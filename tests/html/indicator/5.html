@@ -1,0 +1,55 @@
+<!--
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
+<!DOCTYPE html>
+<html lang="en" >
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="keywords" content="kline time-line candlestick stock chart canvas k线 行情 蜡烛图 分时图 技术指标 图表"/>
+    <meta name="description" content="FP KTR/KCB levels (crazii formulas) plus Pivot/Bullishness/BoysPressure placeholders"/>
+    <script type="text/javascript" src="../../../dist/klinecharts.min.js"></script>
+    <script type="text/javascript" src="../../js/dataSource.js"></script>
+    <link rel="stylesheet" type="text/css" href="../../css/chart.css"/>
+    <title>Indicator -- FP KTR Bands / KCB Targets / Pivot / Bullishness / Boys Pressure</title>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="chart"></div>
+    <div></div>
+    <script>
+      window.onload = function () {
+        var chart = klinecharts.init('chart')
+        chart.createIndicator('FP_KTR_BANDS', false, { id: 'candle_pane' })
+        chart.createIndicator('FP_KCB_TARGETS', false, { id: 'candle_pane' })
+        chart.createIndicator('FP_PIVOT_LEVELS', false, { id: 'candle_pane' })
+        chart.createIndicator('FP_BULLISHNESS', false, { gap: { bottom: 2 } })
+        chart.createIndicator('FP_BOYS_PRESSURE', false, { gap: { bottom: 2 } })
+        // NOTE: this fork's Chart API (v10 beta) replaced the old applyNewData(data)
+        // call with an async DataLoader — tests/html/indicator/1-4.html still use
+        // the old call and are currently broken on this branch too (pre-existing,
+        // unrelated to this change). Using the current DataLoader API here instead.
+        var bars = generated()
+        chart.setDataLoader({
+          getBars: function (params) {
+            params.callback(bars)
+          }
+        })
+        chart.setSymbol({ ticker: 'FP_DEMO', pricePrecision: 2, volumePrecision: 0 })
+        chart.setPeriod({ type: 'day', span: 1 })
+      }
+    </script>
+  </body>
+</html>

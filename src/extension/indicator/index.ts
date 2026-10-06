@@ -50,6 +50,11 @@ import finpathTrendlinesWithBreaks from './finpathTrendlinesWithBreaks'
 import finpathSupportResistanceWithBreaks from './finpathSupportResistanceWithBreaks'
 import finpathMovingAverageConvergenceDivergence from './finpathMovingAverageConvergenceDivergence'
 import finpathAnalogueMatcher from './finpathAnalogueMatcher'
+import finpathKtrBands from './finpathKtrBands'
+import finpathKcbTargets from './finpathKcbTargets'
+import finpathPivotLevels from './finpathPivotLevels'
+import finpathBullishness from './finpathBullishness'
+import finpathBoysPressure from './finpathBoysPressure'
 import williamsR from './williamsR'
 import squeezeMomentum from './squeezeMomentum'
 
@@ -61,7 +66,7 @@ const extensions = [
   directionalMovementIndex, easeOfMovementValue, exponentialMovingAverage, ichimokuCloud, momentum,
   movingAverage, movingAverageConvergenceDivergence, onBalanceVolume, priceAndVolumeTrend,
   psychologicalLine, rateOfChange, relativeStrengthIndex, simpleMovingAverage,
-  stoch, stopAndReverse, superTrend, tripleExponentiallySmoothedAverage, volume, volumeProfileVisibleRange, fpVolumeProfileFixedRange, finpathTrendlinesWithBreaks, finpathSupportResistanceWithBreaks, finpathMovingAverageConvergenceDivergence, finpathAnalogueMatcher, volumeRatio, williamsR, squeezeMomentum
+  stoch, stopAndReverse, superTrend, tripleExponentiallySmoothedAverage, volume, volumeProfileVisibleRange, fpVolumeProfileFixedRange, finpathTrendlinesWithBreaks, finpathSupportResistanceWithBreaks, finpathMovingAverageConvergenceDivergence, finpathAnalogueMatcher, finpathKtrBands, finpathKcbTargets, finpathPivotLevels, finpathBullishness, finpathBoysPressure, volumeRatio, williamsR, squeezeMomentum
 ]
 
 extensions.forEach((indicator: IndicatorTemplate) => {

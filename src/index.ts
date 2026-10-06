@@ -82,6 +82,7 @@ import type {
 import { registerStyles } from './extension/styles/index'
 import { registerXAxis } from './extension/x-axis'
 import { registerYAxis } from './extension/y-axis'
+import { KTR_STEP_PERCENT, KCX_PERIOD, type CraziiLevelsExtendData } from './extension/indicator/finpathCraziiFormulas'
 
 const charts = new Map<string, ChartImp>()
 let chartBaseId = 1
@@ -185,6 +186,11 @@ export {
   registerStyles,
   registerXAxis, registerYAxis,
   utils,
+  // Per-symbol KTR step for FP_KTR_BANDS calcParams[0]; extendData shape for FP_KTR_BANDS / FP_KCB_TARGETS.
+  KTR_STEP_PERCENT,
+  // Per-symbol lookback for FP_BULLISHNESS (KCX) calcParams[0].
+  KCX_PERIOD,
+  type CraziiLevelsExtendData,
   type LineType, type PolygonType, type TooltipShowRule, type TooltipShowType, type FeatureType, type TooltipFeaturePosition, type CandleTooltipRectPosition,
   type CandleType, type FormatDateType, type ZoomAnchor,
   type DomPosition, type ActionType, type IndicatorSeries, type OverlayMode,
