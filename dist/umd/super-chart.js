@@ -28101,16 +28101,41 @@ function createChartSync(options) {
         });
     }
     function attach(chart, attachOptions) {
-        var _a, _b;
+        var _a, _b, _c;
         if (attachOptions === void 0) { attachOptions = {}; }
         if (charts.has(chart)) {
             return;
         }
+        var store = getStore(chart);
+        // Seed the value-dedupe keys from the chart's current state so re-emitted
+        // setup values never propagate; when attaching before the data pipeline
+        // has run, additionally prime the first emit of each channel as baseline.
+        var meta = (_a = appliedMeta.get(chart)) !== null && _a !== void 0 ? _a : {};
+        var currentSymbol = store.getSymbol();
+        var currentPeriod = store.getPeriod();
+        if (isValid(currentSymbol)) {
+            meta.symbol = metaKey(currentSymbol);
+        }
+        if (isValid(currentPeriod)) {
+            meta.period = metaKey(currentPeriod);
+        }
+        appliedMeta.set(chart, meta);
+        var alreadySetup = isValid(currentSymbol) && store.getDataList().length > 0;
+        var priming = new Set();
+        if ((_b = attachOptions.skipInitialEmits) !== null && _b !== void 0 ? _b : !alreadySetup) {
+            priming.add('timeRange');
+            if (!isValid(currentSymbol)) {
+                priming.add('symbol');
+            }
+            if (!isValid(currentPeriod)) {
+                priming.add('period');
+            }
+        }
         var entry = {
             chart: chart,
-            groupId: (_a = attachOptions.groupId) !== null && _a !== void 0 ? _a : null,
+            groupId: (_c = attachOptions.groupId) !== null && _c !== void 0 ? _c : null,
             unsubscribes: [],
-            priming: new Set(((_b = attachOptions.skipInitialEmits) !== null && _b !== void 0 ? _b : true) ? ['timeRange', 'symbol', 'period'] : [])
+            priming: priming
         };
         var onCrosshairChange = function (data) {
             if (!applying.has(chart)) {

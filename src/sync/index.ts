@@ -404,13 +404,36 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
     if (charts.has(chart)) {
       return
     }
+    const store = getStore(chart)
+    // Seed the value-dedupe keys from the chart's current state so re-emitted
+    // setup values never propagate; when attaching before the data pipeline
+    // has run, additionally prime the first emit of each channel as baseline.
+    const meta = appliedMeta.get(chart) ?? {}
+    const currentSymbol = store.getSymbol()
+    const currentPeriod = store.getPeriod()
+    if (isValid(currentSymbol)) {
+      meta.symbol = metaKey(currentSymbol)
+    }
+    if (isValid(currentPeriod)) {
+      meta.period = metaKey(currentPeriod)
+    }
+    appliedMeta.set(chart, meta)
+    const alreadySetup = isValid(currentSymbol) && store.getDataList().length > 0
+    const priming = new Set<'timeRange' | 'symbol' | 'period'>()
+    if (attachOptions.skipInitialEmits ?? !alreadySetup) {
+      priming.add('timeRange')
+      if (!isValid(currentSymbol)) {
+        priming.add('symbol')
+      }
+      if (!isValid(currentPeriod)) {
+        priming.add('period')
+      }
+    }
     const entry: AttachedChart = {
       chart,
       groupId: attachOptions.groupId ?? null,
       unsubscribes: [],
-      priming: new Set<'timeRange' | 'symbol' | 'period'>(
-        (attachOptions.skipInitialEmits ?? true) ? ['timeRange', 'symbol', 'period'] : []
-      )
+      priming
     }
     const onCrosshairChange: ActionCallback = data => {
       if (!applying.has(chart)) {
