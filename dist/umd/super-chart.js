@@ -1,13 +1,13 @@
 /**
      * @license
-     * KLineChart v10.0.0-beta1
+     * SuperChart v10.0.0-beta1
      * Copyright (c) 2019 lihu.
      * Licensed under Apache License 2.0 https://www.apache.org/licenses/LICENSE-2.0
      */
 (function (global, factory) {
 typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
 typeof define === 'function' && define.amd ? define(['exports'], factory) :
-(global = typeof globalThis !== 'undefined' ? globalThis : global || self, factory(global.klinecharts = {}));
+(global = typeof globalThis !== 'undefined' ? globalThis : global || self, factory(global.superChart = {}));
 })(this, (function (exports) { 'use strict';
 
 /**
@@ -7848,6 +7848,536 @@ var finpathAnalogueMatcher = {
  * limitations under the License.
  */
 /**
+ * KTR step per level, in percent of OP. Hand-set per symbol on crazii's side
+ * (constant across every day observed), keyed by crazii's ticker.
+ */
+var KTR_STEP_PERCENT = {
+    'XAUUSD.ca': 0.4,
+    'XAGUSD.ca': 0.668,
+    USOil: 0.7,
+    BTCUSD: 1.38,
+    ETHUSD: 1.2,
+    'DAX.ca': 0.369,
+    'SP500.ca': 0.318,
+    'Nasdaq.ca': 0.312,
+    'DowJones.ca': 0.375
+};
+var DEFAULT_KTR_STEP_PERCENT = 0.4;
+/**
+ * KCX lookback (bars) per symbol, keyed by crazii's ticker. Same value on
+ * every timeframe checked (5m, 15m, 1D).
+ */
+var KCX_PERIOD = {
+    'XAUUSD.ca': 17,
+    'XAGUSD.ca': 17,
+    USOil: 16,
+    BTCUSD: 17,
+    ETHUSD: 13,
+    'DAX.ca': 11,
+    'SP500.ca': 30,
+    'Nasdaq.ca': 26,
+    'DowJones.ca': 38
+};
+var DEFAULT_KCX_PERIOD = 17;
+/** KCX full scale: a close at the n-bar low reads -3750/11 (≈ -340.91). */
+var KCX_SCALE = 3750 / 11;
+/** crazii clamps the KCX histogram here and flashes bars that go below it. */
+var KCX_BLINK_LEVEL = -300;
+/**
+ * KCX ("BEARISHNESS" when non-zero) for bar `i`: Williams %R over the last
+ * `period` bars (current one included) scaled by KCX_SCALE, kept only when
+ * the close sits in the lower half of that range, else 0. Null during warmup.
+ * Matched 454/454 bars on 8 of 9 symbols (USOil 452/454).
+ */
+function kcxValue(dataList, i, period) {
+    if (i < period - 1) {
+        return null;
+    }
+    var highest = -Infinity;
+    var lowest = Infinity;
+    for (var j = i - period + 1; j <= i; j++) {
+        highest = Math.max(highest, dataList[j].high);
+        lowest = Math.min(lowest, dataList[j].low);
+    }
+    if (highest === lowest) {
+        return 0;
+    }
+    var value = KCX_SCALE * (dataList[i].close - highest) / (highest - lowest);
+    return value <= -KCX_SCALE / 2 ? value : 0;
+}
+var MINUTE = 60 * 1000;
+var DAY = 24 * 60 * MINUTE;
+/**
+ * Trading-day index of a bar. crazii cuts days at its broker server's
+ * midnight, so `utcOffsetMinutes` is that server's offset from UTC
+ * (0 when the host already feeds server-time timestamps as UTC, like crazii's
+ * own chart does).
+ */
+function dayIndex(timestamp, utcOffsetMinutes) {
+    return Math.floor((timestamp + utcOffsetMinutes * MINUTE) / DAY);
+}
+/** Collapses intraday bars into daily OHLC, in input order. */
+function toDailyBars(dataList, utcOffsetMinutes) {
+    var e_1, _a;
+    var days = [];
+    try {
+        for (var dataList_1 = __values(dataList), dataList_1_1 = dataList_1.next(); !dataList_1_1.done; dataList_1_1 = dataList_1.next()) {
+            var bar = dataList_1_1.value;
+            var day = dayIndex(bar.timestamp, utcOffsetMinutes);
+            var last = days.length > 0 ? days[days.length - 1] : null;
+            if ((last === null || last === void 0 ? void 0 : last.day) === day) {
+                last.high = Math.max(last.high, bar.high);
+                last.low = Math.min(last.low, bar.low);
+                last.close = bar.close;
+            }
+            else {
+                days.push({ day: day, open: bar.open, high: bar.high, low: bar.low, close: bar.close });
+            }
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (dataList_1_1 && !dataList_1_1.done && (_a = dataList_1.return)) _a.call(dataList_1);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    return days;
+}
+/**
+ * Daily bars for the indicator, merging the host's `dailyBars` with days
+ * rebuilt from `dataList`. The host's bars may be a snapshot taken earlier
+ * (e.g. before midnight), while the intraday list always runs up to now, so
+ * for every day the intraday list covers: open comes from the host (intraday
+ * may start mid-day), high/low are the union of both, close comes from intraday.
+ */
+function resolveDailyBars(dataList, extendData, utcOffsetMinutes) {
+    var e_2, _a, e_3, _b;
+    var fromIntraday = toDailyBars(dataList, utcOffsetMinutes);
+    var hostBars = extendData === null || extendData === void 0 ? void 0 : extendData.dailyBars;
+    if (hostBars == null || hostBars.length === 0) {
+        return fromIntraday;
+    }
+    var byDay = new Map();
+    try {
+        for (var _c = __values(toDailyBars(hostBars, utcOffsetMinutes)), _d = _c.next(); !_d.done; _d = _c.next()) {
+            var d = _d.value;
+            byDay.set(d.day, d);
+        }
+    }
+    catch (e_2_1) { e_2 = { error: e_2_1 }; }
+    finally {
+        try {
+            if (_d && !_d.done && (_a = _c.return)) _a.call(_c);
+        }
+        finally { if (e_2) throw e_2.error; }
+    }
+    try {
+        for (var fromIntraday_1 = __values(fromIntraday), fromIntraday_1_1 = fromIntraday_1.next(); !fromIntraday_1_1.done; fromIntraday_1_1 = fromIntraday_1.next()) {
+            var d = fromIntraday_1_1.value;
+            var host = byDay.get(d.day);
+            byDay.set(d.day, host === undefined
+                ? d
+                : { day: d.day, open: host.open, high: Math.max(host.high, d.high), low: Math.min(host.low, d.low), close: d.close });
+        }
+    }
+    catch (e_3_1) { e_3 = { error: e_3_1 }; }
+    finally {
+        try {
+            if (fromIntraday_1_1 && !fromIntraday_1_1.done && (_b = fromIntraday_1.return)) _b.call(fromIntraday_1);
+        }
+        finally { if (e_3) throw e_3.error; }
+    }
+    return Array.from(byDay.values()).sort(function (a, b) { return a.day - b.day; });
+}
+/** MLP for a day, from the previous day's bar. */
+function midLevelPrice(prevDay) {
+    return (prevDay.open + prevDay.close) / 2;
+}
+/** KTR level `n` (n = ±1, ±2, ±3) around OP. */
+function ktrLevel(op, stepPercent, n) {
+    return op * (1 + n * stepPercent / 100);
+}
+/**
+ * Opens of `pastDays` (oldest first, all before today) that no later past
+ * day's high-low range has touched. Each later day is checked on its own —
+ * merging ranges would wrongly swallow levels sitting in a gap between days.
+ * Computed once per day; `kcbTargets` then filters by today's range.
+ */
+function untouchedOpens(pastDays) {
+    var result = [];
+    for (var j = 0; j < pastDays.length; j++) {
+        var level = pastDays[j].open;
+        var touched = false;
+        for (var k = j + 1; k < pastDays.length; k++) {
+            if (pastDays[k].low <= level && level <= pastDays[k].high) {
+                touched = true;
+                break;
+            }
+        }
+        if (!touched) {
+            result.push(level);
+        }
+    }
+    return result;
+}
+/**
+ * KCB take-profit targets (crazii's TP1/TP2/TP3) as of one bar: untouched
+ * past opens that today's range so far hasn't reached either, above `close`
+ * when it is above OP and below otherwise, nearest first. Fewer than `count`
+ * come back when not enough untouched opens exist.
+ */
+function kcbTargets(untouched, todayHigh, todayLow, close, op, count) {
+    if (count === void 0) { count = 3; }
+    var above = close > op;
+    return untouched
+        .filter(function (level) { return !(todayLow <= level && level <= todayHigh) && (above ? level > close : level < close); })
+        .sort(function (a, b) { return Math.abs(a - close) - Math.abs(b - close); })
+        .slice(0, count);
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+
+ * http://www.apache.org/licenses/LICENSE-2.0
+
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var finpathKtrBands = {
+    name: 'FP_KTR_BANDS',
+    shortName: 'KTR',
+    series: 'price',
+    calcParams: [DEFAULT_KTR_STEP_PERCENT, 0],
+    precision: 2,
+    shouldOhlc: true,
+    figures: [
+        { key: 'ktrPlus3', title: 'KTR+3: ', type: 'line' },
+        { key: 'ktrPlus2', title: 'KTR+2: ', type: 'line' },
+        { key: 'ktrPlus1', title: 'KTR+1: ', type: 'line' },
+        { key: 'op', title: 'OP: ', type: 'line' },
+        { key: 'mlp', title: 'MLP: ', type: 'line' },
+        { key: 'ktrMinus1', title: 'KTR-1: ', type: 'line' },
+        { key: 'ktrMinus2', title: 'KTR-2: ', type: 'line' },
+        { key: 'ktrMinus3', title: 'KTR-3: ', type: 'line' }
+    ],
+    postDraw: function (_a) {
+        var ctx = _a.ctx, indicator = _a.indicator, xAxis = _a.xAxis, yAxis = _a.yAxis, chart = _a.chart;
+        var result = indicator.result;
+        if (result.length === 0)
+            return false;
+        var _b = chart.getVisibleRange(), from = _b.from, to = _b.to;
+        if (from >= to)
+            return false;
+        var keys = indicator.figures.map(function (f) { return f.key; });
+        applyIndicatorInteraction(ctx, indicator, result, from, to, xAxis, yAxis, keys, 0, getControlPointBgColor(chart));
+        return false;
+    },
+    calc: function (dataList, indicator) {
+        var _a, _b;
+        var stepPercent = (_a = indicator.calcParams[0]) !== null && _a !== void 0 ? _a : DEFAULT_KTR_STEP_PERCENT;
+        var utcOffsetMinutes = (_b = indicator.calcParams[1]) !== null && _b !== void 0 ? _b : 0;
+        var days = resolveDailyBars(dataList, indicator.extendData, utcOffsetMinutes);
+        var dayPosition = new Map(days.map(function (d, i) { return [d.day, i]; }));
+        return dataList.map(function (bar) {
+            var i = dayPosition.get(dayIndex(bar.timestamp, utcOffsetMinutes));
+            if (i === undefined)
+                return {};
+            var op = days[i].open;
+            return {
+                op: op,
+                mlp: i > 0 ? midLevelPrice(days[i - 1]) : undefined,
+                ktrPlus1: ktrLevel(op, stepPercent, 1),
+                ktrPlus2: ktrLevel(op, stepPercent, 2),
+                ktrPlus3: ktrLevel(op, stepPercent, 3),
+                ktrMinus1: ktrLevel(op, stepPercent, -1),
+                ktrMinus2: ktrLevel(op, stepPercent, -2),
+                ktrMinus3: ktrLevel(op, stepPercent, -3)
+            };
+        });
+    }
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+
+ * http://www.apache.org/licenses/LICENSE-2.0
+
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var finpathKcbTargets = {
+    name: 'FP_KCB_TARGETS',
+    shortName: 'KCB',
+    series: 'price',
+    calcParams: [0],
+    precision: 2,
+    shouldOhlc: true,
+    figures: [
+        { key: 'tp1', title: 'TP1: ', type: 'line' },
+        { key: 'tp2', title: 'TP2: ', type: 'line' },
+        { key: 'tp3', title: 'TP3: ', type: 'line' }
+    ],
+    postDraw: function (_a) {
+        var ctx = _a.ctx, indicator = _a.indicator, xAxis = _a.xAxis, yAxis = _a.yAxis, chart = _a.chart;
+        var result = indicator.result;
+        if (result.length === 0)
+            return false;
+        var _b = chart.getVisibleRange(), from = _b.from, to = _b.to;
+        if (from >= to)
+            return false;
+        var keys = indicator.figures.map(function (f) { return f.key; });
+        applyIndicatorInteraction(ctx, indicator, result, from, to, xAxis, yAxis, keys, 0, getControlPointBgColor(chart));
+        return false;
+    },
+    calc: function (dataList, indicator) {
+        var _a;
+        var utcOffsetMinutes = (_a = indicator.calcParams[0]) !== null && _a !== void 0 ? _a : 0;
+        var days = resolveDailyBars(dataList, indicator.extendData, utcOffsetMinutes);
+        var dayPosition = new Map(days.map(function (d, i) { return [d.day, i]; }));
+        var currentDay = null;
+        var untouched = [];
+        var todayHigh = 0;
+        var todayLow = 0;
+        return dataList.map(function (bar) {
+            var day = dayIndex(bar.timestamp, utcOffsetMinutes);
+            var i = dayPosition.get(day);
+            if (i === undefined)
+                return {};
+            if (day !== currentDay) {
+                currentDay = day;
+                untouched = untouchedOpens(days.slice(0, i));
+                todayHigh = bar.high;
+                todayLow = bar.low;
+            }
+            else {
+                todayHigh = Math.max(todayHigh, bar.high);
+                todayLow = Math.min(todayLow, bar.low);
+            }
+            var _a = __read(kcbTargets(untouched, todayHigh, todayLow, bar.close, days[i].open), 3), tp1 = _a[0], tp2 = _a[1], tp3 = _a[2];
+            return { tp1: tp1, tp2: tp2, tp3: tp3 };
+        });
+    }
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+
+ * http://www.apache.org/licenses/LICENSE-2.0
+
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var finpathPivotLevels = {
+    name: 'FP_PIVOT_LEVELS',
+    shortName: 'Pivot (placeholder)',
+    calcParams: [0],
+    series: 'price',
+    precision: 2,
+    shouldOhlc: true,
+    figures: [
+        { key: 'pivot01', title: 'Pivot 01: ', type: 'line' },
+        { key: 'pivot02', title: 'Pivot 02: ', type: 'line' }
+    ],
+    postDraw: function (_a) {
+        var ctx = _a.ctx, indicator = _a.indicator, xAxis = _a.xAxis, yAxis = _a.yAxis, chart = _a.chart;
+        var result = indicator.result;
+        if (result.length === 0)
+            return false;
+        var _b = chart.getVisibleRange(), from = _b.from, to = _b.to;
+        if (from >= to)
+            return false;
+        var keys = indicator.figures.map(function (f) { return f.key; });
+        applyIndicatorInteraction(ctx, indicator, result, from, to, xAxis, yAxis, keys, 0, getControlPointBgColor(chart));
+        return false;
+    },
+    calc: function (dataList, indicator) {
+        var _a;
+        var utcOffsetMinutes = (_a = indicator.calcParams[0]) !== null && _a !== void 0 ? _a : 0;
+        var sessionHigh = -Infinity;
+        var sessionLow = Infinity;
+        var prevSessionHigh = null;
+        var prevSessionLow = null;
+        return dataList.map(function (bar, i) {
+            var prevBar = i > 0 ? dataList[i - 1] : null;
+            var isNewSession = prevBar === null || dayIndex(prevBar.timestamp, utcOffsetMinutes) !== dayIndex(bar.timestamp, utcOffsetMinutes);
+            if (isNewSession) {
+                if (sessionHigh !== -Infinity) {
+                    prevSessionHigh = sessionHigh;
+                    prevSessionLow = sessionLow;
+                }
+                sessionHigh = bar.high;
+                sessionLow = bar.low;
+            }
+            else {
+                sessionHigh = Math.max(sessionHigh, bar.high);
+                sessionLow = Math.min(sessionLow, bar.low);
+            }
+            return { pivot01: prevSessionHigh !== null && prevSessionHigh !== void 0 ? prevSessionHigh : undefined, pivot02: prevSessionLow !== null && prevSessionLow !== void 0 ? prevSessionLow : undefined };
+        });
+    }
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+
+ * http://www.apache.org/licenses/LICENSE-2.0
+
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var KCX_COLOR = '#1e90ff';
+var BLINK_COLOR = '#7fff00';
+var finpathBullishness = {
+    name: 'FP_BULLISHNESS',
+    shortName: 'KCX',
+    series: 'normal',
+    calcParams: [DEFAULT_KCX_PERIOD],
+    precision: 2,
+    figures: [
+        {
+            key: 'kcx',
+            title: 'KCX: ',
+            type: 'bar',
+            baseValue: 0,
+            styles: function () { return ({ color: KCX_COLOR, style: 'fill', borderColor: KCX_COLOR }); }
+        },
+        {
+            key: 'blink',
+            title: '',
+            type: 'bar',
+            baseValue: 0,
+            styles: function () { return ({ color: BLINK_COLOR, style: 'fill', borderColor: BLINK_COLOR }); }
+        }
+    ],
+    calc: function (dataList, indicator) {
+        var _a;
+        var period = (_a = indicator.calcParams[0]) !== null && _a !== void 0 ? _a : DEFAULT_KCX_PERIOD;
+        return dataList.map(function (_, i) {
+            var value = kcxValue(dataList, i, period);
+            if (value === null)
+                return {};
+            return {
+                kcx: Math.max(value, KCX_BLINK_LEVEL),
+                blink: value < KCX_BLINK_LEVEL ? value : undefined
+            };
+        });
+    }
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+
+ * http://www.apache.org/licenses/LICENSE-2.0
+
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * Close-location value in [-1, 1]: +1 when close prints at the bar's high,
+ * -1 when it prints at the low. Shared building block for finpathBullishness
+ * and finpathBoysPressure — NOT crazii's real formula, see file-level docs.
+ */
+function moneyFlowMultiplier(bar) {
+    var range = bar.high - bar.low;
+    if (range === 0) {
+        return 0;
+    }
+    return ((bar.close - bar.low) - (bar.high - bar.close)) / range;
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+
+ * http://www.apache.org/licenses/LICENSE-2.0
+
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * FP BOYS PRESSURE — placeholder stand-in for crazii.com's "BOYS BUYING" /
+ * "BOYS SELLING" sub-pane histogram.
+ *
+ * PLACEHOLDER — NOT crazii's formula. What is known about crazii's KSI
+ * (2026-10-06, live socket probe): it is a points score in ±3.7, step 0.1/3,
+ * built from several step components of the form "close above/below a hidden
+ * level derived from prior bars"; one large component sets the colour, small
+ * ones adjust the size. The levels are not plain SMA/EMA/LWMA of price and
+ * have not been recovered, see crazii-chart-audit/05-cong-thuc-da-giai.md.
+ * Until they are, this renders a self-contained buy/sell-pressure histogram
+ * (close-location value weighted by volume) so the pane has an occupant.
+ */
+var finpathBoysPressure = {
+    name: 'FP_BOYS_PRESSURE',
+    shortName: 'Boys Pressure (placeholder)',
+    series: 'normal',
+    precision: 2,
+    figures: [{
+            key: 'value',
+            title: 'Boys Pressure: ',
+            type: 'bar',
+            baseValue: 0,
+            styles: function (_a) {
+                var _b, _c;
+                var data = _a.data, indicator = _a.indicator, defaultStyles = _a.defaultStyles;
+                var value = (_c = (_b = data.current) === null || _b === void 0 ? void 0 : _b.value) !== null && _c !== void 0 ? _c : 0;
+                var color = value >= 0
+                    ? formatValue(indicator.styles, 'bars[0].upColor', (defaultStyles.bars)[0].upColor)
+                    : formatValue(indicator.styles, 'bars[0].downColor', (defaultStyles.bars)[0].downColor);
+                return { color: color, style: 'fill', borderColor: color };
+            }
+        }],
+    calc: function (dataList) { return dataList.map(function (bar) {
+        var _a;
+        var volume = (_a = bar.volume) !== null && _a !== void 0 ? _a : (bar.high - bar.low);
+        return { value: moneyFlowMultiplier(bar) * volume };
+    }); }
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+
+ * http://www.apache.org/licenses/LICENSE-2.0
+
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
  * WR
  * 公式 WR(N) = 100 * [ C - HIGH(N) ] / [ HIGH(N)-LOW(N) ]
  */
@@ -8172,7 +8702,7 @@ var extensions$2 = [
     directionalMovementIndex, easeOfMovementValue, exponentialMovingAverage, ichimokuCloud, momentum,
     movingAverage, movingAverageConvergenceDivergence, onBalanceVolume, priceAndVolumeTrend,
     psychologicalLine, rateOfChange, relativeStrengthIndex, simpleMovingAverage,
-    stoch, stopAndReverse, superTrend, tripleExponentiallySmoothedAverage, volume, volumeProfileVisibleRange, fpVolumeProfileFixedRange, finpathTrendlinesWithBreaks, finpathSupportResistanceWithBreaks, finpathMovingAverageConvergenceDivergence, finpathAnalogueMatcher, volumeRatio, williamsR, squeezeMomentum
+    stoch, stopAndReverse, superTrend, tripleExponentiallySmoothedAverage, volume, volumeProfileVisibleRange, fpVolumeProfileFixedRange, finpathTrendlinesWithBreaks, finpathSupportResistanceWithBreaks, finpathMovingAverageConvergenceDivergence, finpathAnalogueMatcher, finpathKtrBands, finpathKcbTargets, finpathPivotLevels, finpathBullishness, finpathBoysPressure, volumeRatio, williamsR, squeezeMomentum
 ];
 extensions$2.forEach(function (indicator) {
     indicators[indicator.name] = IndicatorImp.extend(indicator);
@@ -11887,21 +12417,10 @@ function renderVPFRFigures(params) {
     var MIN_ROW_HEIGHT = 5;
     var minProfileHeight = rows.length * MIN_ROW_HEIGHT;
     var rawHeight = Math.abs(bottomY - topY);
-    console.log('[VPFR render]', {
-        profileHigh: profileHigh,
-        profileLow: profileLow,
-        rawTopY: topY,
-        rawBottomY: bottomY,
-        rawHeight: rawHeight,
-        minProfileHeight: minProfileHeight,
-        willExpand: rawHeight < minProfileHeight,
-        rowCount: rows.length
-    });
     if (rawHeight < minProfileHeight) {
         var midY = (topY + bottomY) / 2;
         topY = midY - minProfileHeight / 2;
         bottomY = midY + minProfileHeight / 2;
-        console.log('[VPFR render] expanded:', { topY: topY, bottomY: bottomY, newHeight: Math.abs(bottomY - topY) });
     }
     // Ignore pressed-move events on hit area and histogram bars
     // so body drag falls through to chart pan
@@ -18305,6 +18824,7 @@ var Canvas = /** @class */ (function () {
         this._nextPixelWidth = 0;
         this._nextPixelHeight = 0;
         this._requestAnimationId = DEFAULT_REQUEST_ID;
+        this._destroyed = false;
         this._mediaQueryListener = function () {
             var pixelRatio = getPixelRatio(_this._element);
             _this._nextPixelWidth = Math.round(_this._element.clientWidth * pixelRatio);
@@ -18315,6 +18835,9 @@ var Canvas = /** @class */ (function () {
         this._element = createDom('canvas', style);
         this._ctx = this._element.getContext('2d');
         isSupportedDevicePixelContentBox().then(function (result) {
+            if (_this._destroyed) {
+                return;
+            }
             _this._supportedDevicePixelContentBox = result;
             if (result) {
                 _this._resizeObserver = new ResizeObserver(function (entries) {
@@ -18357,10 +18880,10 @@ var Canvas = /** @class */ (function () {
         var _this = this;
         if (this._requestAnimationId === DEFAULT_REQUEST_ID) {
             this._requestAnimationId = requestAnimationFrame(function () {
+                _this._requestAnimationId = DEFAULT_REQUEST_ID;
                 _this._ctx.clearRect(0, 0, _this._width, _this._height);
                 fn === null || fn === void 0 ? void 0 : fn();
                 _this._listener();
-                _this._requestAnimationId = DEFAULT_REQUEST_ID;
             });
         }
     };
@@ -18386,8 +18909,13 @@ var Canvas = /** @class */ (function () {
         return this._ctx;
     };
     Canvas.prototype.destroy = function () {
+        this._destroyed = true;
+        if (this._requestAnimationId !== DEFAULT_REQUEST_ID) {
+            cancelAnimationFrame(this._requestAnimationId);
+            this._requestAnimationId = DEFAULT_REQUEST_ID;
+        }
         if (isValid(this._resizeObserver)) {
-            this._resizeObserver.unobserve(this._element);
+            this._resizeObserver.disconnect();
         }
         if (isValid(this._mediaQueryList)) {
             // eslint-disable-next-line @typescript-eslint/no-deprecated -- ignore
@@ -27337,6 +27865,8 @@ var utils = {
     checkCoordinateOnText: checkCoordinateOnText
 };
 
+exports.KCX_PERIOD = KCX_PERIOD;
+exports.KTR_STEP_PERCENT = KTR_STEP_PERCENT;
 exports.dispose = dispose;
 exports.getFigureClass = getFigureClass;
 exports.getOverlayClass = getOverlayClass;
@@ -27356,4 +27886,4 @@ exports.utils = utils;
 exports.version = version;
 
 }));
-//# sourceMappingURL=klinecharts.js.map
+//# sourceMappingURL=super-chart.js.map

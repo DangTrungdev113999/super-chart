@@ -1256,6 +1256,27 @@ export declare function registerStyles(name: string, ss: DeepPartial<Styles>): v
 export declare function registerXAxis(axis: XAxisTemplate): void;
 export declare function registerYAxis(axis: YAxisTemplate): void;
 /**
+ * KTR step per level, in percent of OP. Hand-set per symbol on crazii's side
+ * (constant across every day observed), keyed by crazii's ticker.
+ */
+export declare const KTR_STEP_PERCENT: Readonly<Record<string, number>>;
+/**
+ * KCX lookback (bars) per symbol, keyed by crazii's ticker. Same value on
+ * every timeframe checked (5m, 15m, 1D).
+ */
+export declare const KCX_PERIOD: Readonly<Record<string, number>>;
+/**
+ * Options the host passes through `indicator.extendData`.
+ *
+ * `dailyBars` matters: MLP needs the previous day and KCB needs months of
+ * daily opens, while an intraday chart only loads a few days. Without it the
+ * indicators fall back to days rebuilt from the visible bars, which leaves the
+ * first loaded day without MLP and drops older untouched opens from KCB.
+ */
+export interface CraziiLevelsExtendData {
+	dailyBars?: KLineData[];
+}
+/**
  * Chart version
  * @return {string}
  */
@@ -1305,6 +1326,6 @@ export {
 	VisibilityRange as RegressionVisibilityRange,
 };
 
-export as namespace klinecharts;
+export as namespace superChart;
 
 export {};
