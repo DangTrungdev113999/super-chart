@@ -919,7 +919,7 @@ export interface Chart extends Store {
 	zoomAtTimestamp: (scale: number, timestamp: number, animationDuration?: number) => void;
 	convertToPixel: (points: Partial<Point> | Array<Partial<Point>>, filter?: ConvertFilter) => Partial<Coordinate> | Array<Partial<Coordinate>>;
 	convertFromPixel: (coordinates: Array<Partial<Coordinate>>, filter?: ConvertFilter) => Partial<Point> | Array<Partial<Point>>;
-	executeAction: (type: ActionType, data: Crosshair) => void;
+	executeAction: (type: ActionType, data?: unknown) => void;
 	subscribeAction: (type: ActionType, callback: ActionCallback) => void;
 	unsubscribeAction: (type: ActionType, callback?: ActionCallback) => void;
 	getConvertPictureUrl: (includeOverlay?: boolean, type?: "png" | "jpeg" | "bmp", backgroundColor?: string) => string;

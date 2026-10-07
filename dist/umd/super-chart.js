@@ -27875,6 +27875,10 @@ var ChartImp = /** @class */ (function () {
                 this._chartStore.setCrosshair(crosshair, { notExecuteAction: true });
                 break;
             }
+            default: {
+                this._chartStore.executeAction(type, data);
+                break;
+            }
         }
     };
     ChartImp.prototype.subscribeAction = function (type, callback) {
@@ -28497,6 +28501,13 @@ function createChartSync(options) {
         }
         var apply = options.onApplySymbol;
         var key = symbolKey(symbol);
+        // The source's own reload burst (resetData → range/crosshair housekeeping)
+        // is a byproduct of the change, not a user gesture — mute it locally too
+        // or every peer's viewport churns to a stale anchor mid-reload.
+        var sourceEntry = charts.get(source);
+        if (isValid(sourceEntry)) {
+            primeAfterApply(sourceEntry);
+        }
         peers(source).forEach(function (entry) {
             var _a, _b;
             var chart = entry.chart;
@@ -28556,6 +28567,11 @@ function createChartSync(options) {
         }
         var apply = options.onApplyPeriod;
         var key = periodKey(period);
+        // Same as dispatchSymbol: absorb the source's own reload burst locally.
+        var sourceEntry = charts.get(source);
+        if (isValid(sourceEntry)) {
+            primeAfterApply(sourceEntry);
+        }
         peers(source).forEach(function (entry) {
             var _a, _b;
             var chart = entry.chart;

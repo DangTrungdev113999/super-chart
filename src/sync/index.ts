@@ -697,6 +697,13 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
     }
     const apply = options.onApplySymbol
     const key = symbolKey(symbol)
+    // The source's own reload burst (resetData → range/crosshair housekeeping)
+    // is a byproduct of the change, not a user gesture — mute it locally too
+    // or every peer's viewport churns to a stale anchor mid-reload.
+    const sourceEntry = charts.get(source)
+    if (isValid(sourceEntry)) {
+      primeAfterApply(sourceEntry)
+    }
     peers(source).forEach(entry => {
       const { chart } = entry
       const meta = appliedMeta.get(chart) ?? {}
@@ -752,6 +759,11 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
     }
     const apply = options.onApplyPeriod
     const key = periodKey(period)
+    // Same as dispatchSymbol: absorb the source's own reload burst locally.
+    const sourceEntry = charts.get(source)
+    if (isValid(sourceEntry)) {
+      primeAfterApply(sourceEntry)
+    }
     peers(source).forEach(entry => {
       const { chart } = entry
       const meta = appliedMeta.get(chart) ?? {}

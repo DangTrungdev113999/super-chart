@@ -90,7 +90,7 @@ export interface Chart extends Store {
   zoomAtTimestamp: (scale: number, timestamp: number, animationDuration?: number) => void
   convertToPixel: (points: Partial<Point> | Array<Partial<Point>>, filter?: ConvertFilter) => Partial<Coordinate> | Array<Partial<Coordinate>>
   convertFromPixel: (coordinates: Array<Partial<Coordinate>>, filter?: ConvertFilter) => Partial<Point> | Array<Partial<Point>>
-  executeAction: (type: ActionType, data: Crosshair) => void
+  executeAction: (type: ActionType, data?: unknown) => void
   subscribeAction: (type: ActionType, callback: ActionCallback) => void
   unsubscribeAction: (type: ActionType, callback?: ActionCallback) => void
   getConvertPictureUrl: (includeOverlay?: boolean, type?: 'png' | 'jpeg' | 'bmp', backgroundColor?: string) => string
@@ -1111,15 +1111,18 @@ export default class ChartImp implements Chart {
     return isArray(coordinates) ? points : (points[0] ?? {})
   }
 
-  executeAction (type: ActionType, data: Crosshair): void {
+  executeAction (type: ActionType, data?: unknown): void {
     switch (type) {
       case 'onCrosshairChange': {
-        const crosshair: Crosshair = { ...data }
+        const crosshair: Crosshair = { ...(data as Crosshair) }
         crosshair.paneId ??= PaneIdConstants.CANDLE
         this._chartStore.setCrosshair(crosshair, { notExecuteAction: true })
         break
       }
-      default: { break }
+      default: {
+        this._chartStore.executeAction(type, data)
+        break
+      }
     }
   }
 
