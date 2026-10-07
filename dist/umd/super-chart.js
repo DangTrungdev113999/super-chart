@@ -28142,10 +28142,23 @@ function createChartSync(options) {
                 schedule(chart, 'crosshair', data);
             }
         };
+        // Setup emits arrive as a burst (setSymbol → setPeriod → data → range
+        // adjusts). While priming, keep absorbing and rearm a quiet timer — the
+        // burst drains together, so trailing emits can't slip through and hijack
+        // peers. The first emit after ~250ms of quiet is a real user change.
+        var absorbPrimed = function () {
+            if (isValid(entry.primeTimer)) {
+                clearTimeout(entry.primeTimer);
+            }
+            entry.primeTimer = setTimeout(function () {
+                entry.priming.clear();
+                entry.primeTimer = undefined;
+            }, 250);
+        };
         var onVisibleRangeChange = function (data) {
             if (!applying.has(chart)) {
                 if (entry.priming.has('timeRange')) {
-                    entry.priming.delete('timeRange');
+                    absorbPrimed();
                     return;
                 }
                 schedule(chart, 'timeRange', data);
@@ -28174,7 +28187,7 @@ function createChartSync(options) {
             meta.symbol = key;
             appliedMeta.set(chart, meta);
             if (entry.priming.has('symbol')) {
-                entry.priming.delete('symbol');
+                absorbPrimed();
                 return;
             }
             dispatchSymbol(chart, data);
@@ -28192,7 +28205,7 @@ function createChartSync(options) {
             meta.period = key;
             appliedMeta.set(chart, meta);
             if (entry.priming.has('period')) {
-                entry.priming.delete('period');
+                absorbPrimed();
                 return;
             }
             dispatchPeriod(chart, data);
@@ -28217,6 +28230,9 @@ function createChartSync(options) {
         var entry = charts.get(chart);
         if (isValid(entry)) {
             entry.unsubscribes.forEach(function (unsub) { unsub(); });
+            if (isValid(entry.primeTimer)) {
+                clearTimeout(entry.primeTimer);
+            }
             charts.delete(chart);
             pending.delete(chart);
             appliedMeta.delete(chart);

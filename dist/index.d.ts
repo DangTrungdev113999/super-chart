@@ -1331,11 +1331,13 @@ export interface ChartSyncAttachOptions {
 	 */
 	groupId?: string | null;
 	/**
-	 * When true (default), the first emitted symbol/period/visible-range after
-	 * attach is treated as the chart's setup baseline and is not propagated —
-	 * prevents a freshly mounted chart from hijacking its peers while its data
-	 * pipeline performs `setSymbol`/`setPeriod`/`resetData`. Pass `false` when
-	 * attaching to a chart that is already fully loaded and idle.
+	 * When true (default for a chart that hasn't finished loading), symbol /
+	 * period / visible-range emits during the initial setup burst are treated
+	 * as the chart's baseline and are not propagated — prevents a freshly
+	 * mounted chart from hijacking its peers while its data pipeline performs
+	 * `setSymbol`/`setPeriod`/`resetData`. The burst is detected via a short
+	 * quiet window; the first emit after the chart settles propagates normally.
+	 * Pass `false` when attaching to a chart that is already fully loaded.
 	 */
 	skipInitialEmits?: boolean;
 }

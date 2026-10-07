@@ -61,11 +61,13 @@ export interface ChartSyncAttachOptions {
    */
   groupId?: string | null
   /**
-   * When true (default), the first emitted symbol/period/visible-range after
-   * attach is treated as the chart's setup baseline and is not propagated —
-   * prevents a freshly mounted chart from hijacking its peers while its data
-   * pipeline performs `setSymbol`/`setPeriod`/`resetData`. Pass `false` when
-   * attaching to a chart that is already fully loaded and idle.
+   * When true (default for a chart that hasn't finished loading), symbol /
+   * period / visible-range emits during the initial setup burst are treated
+   * as the chart's baseline and are not propagated — prevents a freshly
+   * mounted chart from hijacking its peers while its data pipeline performs
+   * `setSymbol`/`setPeriod`/`resetData`. The burst is detected via a short
+   * quiet window; the first emit after the chart settles propagates normally.
+   * Pass `false` when attaching to a chart that is already fully loaded.
    */
   skipInitialEmits?: boolean
 }
@@ -83,10 +85,12 @@ interface AttachedChart {
   groupId: Nullable<string>
   unsubscribes: Array<() => void>
   /**
-   * Channels that still need their first observed emit to be absorbed as the
-   * baseline instead of propagated (see `skipInitialEmits`).
+   * Channels that still need their emits absorbed as setup baseline instead
+   * of propagated (see `skipInitialEmits`). Setup emits arrive as a burst, so
+   * priming stays armed until the chart has been quiet for a settle window.
    */
   priming: Set<'timeRange' | 'symbol' | 'period'>
+  primeTimer?: number
 }
 
 type ChartStoreInternal = ReturnType<ChartImp['getChartStore']>
@@ -440,10 +444,23 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
         schedule(chart, 'crosshair', data)
       }
     }
+    // Setup emits arrive as a burst (setSymbol → setPeriod → data → range
+    // adjusts). While priming, keep absorbing and rearm a quiet timer — the
+    // burst drains together, so trailing emits can't slip through and hijack
+    // peers. The first emit after ~250ms of quiet is a real user change.
+    const absorbPrimed = (): void => {
+      if (isValid(entry.primeTimer)) {
+        clearTimeout(entry.primeTimer)
+      }
+      entry.primeTimer = setTimeout(() => {
+        entry.priming.clear()
+        entry.primeTimer = undefined
+      }, 250) as unknown as number
+    }
     const onVisibleRangeChange: ActionCallback = data => {
       if (!applying.has(chart)) {
         if (entry.priming.has('timeRange')) {
-          entry.priming.delete('timeRange')
+          absorbPrimed()
           return
         }
         schedule(chart, 'timeRange', data)
@@ -471,7 +488,7 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
       meta.symbol = key
       appliedMeta.set(chart, meta)
       if (entry.priming.has('symbol')) {
-        entry.priming.delete('symbol')
+        absorbPrimed()
         return
       }
       dispatchSymbol(chart, data as SymbolInfo)
@@ -488,7 +505,7 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
       meta.period = key
       appliedMeta.set(chart, meta)
       if (entry.priming.has('period')) {
-        entry.priming.delete('period')
+        absorbPrimed()
         return
       }
       dispatchPeriod(chart, data as Period)
@@ -514,6 +531,9 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
     const entry = charts.get(chart)
     if (isValid(entry)) {
       entry.unsubscribes.forEach(unsub => { unsub() })
+      if (isValid(entry.primeTimer)) {
+        clearTimeout(entry.primeTimer)
+      }
       charts.delete(chart)
       pending.delete(chart)
       appliedMeta.delete(chart)
