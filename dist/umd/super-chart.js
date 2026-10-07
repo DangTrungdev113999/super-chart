@@ -27837,6 +27837,18 @@ function createChartSync(options) {
     // Charts currently being written to by the sync engine — events emitted
     // while applying are echoes and must not be re-broadcast.
     var applying = new Set();
+    // Symbol/period applies typically re-enter asynchronously (the host's
+    // adapter goes through its own state before calling chart.setSymbol) —
+    // suppress echoes by value instead of only by synchronous flag.
+    var appliedMeta = new Map();
+    function metaKey(value) {
+        try {
+            return JSON.stringify(value);
+        }
+        catch (_a) {
+            return String(value);
+        }
+    }
     function peers(source) {
         var sourceEntry = charts.get(source);
         if (!isValid(sourceEntry) || !isString(sourceEntry.groupId)) {
@@ -27890,18 +27902,41 @@ function createChartSync(options) {
         pending.clear();
     }
     function dispatchCrosshair(source, crosshair) {
+        var _a;
+        var paneId = crosshair.paneId;
+        if (!isString(paneId)) {
+            peers(source).forEach(function (_a) {
+                var chart = _a.chart;
+                var store = getStore(chart);
+                applying.add(chart);
+                try {
+                    store.setCrosshair({});
+                }
+                finally {
+                    applying.delete(chart);
+                }
+            });
+            return;
+        }
+        // Translate the source pixel position into logical values — timestamp for
+        // the x axis, price for the y axis — so the follower crosshair lands on the
+        // same moment and price level regardless of its own timeframe/scale.
+        var sourcePoint = isNumber(crosshair.x)
+            ? source.convertFromPixel([{ x: crosshair.x, y: crosshair.y }], { paneId: paneId })[0]
+            : null;
+        var timestamp = (_a = crosshair.timestamp) !== null && _a !== void 0 ? _a : sourcePoint === null || sourcePoint === void 0 ? void 0 : sourcePoint.timestamp;
+        var value = sourcePoint === null || sourcePoint === void 0 ? void 0 : sourcePoint.value;
+        if (!isNumber(timestamp)) {
+            return;
+        }
         peers(source).forEach(function (_a) {
             var chart = _a.chart;
             var store = getStore(chart);
             applying.add(chart);
             try {
-                if (!isString(crosshair.paneId) || !isNumber(crosshair.timestamp)) {
-                    store.setCrosshair({});
-                }
-                else {
-                    var dataIndex = store.timestampToDataIndex(crosshair.timestamp);
-                    var x = store.dataIndexToCoordinate(dataIndex);
-                    store.setCrosshair({ x: x, paneId: crosshair.paneId });
+                var coordinate = chart.convertToPixel({ timestamp: timestamp, value: value }, { paneId: paneId });
+                if (isNumber(coordinate.x)) {
+                    store.setCrosshair({ x: coordinate.x, y: coordinate.y, paneId: paneId });
                 }
             }
             finally {
@@ -28000,8 +28035,16 @@ function createChartSync(options) {
             return;
         }
         var apply = options.onApplySymbol;
+        var key = metaKey(symbol);
         peers(source).forEach(function (_a) {
+            var _b;
             var chart = _a.chart;
+            var meta = (_b = appliedMeta.get(chart)) !== null && _b !== void 0 ? _b : {};
+            if (meta.symbol === key) {
+                return;
+            }
+            meta.symbol = key;
+            appliedMeta.set(chart, meta);
             applying.add(chart);
             try {
                 apply(chart, symbol);
@@ -28016,8 +28059,16 @@ function createChartSync(options) {
             return;
         }
         var apply = options.onApplyPeriod;
+        var key = metaKey(period);
         peers(source).forEach(function (_a) {
+            var _b;
             var chart = _a.chart;
+            var meta = (_b = appliedMeta.get(chart)) !== null && _b !== void 0 ? _b : {};
+            if (meta.period === key) {
+                return;
+            }
+            meta.period = key;
+            appliedMeta.set(chart, meta);
             applying.add(chart);
             try {
                 apply(chart, period);
@@ -28054,14 +28105,32 @@ function createChartSync(options) {
             }
         };
         var onSymbolChange = function (data) {
-            if (!applying.has(chart) && channels.symbol && isValid(data)) {
-                dispatchSymbol(chart, data);
+            var _a;
+            if (!channels.symbol || !isValid(data)) {
+                return;
             }
+            var key = metaKey(data);
+            var meta = (_a = appliedMeta.get(chart)) !== null && _a !== void 0 ? _a : {};
+            if (meta.symbol === key) {
+                return;
+            }
+            meta.symbol = key;
+            appliedMeta.set(chart, meta);
+            dispatchSymbol(chart, data);
         };
         var onPeriodChange = function (data) {
-            if (!applying.has(chart) && channels.period && isValid(data)) {
-                dispatchPeriod(chart, data);
+            var _a;
+            if (!channels.period || !isValid(data)) {
+                return;
             }
+            var key = metaKey(data);
+            var meta = (_a = appliedMeta.get(chart)) !== null && _a !== void 0 ? _a : {};
+            if (meta.period === key) {
+                return;
+            }
+            meta.period = key;
+            appliedMeta.set(chart, meta);
+            dispatchPeriod(chart, data);
         };
         chart.subscribeAction('onCrosshairChange', onCrosshairChange);
         chart.subscribeAction('onVisibleRangeChange', onVisibleRangeChange);
@@ -28088,6 +28157,7 @@ function createChartSync(options) {
             entry.unsubscribes.forEach(function (unsub) { unsub(); });
             charts.delete(chart);
             pending.delete(chart);
+            appliedMeta.delete(chart);
         }
     }
     return {
@@ -28108,6 +28178,7 @@ function createChartSync(options) {
             });
             charts.clear();
             pending.clear();
+            appliedMeta.clear();
             if (frame !== 0) {
                 cancelFrame(frame);
                 frame = 0;

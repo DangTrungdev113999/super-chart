@@ -16,6 +16,8 @@ import type ChartImp from '../Chart'
 import type { Chart } from '../Chart'
 import type { ActionCallback } from '../common/Action'
 import type Crosshair from '../common/Crosshair'
+import type Coordinate from '../common/Coordinate'
+import type Point from '../common/Point'
 import type VisibleRange from '../common/VisibleRange'
 import type { Period } from '../common/Period'
 import type { SymbolInfo } from '../common/SymbolInfo'
@@ -130,6 +132,18 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
   // Charts currently being written to by the sync engine — events emitted
   // while applying are echoes and must not be re-broadcast.
   const applying = new Set<Chart>()
+  // Symbol/period applies typically re-enter asynchronously (the host's
+  // adapter goes through its own state before calling chart.setSymbol) —
+  // suppress echoes by value instead of only by synchronous flag.
+  const appliedMeta = new Map<Chart, { symbol?: string, period?: string }>()
+
+  function metaKey (value: unknown): string {
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return String(value)
+    }
+  }
 
   function peers (source: Chart): AttachedChart[] {
     const sourceEntry = charts.get(source)
@@ -188,16 +202,37 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
   }
 
   function dispatchCrosshair (source: Chart, crosshair: Crosshair): void {
+    const paneId = crosshair.paneId
+    if (!isString(paneId)) {
+      peers(source).forEach(({ chart }) => {
+        const store = getStore(chart)
+        applying.add(chart)
+        try {
+          store.setCrosshair({})
+        } finally {
+          applying.delete(chart)
+        }
+      })
+      return
+    }
+    // Translate the source pixel position into logical values — timestamp for
+    // the x axis, price for the y axis — so the follower crosshair lands on the
+    // same moment and price level regardless of its own timeframe/scale.
+    const sourcePoint = isNumber(crosshair.x)
+      ? (source.convertFromPixel([{ x: crosshair.x, y: crosshair.y }], { paneId }) as Array<Partial<Point>>)[0]
+      : null
+    const timestamp = crosshair.timestamp ?? sourcePoint?.timestamp
+    const value = sourcePoint?.value
+    if (!isNumber(timestamp)) {
+      return
+    }
     peers(source).forEach(({ chart }) => {
       const store = getStore(chart)
       applying.add(chart)
       try {
-        if (!isString(crosshair.paneId) || !isNumber(crosshair.timestamp)) {
-          store.setCrosshair({})
-        } else {
-          const dataIndex = store.timestampToDataIndex(crosshair.timestamp)
-          const x = store.dataIndexToCoordinate(dataIndex)
-          store.setCrosshair({ x, paneId: crosshair.paneId })
+        const coordinate = chart.convertToPixel({ timestamp, value }, { paneId }) as Partial<Coordinate>
+        if (isNumber(coordinate.x)) {
+          store.setCrosshair({ x: coordinate.x, y: coordinate.y, paneId })
         }
       } finally {
         applying.delete(chart)
@@ -292,7 +327,14 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
       return
     }
     const apply = options.onApplySymbol
+    const key = metaKey(symbol)
     peers(source).forEach(({ chart }) => {
+      const meta = appliedMeta.get(chart) ?? {}
+      if (meta.symbol === key) {
+        return
+      }
+      meta.symbol = key
+      appliedMeta.set(chart, meta)
       applying.add(chart)
       try {
         apply(chart, symbol)
@@ -307,7 +349,14 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
       return
     }
     const apply = options.onApplyPeriod
+    const key = metaKey(period)
     peers(source).forEach(({ chart }) => {
+      const meta = appliedMeta.get(chart) ?? {}
+      if (meta.period === key) {
+        return
+      }
+      meta.period = key
+      appliedMeta.set(chart, meta)
       applying.add(chart)
       try {
         apply(chart, period)
@@ -342,14 +391,30 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
       }
     }
     const onSymbolChange: ActionCallback = data => {
-      if (!applying.has(chart) && channels.symbol && isValid(data)) {
-        dispatchSymbol(chart, data as SymbolInfo)
+      if (!channels.symbol || !isValid(data)) {
+        return
       }
+      const key = metaKey(data)
+      const meta = appliedMeta.get(chart) ?? {}
+      if (meta.symbol === key) {
+        return
+      }
+      meta.symbol = key
+      appliedMeta.set(chart, meta)
+      dispatchSymbol(chart, data as SymbolInfo)
     }
     const onPeriodChange: ActionCallback = data => {
-      if (!applying.has(chart) && channels.period && isValid(data)) {
-        dispatchPeriod(chart, data as Period)
+      if (!channels.period || !isValid(data)) {
+        return
       }
+      const key = metaKey(data)
+      const meta = appliedMeta.get(chart) ?? {}
+      if (meta.period === key) {
+        return
+      }
+      meta.period = key
+      appliedMeta.set(chart, meta)
+      dispatchPeriod(chart, data as Period)
     }
     chart.subscribeAction('onCrosshairChange', onCrosshairChange)
     chart.subscribeAction('onVisibleRangeChange', onVisibleRangeChange)
@@ -377,6 +442,7 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
       entry.unsubscribes.forEach(unsub => { unsub() })
       charts.delete(chart)
       pending.delete(chart)
+      appliedMeta.delete(chart)
     }
   }
 
@@ -398,6 +464,7 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
       })
       charts.clear()
       pending.clear()
+      appliedMeta.clear()
       if (frame !== 0) {
         cancelFrame(frame)
         frame = 0
