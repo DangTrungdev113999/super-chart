@@ -22,6 +22,7 @@ import type VisibleRange from '../common/VisibleRange'
 import type { Period } from '../common/Period'
 import type { SymbolInfo } from '../common/SymbolInfo'
 import type Nullable from '../common/Nullable'
+import { PaneIdConstants } from '../pane/types'
 import { isFunction, isNumber, isString, isValid } from '../common/utils/typeChecks'
 import type { Overlay, OverlayChangeEvent, OverlayCreate } from '../component/Overlay'
 
@@ -59,6 +60,14 @@ export interface ChartSyncAttachOptions {
    * Charts without a group never sync.
    */
   groupId?: string | null
+  /**
+   * When true (default), the first emitted symbol/period/visible-range after
+   * attach is treated as the chart's setup baseline and is not propagated —
+   * prevents a freshly mounted chart from hijacking its peers while its data
+   * pipeline performs `setSymbol`/`setPeriod`/`resetData`. Pass `false` when
+   * attaching to a chart that is already fully loaded and idle.
+   */
+  skipInitialEmits?: boolean
 }
 
 export interface ChartSync {
@@ -73,6 +82,11 @@ interface AttachedChart {
   chart: Chart
   groupId: Nullable<string>
   unsubscribes: Array<() => void>
+  /**
+   * Channels that still need their first observed emit to be absorbed as the
+   * baseline instead of propagated (see `skipInitialEmits`).
+   */
+  priming: Set<'timeRange' | 'symbol' | 'period'>
 }
 
 type ChartStoreInternal = ReturnType<ChartImp['getChartStore']>
@@ -230,9 +244,21 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
       const store = getStore(chart)
       applying.add(chart)
       try {
-        const coordinate = chart.convertToPixel({ timestamp, value }, { paneId }) as Partial<Coordinate>
+        const toCoordinate = (point: Partial<Point>, targetPaneId: string): Partial<Coordinate> => {
+          const result = chart.convertToPixel(point, { paneId: targetPaneId })
+          return Array.isArray(result) ? result[0] : result
+        }
+        let coordinate = toCoordinate({ timestamp, value }, paneId)
+        let targetPaneId = paneId
+        if (!isNumber(coordinate.x) && paneId !== PaneIdConstants.CANDLE) {
+          // The source crosshair sat on a pane the follower does not have
+          // (e.g. an indicator pane that exists only on the source). Fall back
+          // to the candle pane so the vertical line and legend still sync.
+          coordinate = toCoordinate({ timestamp }, PaneIdConstants.CANDLE)
+          targetPaneId = PaneIdConstants.CANDLE
+        }
         if (isNumber(coordinate.x)) {
-          store.setCrosshair({ x: coordinate.x, y: coordinate.y, paneId })
+          store.setCrosshair({ x: coordinate.x, y: coordinate.y, paneId: targetPaneId })
         }
       } finally {
         applying.delete(chart)
@@ -275,7 +301,15 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
 
   function dispatchOverlay (source: Chart, event: OverlayChangeEvent): void {
     const overlay = event.overlay
+    // Drawings are symbol-scoped: mirroring a BTC trendline onto an ETH chart
+    // would anchor it to meaningless prices. Charts without a symbol set are
+    // treated as "unknown" and only receive mirrors from other unknown-symbol
+    // sources — call `chart.setSymbol` to enable cross-symbol filtering.
+    const sourceTicker = getStore(source).getSymbol()?.ticker
     peers(source).forEach(({ chart }) => {
+      if (getStore(chart).getSymbol()?.ticker !== sourceTicker) {
+        return
+      }
       applying.add(chart)
       try {
         switch (event.type) {
@@ -370,6 +404,14 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
     if (charts.has(chart)) {
       return
     }
+    const entry: AttachedChart = {
+      chart,
+      groupId: attachOptions.groupId ?? null,
+      unsubscribes: [],
+      priming: new Set<'timeRange' | 'symbol' | 'period'>(
+        (attachOptions.skipInitialEmits ?? true) ? ['timeRange', 'symbol', 'period'] : []
+      )
+    }
     const onCrosshairChange: ActionCallback = data => {
       if (!applying.has(chart)) {
         schedule(chart, 'crosshair', data)
@@ -377,6 +419,10 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
     }
     const onVisibleRangeChange: ActionCallback = data => {
       if (!applying.has(chart)) {
+        if (entry.priming.has('timeRange')) {
+          entry.priming.delete('timeRange')
+          return
+        }
         schedule(chart, 'timeRange', data)
       }
     }
@@ -401,6 +447,10 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
       }
       meta.symbol = key
       appliedMeta.set(chart, meta)
+      if (entry.priming.has('symbol')) {
+        entry.priming.delete('symbol')
+        return
+      }
       dispatchSymbol(chart, data as SymbolInfo)
     }
     const onPeriodChange: ActionCallback = data => {
@@ -414,6 +464,10 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
       }
       meta.period = key
       appliedMeta.set(chart, meta)
+      if (entry.priming.has('period')) {
+        entry.priming.delete('period')
+        return
+      }
       dispatchPeriod(chart, data as Period)
     }
     chart.subscribeAction('onCrosshairChange', onCrosshairChange)
@@ -422,18 +476,15 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
     chart.subscribeAction('onOverlayChange', onOverlayChange)
     chart.subscribeAction('onSymbolChange', onSymbolChange)
     chart.subscribeAction('onPeriodChange', onPeriodChange)
-    charts.set(chart, {
-      chart,
-      groupId: attachOptions.groupId ?? null,
-      unsubscribes: [
-        () => { chart.unsubscribeAction('onCrosshairChange', onCrosshairChange) },
-        () => { chart.unsubscribeAction('onVisibleRangeChange', onVisibleRangeChange) },
-        () => { chart.unsubscribeAction('onZoom', onZoom) },
-        () => { chart.unsubscribeAction('onOverlayChange', onOverlayChange) },
-        () => { chart.unsubscribeAction('onSymbolChange', onSymbolChange) },
-        () => { chart.unsubscribeAction('onPeriodChange', onPeriodChange) }
-      ]
-    })
+    entry.unsubscribes = [
+      () => { chart.unsubscribeAction('onCrosshairChange', onCrosshairChange) },
+      () => { chart.unsubscribeAction('onVisibleRangeChange', onVisibleRangeChange) },
+      () => { chart.unsubscribeAction('onZoom', onZoom) },
+      () => { chart.unsubscribeAction('onOverlayChange', onOverlayChange) },
+      () => { chart.unsubscribeAction('onSymbolChange', onSymbolChange) },
+      () => { chart.unsubscribeAction('onPeriodChange', onPeriodChange) }
+    ]
+    charts.set(chart, entry)
   }
 
   function detach (chart: Chart): void {

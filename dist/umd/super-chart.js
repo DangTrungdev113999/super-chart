@@ -27934,9 +27934,21 @@ function createChartSync(options) {
             var store = getStore(chart);
             applying.add(chart);
             try {
-                var coordinate = chart.convertToPixel({ timestamp: timestamp, value: value }, { paneId: paneId });
+                var toCoordinate = function (point, targetPaneId) {
+                    var result = chart.convertToPixel(point, { paneId: targetPaneId });
+                    return Array.isArray(result) ? result[0] : result;
+                };
+                var coordinate = toCoordinate({ timestamp: timestamp, value: value }, paneId);
+                var targetPaneId = paneId;
+                if (!isNumber(coordinate.x) && paneId !== PaneIdConstants.CANDLE) {
+                    // The source crosshair sat on a pane the follower does not have
+                    // (e.g. an indicator pane that exists only on the source). Fall back
+                    // to the candle pane so the vertical line and legend still sync.
+                    coordinate = toCoordinate({ timestamp: timestamp }, PaneIdConstants.CANDLE);
+                    targetPaneId = PaneIdConstants.CANDLE;
+                }
                 if (isNumber(coordinate.x)) {
-                    store.setCrosshair({ x: coordinate.x, y: coordinate.y, paneId: paneId });
+                    store.setCrosshair({ x: coordinate.x, y: coordinate.y, paneId: targetPaneId });
                 }
             }
             finally {
@@ -27980,9 +27992,19 @@ function createChartSync(options) {
         });
     }
     function dispatchOverlay(source, event) {
+        var _a;
         var overlay = event.overlay;
+        // Drawings are symbol-scoped: mirroring a BTC trendline onto an ETH chart
+        // would anchor it to meaningless prices. Charts without a symbol set are
+        // treated as "unknown" and only receive mirrors from other unknown-symbol
+        // sources — call `chart.setSymbol` to enable cross-symbol filtering.
+        var sourceTicker = (_a = getStore(source).getSymbol()) === null || _a === void 0 ? void 0 : _a.ticker;
         peers(source).forEach(function (_a) {
+            var _b;
             var chart = _a.chart;
+            if (((_b = getStore(chart).getSymbol()) === null || _b === void 0 ? void 0 : _b.ticker) !== sourceTicker) {
+                return;
+            }
             applying.add(chart);
             try {
                 switch (event.type) {
@@ -28079,11 +28101,17 @@ function createChartSync(options) {
         });
     }
     function attach(chart, attachOptions) {
-        var _a;
+        var _a, _b;
         if (attachOptions === void 0) { attachOptions = {}; }
         if (charts.has(chart)) {
             return;
         }
+        var entry = {
+            chart: chart,
+            groupId: (_a = attachOptions.groupId) !== null && _a !== void 0 ? _a : null,
+            unsubscribes: [],
+            priming: new Set(((_b = attachOptions.skipInitialEmits) !== null && _b !== void 0 ? _b : true) ? ['timeRange', 'symbol', 'period'] : [])
+        };
         var onCrosshairChange = function (data) {
             if (!applying.has(chart)) {
                 schedule(chart, 'crosshair', data);
@@ -28091,6 +28119,10 @@ function createChartSync(options) {
         };
         var onVisibleRangeChange = function (data) {
             if (!applying.has(chart)) {
+                if (entry.priming.has('timeRange')) {
+                    entry.priming.delete('timeRange');
+                    return;
+                }
                 schedule(chart, 'timeRange', data);
             }
         };
@@ -28116,6 +28148,10 @@ function createChartSync(options) {
             }
             meta.symbol = key;
             appliedMeta.set(chart, meta);
+            if (entry.priming.has('symbol')) {
+                entry.priming.delete('symbol');
+                return;
+            }
             dispatchSymbol(chart, data);
         };
         var onPeriodChange = function (data) {
@@ -28130,6 +28166,10 @@ function createChartSync(options) {
             }
             meta.period = key;
             appliedMeta.set(chart, meta);
+            if (entry.priming.has('period')) {
+                entry.priming.delete('period');
+                return;
+            }
             dispatchPeriod(chart, data);
         };
         chart.subscribeAction('onCrosshairChange', onCrosshairChange);
@@ -28138,18 +28178,15 @@ function createChartSync(options) {
         chart.subscribeAction('onOverlayChange', onOverlayChange);
         chart.subscribeAction('onSymbolChange', onSymbolChange);
         chart.subscribeAction('onPeriodChange', onPeriodChange);
-        charts.set(chart, {
-            chart: chart,
-            groupId: (_a = attachOptions.groupId) !== null && _a !== void 0 ? _a : null,
-            unsubscribes: [
-                function () { chart.unsubscribeAction('onCrosshairChange', onCrosshairChange); },
-                function () { chart.unsubscribeAction('onVisibleRangeChange', onVisibleRangeChange); },
-                function () { chart.unsubscribeAction('onZoom', onZoom); },
-                function () { chart.unsubscribeAction('onOverlayChange', onOverlayChange); },
-                function () { chart.unsubscribeAction('onSymbolChange', onSymbolChange); },
-                function () { chart.unsubscribeAction('onPeriodChange', onPeriodChange); }
-            ]
-        });
+        entry.unsubscribes = [
+            function () { chart.unsubscribeAction('onCrosshairChange', onCrosshairChange); },
+            function () { chart.unsubscribeAction('onVisibleRangeChange', onVisibleRangeChange); },
+            function () { chart.unsubscribeAction('onZoom', onZoom); },
+            function () { chart.unsubscribeAction('onOverlayChange', onOverlayChange); },
+            function () { chart.unsubscribeAction('onSymbolChange', onSymbolChange); },
+            function () { chart.unsubscribeAction('onPeriodChange', onPeriodChange); }
+        ];
+        charts.set(chart, entry);
     }
     function detach(chart) {
         var entry = charts.get(chart);

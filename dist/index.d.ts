@@ -1330,6 +1330,14 @@ export interface ChartSyncAttachOptions {
 	 * Charts without a group never sync.
 	 */
 	groupId?: string | null;
+	/**
+	 * When true (default), the first emitted symbol/period/visible-range after
+	 * attach is treated as the chart's setup baseline and is not propagated —
+	 * prevents a freshly mounted chart from hijacking its peers while its data
+	 * pipeline performs `setSymbol`/`setPeriod`/`resetData`. Pass `false` when
+	 * attaching to a chart that is already fully loaded and idle.
+	 */
+	skipInitialEmits?: boolean;
 }
 export interface ChartSync {
 	attach: (chart: Chart, options?: ChartSyncAttachOptions) => void;
