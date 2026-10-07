@@ -122,6 +122,13 @@ interface AttachedChart {
   applyAwait?: { symbol?: string, period?: string }
   applyDeadline: number
   /**
+   * When the last symbol/period apply ran. A same-key emit arriving within
+   * the apply window is that apply's confirmation — even if applyAwait was
+   * already released early — and must re-open the quiet window so the
+   * trailing reload burst stays absorbed.
+   */
+  appliedAt: number
+  /**
    * Signature of the last crosshair this chart applied on behalf of a peer.
    * Housekeeping re-emits echo it back — matching payloads are dropped so a
    * synced crosshair never drifts the group (or snaps the source back).
@@ -268,7 +275,11 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
       return false
     }
     if (Date.now() >= entry.primeDeadline || entry.absorbedCount >= PRIME_ABSORB_MAX) {
-      releasePriming(entry)
+      // Setup-priming exhaustion releases the priming set only — a pending
+      // applyAwait is a separate contract and must survive until confirm.
+      entry.priming.clear()
+      entry.absorbedCount = 0
+      clearPrimeTimer(entry)
       return false
     }
     entry.absorbedCount++
@@ -287,7 +298,11 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
     entry.priming.add('crosshair')
     entry.priming.add('zoom')
     entry.priming.add('drawings')
-    entry.primeDeadline = Date.now() + PRIME_MAX_MS
+    // The reload burst (fetch → _addData → range adjusts) can land seconds
+    // after the confirm emit on slow networks — use the extended apply
+    // deadline. The 250ms quiet window still releases early once the chart
+    // settles, so normal-speed reloads don't stay muted.
+    entry.primeDeadline = Date.now() + PRIME_APPLY_MAX_MS
     armPrimeTimer(entry)
   }
 
@@ -532,15 +547,22 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
    * once the source finished drawing.
    */
   function promoteMirror (chart: Chart, overlay: Overlay): void {
-    chart.removeOverlay({ id: overlay.id })
+    // Mark before removing — the ghost's removal must never reach a host's
+    // shared-store delete (same contract as dispatchOverlay's remove path).
+    try {
+      chart.overrideOverlay({ id: overlay.id, synced: true, syncRemoved: true })
+    } finally {
+      chart.removeOverlay({ id: overlay.id })
+    }
     chart.createOverlay({ ...serializeOverlay(overlay), synced: true, skipDrawReplay: true })
   }
 
   function dispatchOverlay (source: Chart, event: OverlayChangeEvent, suppressMaterialize = false): void {
     const overlay = event.overlay
-    // Host-marked removals (symbol-switch wipes, bulk clears) never propagate —
-    // peers keep their own copies of the shared persisted drawings.
-    if (event.type === 'remove' && overlay.suppressSync === true) {
+    // Host-marked suppressSync overlays (symbol-switch wipes, bulk clears)
+    // never propagate ANY lifecycle event — the flag's contract covers the
+    // whole lifecycle, not just removal.
+    if (overlay.suppressSync === true) {
       return
     }
     // Drawings are symbol-scoped: mirroring a BTC trendline onto an ETH chart
@@ -597,16 +619,40 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
               }
               if (!updated && !suppressMaterialize) {
                 // Follower may have attached after the overlay was created —
-                // materialize it instead of dropping the update.
-                mirrorCreate(chart, overlay)
+                // materialize it instead of dropping the update. But only if
+                // the source still owns it: emits for a removed overlay can
+                // land a frame late (mid-drag delete), and resurrecting those
+                // would leave a zombie nobody owns.
+                try {
+                  if (source.getOverlays({ id: overlay.id }).length > 0) {
+                    mirrorCreate(chart, overlay)
+                  }
+                } catch {
+                  // Source torn down mid-dispatch — skip materialization.
+                }
               }
               break
             }
             case 'drawEnd': {
               const existing = chart.getOverlays({ id: overlay.id })[0]
               if (isValid(existing)) {
-                // Replace the ghost with a real, interactive overlay.
-                promoteMirror(chart, overlay)
+                if (existing.ghost) {
+                  if (tickersMatch) {
+                    // Replace the ghost with a real, interactive overlay.
+                    promoteMirror(chart, overlay)
+                  } else {
+                    // Source switched symbol mid-draw — the ghost's frozen
+                    // points are meaningless on the new symbol. Drop it
+                    // rather than promoting a wrong-symbol artifact.
+                    try {
+                      chart.overrideOverlay({ id: overlay.id, synced: true, syncRemoved: true })
+                    } finally {
+                      chart.removeOverlay({ id: overlay.id })
+                    }
+                  }
+                }
+                // A same-id non-ghost overlay is the peer's own drawing —
+                // never let a foreign drawEnd overwrite it.
               } else if (tickersMatch && !suppressMaterialize) {
                 // Follower attached mid-draw — materialize the finished
                 // overlay directly. On a mismatched symbol never create:
@@ -661,6 +707,7 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
       appliedMeta.set(chart, meta)
       applying.add(chart)
       try {
+        entry.appliedAt = Date.now()
         apply(chart, symbol)
         // A synchronous adapter lands the value inside apply() — its confirm
         // emit already ran (deduped via meta), so arming the await now would
@@ -680,11 +727,18 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
         // A failed apply stays retryable — resync the dedupe key from the
         // store's actual state rather than blindly restoring the old value
         // (a partially-succeeded apply may already have emitted the new key).
+        let partiallyLanded = false
         try {
           const liveSymbol = getStore(chart).getSymbol()
           meta.symbol = isValid(liveSymbol) ? symbolKey(liveSymbol) : undefined
+          partiallyLanded = meta.symbol === key
         } catch {
           meta.symbol = undefined
+        }
+        // A throwing adapter can still have landed the value — absorb its
+        // trailing reload burst instead of leaking it into the group.
+        if (partiallyLanded) {
+          primeAfterApply(entry)
         }
       } finally {
         applying.delete(chart)
@@ -708,6 +762,7 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
       appliedMeta.set(chart, meta)
       applying.add(chart)
       try {
+        entry.appliedAt = Date.now()
         apply(chart, period)
         let landed = false
         try {
@@ -720,11 +775,16 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
         }
         primeAfterApply(entry)
       } catch {
+        let partiallyLanded = false
         try {
           const livePeriod = getStore(chart).getPeriod()
           meta.period = isValid(livePeriod) ? periodKey(livePeriod) : undefined
+          partiallyLanded = meta.period === key
         } catch {
           meta.period = undefined
+        }
+        if (partiallyLanded) {
+          primeAfterApply(entry)
         }
       } finally {
         applying.delete(chart)
@@ -778,7 +838,8 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
       primeDeadline: Date.now() + PRIME_MAX_MS,
       lastCrosshairActive: false,
       absorbedCount: 0,
-      applyDeadline: 0
+      applyDeadline: 0,
+      appliedAt: 0
     }
     const onCrosshairChange: ActionCallback = data => {
       if (applying.has(chart)) {
@@ -849,6 +910,7 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
         return
       }
       const key = symbolKey(data as SymbolInfo)
+      const meta = appliedMeta.get(chart) ?? {}
       // Any symbol emit proves the reload pipeline ran — release the
       // post-apply suppression (a different key means the apply was
       // superseded, equally done waiting). But the confirm fires BEFORE the
@@ -860,10 +922,16 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
           entry.applyAwait = undefined
           primeAfterApply(entry)
         }
+      } else if (
+        meta.symbol === key &&
+        Date.now() - entry.appliedAt < PRIME_APPLY_MAX_MS
+      ) {
+        // applyAwait released early (deadline/count) — a same-key emit within
+        // the apply window is still the apply's confirmation landing late.
+        primeAfterApply(entry)
       }
       // Meta always tracks the last-known value — the channel flag gates
       // dispatch, not bookkeeping (otherwise a re-enable dedupes wrongly).
-      const meta = appliedMeta.get(chart) ?? {}
       if (meta.symbol === key) {
         return
       }
@@ -882,14 +950,19 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
         return
       }
       const key = periodKey(data as Period)
+      const meta = appliedMeta.get(chart) ?? {}
       if (isValid(entry.applyAwait?.period)) {
         delete entry.applyAwait.period
         if (!isValid(entry.applyAwait.symbol)) {
           entry.applyAwait = undefined
           primeAfterApply(entry)
         }
+      } else if (
+        meta.period === key &&
+        Date.now() - entry.appliedAt < PRIME_APPLY_MAX_MS
+      ) {
+        primeAfterApply(entry)
       }
-      const meta = appliedMeta.get(chart) ?? {}
       if (meta.period === key) {
         return
       }
@@ -957,7 +1030,13 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
     if (!channels.crosshair) {
       return
     }
-    peers(source).forEach(({ chart }) => {
+    peers(source).forEach(entry => {
+      // Only clear crosshairs WE applied — a peer's own user crosshair must
+      // survive another chart's detach/regroup.
+      if (!isValid(entry.appliedCrosshair)) {
+        return
+      }
+      const { chart } = entry
       try {
         applying.add(chart)
         try {
@@ -965,6 +1044,7 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
         } finally {
           applying.delete(chart)
         }
+        entry.appliedCrosshair = undefined
       } catch {}
     })
   }
@@ -981,11 +1061,15 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
       const p = pending.get(chart)
       if (isValid(p?.drawings)) {
         p.drawings.forEach(events => {
+          // Replay the whole ordered queue — same remove→create collapse
+          // semantics as flush() so a queued replace can't strand mirrors.
+          let sawRemove = false
           events.forEach(event => {
+            try {
+              dispatchOverlay(chart, event, sawRemove)
+            } catch {}
             if (event.type === 'remove') {
-              try {
-                dispatchOverlay(chart, event)
-              } catch {}
+              sawRemove = true
             }
           })
         })
@@ -1013,6 +1097,22 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
           // nobody, when groupId is null).
           purgeInProgressMirror(entry)
           pushCrosshairClear(chart)
+          // Queued emits were generated while in the OLD group — replay
+          // drawing removes to finish cleanup, then drop the rest so they
+          // don't flush into the new group next frame.
+          const p = pending.get(chart)
+          if (isValid(p?.drawings)) {
+            p.drawings.forEach(events => {
+              events.forEach(event => {
+                if (event.type === 'remove') {
+                  try {
+                    dispatchOverlay(chart, event)
+                  } catch {}
+                }
+              })
+            })
+          }
+          pending.delete(chart)
           entry.groupId = groupId
         }
       } else {

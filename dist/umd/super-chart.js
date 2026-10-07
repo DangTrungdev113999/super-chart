@@ -922,7 +922,9 @@ var Action = /** @class */ (function () {
             try {
                 callback(data);
             }
-            catch (_a) { }
+            catch (e) {
+                logWarn('Action.execute', 'callback', e instanceof Error ? e.message : String(e));
+            }
         });
     };
     Action.prototype.isEmpty = function () {
@@ -8799,13 +8801,19 @@ var OverlayImp = /** @class */ (function () {
         // whole overlay here used to dominate the drag/sync hot path. styles are
         // compared by value (JSON) because override() merges them in place —
         // a same-reference compare would silently drop style-only updates.
+        // stringify can throw on non-serializable values (BigInt, throwing
+        // toJSON) — fall back to a reference sentinel so override never throws.
+        var stylesJson = '';
+        try {
+            stylesJson = JSON.stringify((_a = this.styles) !== null && _a !== void 0 ? _a : null);
+        }
+        catch (_c) { }
         this._prevOverlay = {
             zLevel: this.zLevel,
             visible: this.visible,
             points: this.points.map(function (p) { return (__assign({}, p)); }),
             extendData: this.extendData,
-            styles: this.styles,
-            stylesJson: JSON.stringify((_a = this.styles) !== null && _a !== void 0 ? _a : null)
+            stylesJson: stylesJson
         };
         var id = overlay.id, name = overlay.name; overlay.currentStep; var points = overlay.points, styles = overlay.styles, extendData = overlay.extendData, skipDrawReplay = overlay.skipDrawReplay, others = __rest(overlay, ["id", "name", "currentStep", "points", "styles", "extendData", "skipDrawReplay"]);
         merge(this, others);
@@ -8893,11 +8901,16 @@ var OverlayImp = /** @class */ (function () {
                 }
             }
         }
+        var stylesJson = '';
+        try {
+            stylesJson = JSON.stringify((_a = this.styles) !== null && _a !== void 0 ? _a : null);
+        }
+        catch (_b) { }
         var draw = sort ||
             pointsChanged ||
             this._prevOverlay.visible !== this.visible ||
             this._prevOverlay.extendData !== this.extendData ||
-            this._prevOverlay.stylesJson !== JSON.stringify((_a = this.styles) !== null && _a !== void 0 ? _a : null);
+            this._prevOverlay.stylesJson !== stylesJson;
         return { sort: sort, draw: draw };
     };
     OverlayImp.prototype.nextStep = function () {
@@ -18613,7 +18626,11 @@ var StoreImp = /** @class */ (function () {
                 if (overlay.isDrawing() && !overlay.ghost) {
                     // A new drawing displaces any unfinished one without a remove — emit
                     // it so subscribers (sync mirrors) can drop the abandoned overlay.
+                    // Reassign the slot BEFORE emitting: a subscriber re-entering
+                    // removeOverlay for the displaced id must not find it again and
+                    // fire a duplicate remove/onRemoved.
                     var displaced = _this._progressOverlayInfo;
+                    _this._progressOverlayInfo = { paneId: paneId, overlay: overlay, appointPaneFlag: appointPaneFlags[index] };
                     if (isValid(displaced)) {
                         try {
                             (_g = (_f = displaced.overlay).onRemoved) === null || _g === void 0 ? void 0 : _g.call(_f, { overlay: displaced.overlay, chart: _this._chart });
@@ -18621,7 +18638,6 @@ var StoreImp = /** @class */ (function () {
                         catch (_m) { }
                         _this.executeAction('onOverlayChange', { type: 'remove', overlay: displaced.overlay });
                     }
-                    _this._progressOverlayInfo = { paneId: paneId, overlay: overlay, appointPaneFlag: appointPaneFlags[index] };
                 }
                 else {
                     if (!_this._overlays.has(paneId)) {
@@ -18739,6 +18755,18 @@ var StoreImp = /** @class */ (function () {
             if (((_c = _this._progressOverlayInfo) === null || _c === void 0 ? void 0 : _c.overlay) === overlay) {
                 _this._progressOverlayInfo = null;
             }
+            // A mid-drag removal must also drop the pressed state — otherwise the
+            // next mousemove keeps emitting progress events for a dead overlay and
+            // sync mirrors would materialize it back as a zombie.
+            if (_this._pressedOverlayInfo.overlay === overlay) {
+                _this._pressedOverlayInfo = {
+                    paneId: '',
+                    overlay: null,
+                    figureType: 'none',
+                    figureIndex: -1,
+                    figure: null
+                };
+            }
             var index = paneOverlays.findIndex(function (o) { return o.id === overlay.id; });
             if (index === -1) {
                 try {
@@ -18751,6 +18779,9 @@ var StoreImp = /** @class */ (function () {
                         var i = list.indexOf(overlay);
                         if (i > -1) {
                             list.splice(i, 1);
+                            if (!updatePaneIds.includes(item[0])) {
+                                updatePaneIds.push(item[0]);
+                            }
                             if (list.length === 0) {
                                 _this._overlays.delete(item[0]);
                             }
@@ -28037,7 +28068,11 @@ function createChartSync(options) {
             return false;
         }
         if (Date.now() >= entry.primeDeadline || entry.absorbedCount >= PRIME_ABSORB_MAX) {
-            releasePriming(entry);
+            // Setup-priming exhaustion releases the priming set only — a pending
+            // applyAwait is a separate contract and must survive until confirm.
+            entry.priming.clear();
+            entry.absorbedCount = 0;
+            clearPrimeTimer(entry);
             return false;
         }
         entry.absorbedCount++;
@@ -28055,7 +28090,11 @@ function createChartSync(options) {
         entry.priming.add('crosshair');
         entry.priming.add('zoom');
         entry.priming.add('drawings');
-        entry.primeDeadline = Date.now() + PRIME_MAX_MS;
+        // The reload burst (fetch → _addData → range adjusts) can land seconds
+        // after the confirm emit on slow networks — use the extended apply
+        // deadline. The 250ms quiet window still releases early once the chart
+        // settles, so normal-speed reloads don't stay muted.
+        entry.primeDeadline = Date.now() + PRIME_APPLY_MAX_MS;
         armPrimeTimer(entry);
     }
     function peers(source) {
@@ -28299,16 +28338,24 @@ function createChartSync(options) {
      * once the source finished drawing.
      */
     function promoteMirror(chart, overlay) {
-        chart.removeOverlay({ id: overlay.id });
+        // Mark before removing — the ghost's removal must never reach a host's
+        // shared-store delete (same contract as dispatchOverlay's remove path).
+        try {
+            chart.overrideOverlay({ id: overlay.id, synced: true, syncRemoved: true });
+        }
+        finally {
+            chart.removeOverlay({ id: overlay.id });
+        }
         chart.createOverlay(__assign(__assign({}, serializeOverlay(overlay)), { synced: true, skipDrawReplay: true }));
     }
     function dispatchOverlay(source, event, suppressMaterialize) {
         var _a;
         if (suppressMaterialize === void 0) { suppressMaterialize = false; }
         var overlay = event.overlay;
-        // Host-marked removals (symbol-switch wipes, bulk clears) never propagate —
-        // peers keep their own copies of the shared persisted drawings.
-        if (event.type === 'remove' && overlay.suppressSync === true) {
+        // Host-marked suppressSync overlays (symbol-switch wipes, bulk clears)
+        // never propagate ANY lifecycle event — the flag's contract covers the
+        // whole lifecycle, not just removal.
+        if (overlay.suppressSync === true) {
             return;
         }
         // Drawings are symbol-scoped: mirroring a BTC trendline onto an ETH chart
@@ -28367,16 +28414,43 @@ function createChartSync(options) {
                             }
                             if (!updated && !suppressMaterialize) {
                                 // Follower may have attached after the overlay was created —
-                                // materialize it instead of dropping the update.
-                                mirrorCreate(chart, overlay);
+                                // materialize it instead of dropping the update. But only if
+                                // the source still owns it: emits for a removed overlay can
+                                // land a frame late (mid-drag delete), and resurrecting those
+                                // would leave a zombie nobody owns.
+                                try {
+                                    if (source.getOverlays({ id: overlay.id }).length > 0) {
+                                        mirrorCreate(chart, overlay);
+                                    }
+                                }
+                                catch (_c) {
+                                    // Source torn down mid-dispatch — skip materialization.
+                                }
                             }
                             break;
                         }
                         case 'drawEnd': {
                             var existing = chart.getOverlays({ id: overlay.id })[0];
                             if (isValid(existing)) {
-                                // Replace the ghost with a real, interactive overlay.
-                                promoteMirror(chart, overlay);
+                                if (existing.ghost) {
+                                    if (tickersMatch) {
+                                        // Replace the ghost with a real, interactive overlay.
+                                        promoteMirror(chart, overlay);
+                                    }
+                                    else {
+                                        // Source switched symbol mid-draw — the ghost's frozen
+                                        // points are meaningless on the new symbol. Drop it
+                                        // rather than promoting a wrong-symbol artifact.
+                                        try {
+                                            chart.overrideOverlay({ id: overlay.id, synced: true, syncRemoved: true });
+                                        }
+                                        finally {
+                                            chart.removeOverlay({ id: overlay.id });
+                                        }
+                                    }
+                                }
+                                // A same-id non-ghost overlay is the peer's own drawing —
+                                // never let a foreign drawEnd overwrite it.
                             }
                             else if (tickersMatch && !suppressMaterialize) {
                                 // Follower attached mid-draw — materialize the finished
@@ -28412,7 +28486,7 @@ function createChartSync(options) {
                     applying.delete(chart);
                 }
             }
-            catch (_c) {
+            catch (_d) {
                 // One broken peer must not drop the event for the rest of the group.
             }
         });
@@ -28434,6 +28508,7 @@ function createChartSync(options) {
             appliedMeta.set(chart, meta);
             applying.add(chart);
             try {
+                entry.appliedAt = Date.now();
                 apply(chart, symbol);
                 // A synchronous adapter lands the value inside apply() — its confirm
                 // emit already ran (deduped via meta), so arming the await now would
@@ -28455,12 +28530,19 @@ function createChartSync(options) {
                 // A failed apply stays retryable — resync the dedupe key from the
                 // store's actual state rather than blindly restoring the old value
                 // (a partially-succeeded apply may already have emitted the new key).
+                var partiallyLanded = false;
                 try {
                     var liveSymbol = getStore(chart).getSymbol();
                     meta.symbol = isValid(liveSymbol) ? symbolKey(liveSymbol) : undefined;
+                    partiallyLanded = meta.symbol === key;
                 }
                 catch (_e) {
                     meta.symbol = undefined;
+                }
+                // A throwing adapter can still have landed the value — absorb its
+                // trailing reload burst instead of leaking it into the group.
+                if (partiallyLanded) {
+                    primeAfterApply(entry);
                 }
             }
             finally {
@@ -28485,6 +28567,7 @@ function createChartSync(options) {
             appliedMeta.set(chart, meta);
             applying.add(chart);
             try {
+                entry.appliedAt = Date.now();
                 apply(chart, period);
                 var landed = false;
                 try {
@@ -28499,12 +28582,17 @@ function createChartSync(options) {
                 primeAfterApply(entry);
             }
             catch (_d) {
+                var partiallyLanded = false;
                 try {
                     var livePeriod = getStore(chart).getPeriod();
                     meta.period = isValid(livePeriod) ? periodKey(livePeriod) : undefined;
+                    partiallyLanded = meta.period === key;
                 }
                 catch (_e) {
                     meta.period = undefined;
+                }
+                if (partiallyLanded) {
+                    primeAfterApply(entry);
                 }
             }
             finally {
@@ -28560,7 +28648,8 @@ function createChartSync(options) {
             primeDeadline: Date.now() + PRIME_MAX_MS,
             lastCrosshairActive: false,
             absorbedCount: 0,
-            applyDeadline: 0
+            applyDeadline: 0,
+            appliedAt: 0
         };
         var onCrosshairChange = function (data) {
             if (applying.has(chart)) {
@@ -28633,21 +28722,27 @@ function createChartSync(options) {
                 return;
             }
             var key = symbolKey(data);
+            var meta = (_a = appliedMeta.get(chart)) !== null && _a !== void 0 ? _a : {};
             // Any symbol emit proves the reload pipeline ran — release the
             // post-apply suppression (a different key means the apply was
             // superseded, equally done waiting). But the confirm fires BEFORE the
             // async reload burst (fetch → _addData → range adjusts): re-open the
             // quiet window so that trailing burst is absorbed, not broadcast.
-            if (isValid((_a = entry.applyAwait) === null || _a === void 0 ? void 0 : _a.symbol)) {
+            if (isValid((_b = entry.applyAwait) === null || _b === void 0 ? void 0 : _b.symbol)) {
                 delete entry.applyAwait.symbol;
                 if (!isValid(entry.applyAwait.period)) {
                     entry.applyAwait = undefined;
                     primeAfterApply(entry);
                 }
             }
+            else if (meta.symbol === key &&
+                Date.now() - entry.appliedAt < PRIME_APPLY_MAX_MS) {
+                // applyAwait released early (deadline/count) — a same-key emit within
+                // the apply window is still the apply's confirmation landing late.
+                primeAfterApply(entry);
+            }
             // Meta always tracks the last-known value — the channel flag gates
             // dispatch, not bookkeeping (otherwise a re-enable dedupes wrongly).
-            var meta = (_b = appliedMeta.get(chart)) !== null && _b !== void 0 ? _b : {};
             if (meta.symbol === key) {
                 return;
             }
@@ -28667,14 +28762,18 @@ function createChartSync(options) {
                 return;
             }
             var key = periodKey(data);
-            if (isValid((_a = entry.applyAwait) === null || _a === void 0 ? void 0 : _a.period)) {
+            var meta = (_a = appliedMeta.get(chart)) !== null && _a !== void 0 ? _a : {};
+            if (isValid((_b = entry.applyAwait) === null || _b === void 0 ? void 0 : _b.period)) {
                 delete entry.applyAwait.period;
                 if (!isValid(entry.applyAwait.symbol)) {
                     entry.applyAwait = undefined;
                     primeAfterApply(entry);
                 }
             }
-            var meta = (_b = appliedMeta.get(chart)) !== null && _b !== void 0 ? _b : {};
+            else if (meta.period === key &&
+                Date.now() - entry.appliedAt < PRIME_APPLY_MAX_MS) {
+                primeAfterApply(entry);
+            }
             if (meta.period === key) {
                 return;
             }
@@ -28743,8 +28842,13 @@ function createChartSync(options) {
         if (!channels.crosshair) {
             return;
         }
-        peers(source).forEach(function (_a) {
-            var chart = _a.chart;
+        peers(source).forEach(function (entry) {
+            // Only clear crosshairs WE applied — a peer's own user crosshair must
+            // survive another chart's detach/regroup.
+            if (!isValid(entry.appliedCrosshair)) {
+                return;
+            }
+            var chart = entry.chart;
             try {
                 applying.add(chart);
                 try {
@@ -28753,8 +28857,9 @@ function createChartSync(options) {
                 finally {
                     applying.delete(chart);
                 }
+                entry.appliedCrosshair = undefined;
             }
-            catch (_b) { }
+            catch (_a) { }
         });
     }
     function detach(chart) {
@@ -28769,12 +28874,16 @@ function createChartSync(options) {
             var p = pending.get(chart);
             if (isValid(p === null || p === void 0 ? void 0 : p.drawings)) {
                 p.drawings.forEach(function (events) {
+                    // Replay the whole ordered queue — same remove→create collapse
+                    // semantics as flush() so a queued replace can't strand mirrors.
+                    var sawRemove = false;
                     events.forEach(function (event) {
+                        try {
+                            dispatchOverlay(chart, event, sawRemove);
+                        }
+                        catch (_a) { }
                         if (event.type === 'remove') {
-                            try {
-                                dispatchOverlay(chart, event);
-                            }
-                            catch (_a) { }
+                            sawRemove = true;
                         }
                     });
                 });
@@ -28801,6 +28910,23 @@ function createChartSync(options) {
                     // nobody, when groupId is null).
                     purgeInProgressMirror(entry);
                     pushCrosshairClear(chart);
+                    // Queued emits were generated while in the OLD group — replay
+                    // drawing removes to finish cleanup, then drop the rest so they
+                    // don't flush into the new group next frame.
+                    var p = pending.get(chart);
+                    if (isValid(p === null || p === void 0 ? void 0 : p.drawings)) {
+                        p.drawings.forEach(function (events) {
+                            events.forEach(function (event) {
+                                if (event.type === 'remove') {
+                                    try {
+                                        dispatchOverlay(chart, event);
+                                    }
+                                    catch (_a) { }
+                                }
+                            });
+                        });
+                    }
+                    pending.delete(chart);
                     entry.groupId = groupId;
                 }
             }

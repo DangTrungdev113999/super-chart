@@ -13,6 +13,7 @@
  */
 
 import { isFunction } from './utils/typeChecks'
+import { logWarn } from './utils/logger'
 
 export type ActionCallback = (data?: unknown) => void
 
@@ -44,7 +45,9 @@ export default class Action {
       // after it (e.g. a sync mirror missing the ghost-purge 'remove').
       try {
         callback(data)
-      } catch {}
+      } catch (e) {
+        logWarn('Action.execute', 'callback', e instanceof Error ? e.message : String(e))
+      }
     })
   }
 

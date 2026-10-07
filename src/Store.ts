@@ -1427,14 +1427,17 @@ export default class StoreImp implements Store {
         if (overlay.isDrawing() && !overlay.ghost) {
           // A new drawing displaces any unfinished one without a remove — emit
           // it so subscribers (sync mirrors) can drop the abandoned overlay.
+          // Reassign the slot BEFORE emitting: a subscriber re-entering
+          // removeOverlay for the displaced id must not find it again and
+          // fire a duplicate remove/onRemoved.
           const displaced = this._progressOverlayInfo
+          this._progressOverlayInfo = { paneId, overlay, appointPaneFlag: appointPaneFlags[index] }
           if (isValid(displaced)) {
             try {
               displaced.overlay.onRemoved?.({ overlay: displaced.overlay, chart: this._chart })
             } catch {}
             this.executeAction('onOverlayChange', { type: 'remove', overlay: displaced.overlay })
           }
-          this._progressOverlayInfo = { paneId, overlay, appointPaneFlag: appointPaneFlags[index] }
         } else {
           if (!this._overlays.has(paneId)) {
             this._overlays.set(paneId, [])
@@ -1551,6 +1554,18 @@ export default class StoreImp implements Store {
       if (this._progressOverlayInfo?.overlay === overlay) {
         this._progressOverlayInfo = null
       }
+      // A mid-drag removal must also drop the pressed state — otherwise the
+      // next mousemove keeps emitting progress events for a dead overlay and
+      // sync mirrors would materialize it back as a zombie.
+      if (this._pressedOverlayInfo.overlay === overlay) {
+        this._pressedOverlayInfo = {
+          paneId: '',
+          overlay: null,
+          figureType: 'none',
+          figureIndex: -1,
+          figure: null
+        }
+      }
       let index = paneOverlays.findIndex(o => o.id === overlay.id)
       if (index === -1) {
         // overlay.paneId may have drifted from the map key (host-side field
@@ -1561,6 +1576,9 @@ export default class StoreImp implements Store {
           const i = list.indexOf(overlay)
           if (i > -1) {
             list.splice(i, 1)
+            if (!updatePaneIds.includes(item[0])) {
+              updatePaneIds.push(item[0])
+            }
             if (list.length === 0) {
               this._overlays.delete(item[0])
             }

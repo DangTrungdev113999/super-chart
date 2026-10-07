@@ -342,7 +342,7 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
 
   private _prevZLevel = 0
 
-  private _prevOverlay: Pick<Overlay<E>, 'zLevel' | 'visible' | 'points' | 'extendData' | 'styles'> & { stylesJson: string }
+  private _prevOverlay: Pick<Overlay<E>, 'zLevel' | 'visible' | 'points' | 'extendData'> & { stylesJson: string }
 
   private _prevPressedPoint: Nullable<Partial<Point>> = null
   private _prevPressedPoints: Array<Partial<Point>> = []
@@ -356,13 +356,18 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
     // whole overlay here used to dominate the drag/sync hot path. styles are
     // compared by value (JSON) because override() merges them in place —
     // a same-reference compare would silently drop style-only updates.
+    // stringify can throw on non-serializable values (BigInt, throwing
+    // toJSON) — fall back to a reference sentinel so override never throws.
+    let stylesJson = ''
+    try {
+      stylesJson = JSON.stringify(this.styles ?? null)
+    } catch {}
     this._prevOverlay = {
       zLevel: this.zLevel,
       visible: this.visible,
       points: this.points.map(p => ({ ...p })),
       extendData: this.extendData,
-      styles: this.styles,
-      stylesJson: JSON.stringify(this.styles ?? null)
+      stylesJson
     }
 
     const {
@@ -468,11 +473,15 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
         }
       }
     }
+    let stylesJson = ''
+    try {
+      stylesJson = JSON.stringify(this.styles ?? null)
+    } catch {}
     const draw = sort ||
       pointsChanged ||
       this._prevOverlay.visible !== this.visible ||
       this._prevOverlay.extendData !== this.extendData ||
-      this._prevOverlay.stylesJson !== JSON.stringify(this.styles ?? null)
+      this._prevOverlay.stylesJson !== stylesJson
 
     return { sort, draw }
   }
