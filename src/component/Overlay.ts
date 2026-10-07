@@ -157,6 +157,30 @@ export interface Overlay<E = unknown> extends OverlayEventCollection<E> {
   synced: boolean
 
   /**
+   * Host-set directive: when true, chart-sync layers must not propagate this
+   * overlay's lifecycle events (e.g. `remove` during a symbol-switch wipe)
+   * to peer charts. Never serialized onto mirrors.
+   */
+  suppressSync?: boolean
+
+  /**
+   * Per-call `override()` directive: skip the `performEventMoveForDrawing`
+   * replay loop. Callers passing already-normalized points (sync mirrors)
+   * use this to avoid O(points) step replays on unbounded-step overlays.
+   * Never persisted onto the instance.
+   */
+  skipDrawReplay?: boolean
+
+  /**
+   * Set by the sync engine on a peer overlay right before it is removed on
+   * behalf of the source chart. Host `onRemoved` handlers use it to
+   * distinguish a remote-originated removal (skip the shared-store delete —
+   * the owner already deleted it) from a user deleting a synced mirror
+   * (the shared entry must go).
+   */
+  syncRemoved?: boolean
+
+  /**
    * Whether the overlay is visible
    */
   visible: boolean
@@ -318,7 +342,7 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
 
   private _prevZLevel = 0
 
-  private _prevOverlay: Overlay<E>
+  private _prevOverlay: Pick<Overlay<E>, 'zLevel' | 'visible' | 'points' | 'extendData' | 'styles'> & { stylesJson: string }
 
   private _prevPressedPoint: Nullable<Partial<Point>> = null
   private _prevPressedPoints: Array<Partial<Point>> = []
@@ -328,10 +352,18 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
   }
 
   override (overlay: Partial<Overlay<E>>): void {
-    this._prevOverlay = clone({
-      ...this,
-      _prevOverlay: null
-    })
+    // Snapshot only the fields shouldUpdate() compares — a deep clone of the
+    // whole overlay here used to dominate the drag/sync hot path. styles are
+    // compared by value (JSON) because override() merges them in place —
+    // a same-reference compare would silently drop style-only updates.
+    this._prevOverlay = {
+      zLevel: this.zLevel,
+      visible: this.visible,
+      points: this.points.map(p => ({ ...p })),
+      extendData: this.extendData,
+      styles: this.styles,
+      stylesJson: JSON.stringify(this.styles ?? null)
+    }
 
     const {
       id,
@@ -340,6 +372,7 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
       points,
       styles,
       extendData,
+      skipDrawReplay,
       ...others
     } = overlay
 
@@ -384,7 +417,7 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
         repeatTotalStep = points.length
       }
       // Prevent wrong drawing due to wrong points
-      if (isFunction(this.performEventMoveForDrawing)) {
+      if (isFunction(this.performEventMoveForDrawing) && skipDrawReplay !== true) {
         for (let i = 0; i < repeatTotalStep; i++) {
           this.performEventMoveForDrawing({
             currentStep: i + 2,
@@ -439,7 +472,7 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
       pointsChanged ||
       this._prevOverlay.visible !== this.visible ||
       this._prevOverlay.extendData !== this.extendData ||
-      this._prevOverlay.styles !== this.styles
+      this._prevOverlay.stylesJson !== JSON.stringify(this.styles ?? null)
 
     return { sort, draw }
   }

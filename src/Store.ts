@@ -397,6 +397,11 @@ export default class StoreImp implements Store {
         update: true,
         buildYAxisTick: true
       })
+      // Indicator results land asynchronously behind calcImp — the tick's
+      // crosshair emit fired before they existed, so legend/tooltip
+      // subscribers read one-tick-stale values. Re-emit (no repaint) so they
+      // observe the fresh results.
+      this.setCrosshair(this._crosshair, { notInvalidate: true, forceInvalidate: true })
     })
   }
 
@@ -1424,6 +1429,9 @@ export default class StoreImp implements Store {
           // it so subscribers (sync mirrors) can drop the abandoned overlay.
           const displaced = this._progressOverlayInfo
           if (isValid(displaced)) {
+            try {
+              displaced.overlay.onRemoved?.({ overlay: displaced.overlay, chart: this._chart })
+            } catch {}
             this.executeAction('onOverlayChange', { type: 'remove', overlay: displaced.overlay })
           }
           this._progressOverlayInfo = { paneId, overlay, appointPaneFlag: appointPaneFlags[index] }
@@ -1543,8 +1551,24 @@ export default class StoreImp implements Store {
       if (this._progressOverlayInfo?.overlay === overlay) {
         this._progressOverlayInfo = null
       }
-      const index = paneOverlays.findIndex(o => o.id === overlay.id)
-      if (index > -1) {
+      let index = paneOverlays.findIndex(o => o.id === overlay.id)
+      if (index === -1) {
+        // overlay.paneId may have drifted from the map key (host-side field
+        // mutation) — fall back to an identity scan so the splice never misses
+        // while 'remove' still emits.
+        for (const item of this._overlays) {
+          const list = item[1]
+          const i = list.indexOf(overlay)
+          if (i > -1) {
+            list.splice(i, 1)
+            if (list.length === 0) {
+              this._overlays.delete(item[0])
+            }
+            index = 0
+            break
+          }
+        }
+      } else {
         paneOverlays.splice(index, 1)
       }
       if (paneOverlays.length === 0) {
@@ -1682,12 +1706,15 @@ export default class StoreImp implements Store {
     // Tell subscribers (e.g. ChartSyncManager) the in-progress drawing is gone
     // so peers can drop their ghost mirrors instead of leaking them. A throwing
     // subscriber must not abort the rest of teardown.
-    if (this._progressOverlayInfo?.overlay.isDrawing() === true) {
+    const progressInfo = this._progressOverlayInfo
+    // Null the slot BEFORE emitting — a subscriber re-entering removeOverlay
+    // would otherwise find the same overlay and emit a duplicate 'remove'.
+    this._progressOverlayInfo = null
+    if (progressInfo?.overlay.isDrawing() === true) {
       try {
-        this.executeAction('onOverlayChange', { type: 'remove', overlay: this._progressOverlayInfo.overlay })
+        this.executeAction('onOverlayChange', { type: 'remove', overlay: progressInfo.overlay })
       } catch {}
     }
-    this._progressOverlayInfo = null
     this._clearData()
     this._clearLastPriceMarkExtendTextUpdateTimer()
     this._taskScheduler.clear()

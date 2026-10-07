@@ -747,6 +747,27 @@ export interface Overlay<E = unknown> extends OverlayEventCollection<E> {
 	 */
 	synced: boolean;
 	/**
+	 * Host-set directive: when true, chart-sync layers must not propagate this
+	 * overlay's lifecycle events (e.g. `remove` during a symbol-switch wipe)
+	 * to peer charts. Never serialized onto mirrors.
+	 */
+	suppressSync?: boolean;
+	/**
+	 * Per-call `override()` directive: skip the `performEventMoveForDrawing`
+	 * replay loop. Callers passing already-normalized points (sync mirrors)
+	 * use this to avoid O(points) step replays on unbounded-step overlays.
+	 * Never persisted onto the instance.
+	 */
+	skipDrawReplay?: boolean;
+	/**
+	 * Set by the sync engine on a peer overlay right before it is removed on
+	 * behalf of the source chart. Host `onRemoved` handlers use it to
+	 * distinguish a remote-originated removal (skip the shared-store delete —
+	 * the owner already deleted it) from a user deleting a synced mirror
+	 * (the shared entry must go).
+	 */
+	syncRemoved?: boolean;
+	/**
 	 * Whether the overlay is visible
 	 */
 	visible: boolean;

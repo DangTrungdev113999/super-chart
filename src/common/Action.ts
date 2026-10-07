@@ -40,7 +40,11 @@ export default class Action {
 
   execute (data?: unknown): void {
     this._callbacks.forEach(callback => {
-      callback(data)
+      // Isolate subscribers — a throwing callback must not starve the ones
+      // after it (e.g. a sync mirror missing the ghost-purge 'remove').
+      try {
+        callback(data)
+      } catch {}
     })
   }
 
