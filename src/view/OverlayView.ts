@@ -67,6 +67,7 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
         if (overlay.isDrawing() && progressOverlayPaneId === paneId) {
           overlay.eventMoveForDrawing(this._coordinateToPoint(overlay, event))
           overlay.onDrawing?.({ chart, overlay, ...event })
+          chartStore.executeAction('onOverlayChange', { type: 'progress', overlay })
         }
         return this._figureMouseMoveEvent(
           overlay,
@@ -102,6 +103,7 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
           overlay.eventMoveForDrawing(this._coordinateToPoint(overlay, event))
           overlay.onDrawing?.({ chart, overlay, ...event })
           overlay.nextStep()
+          chartStore.executeAction('onOverlayChange', { type: 'progress', overlay })
           if (!overlay.isDrawing()) {
             chartStore.progressOverlayComplete()
             overlay.onDrawEnd?.({ chart, overlay, ...event })
@@ -200,6 +202,7 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
             } else {
               overlay.eventPressedOtherMove(point, this.getWidget().getPane().getChart().getChartStore())
             }
+            chartStore.executeAction('onOverlayChange', { type: 'progress', overlay })
             let prevented = false
             overlay.onPressedMoving?.({ chart, overlay, figure: figure ?? undefined, ...event, preventDefault: () => { prevented = true } })
             // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- ignore

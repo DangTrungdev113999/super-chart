@@ -46,7 +46,12 @@ import {
 import { calcTextWidth } from './common/utils/canvas'
 import type { ActionType } from './common/Action'
 import type { IndicatorSeries } from './component/Indicator'
-import type { OverlayMode } from './component/Overlay'
+import type { OverlayMode, Overlay, OverlayCreate, OverlayChangeEvent, OverlayChangeEventType } from './component/Overlay'
+import type Crosshair from './common/Crosshair'
+import type Point from './common/Point'
+import type { KLineData } from './common/Data'
+import type { Period } from './common/Period'
+import type { SymbolInfo } from './common/SymbolInfo'
 
 import type { FormatDateType, Options, ZoomAnchor } from './Options'
 import ChartImp, { type Chart, type DomPosition } from './Chart'
@@ -83,6 +88,16 @@ import { registerStyles } from './extension/styles/index'
 import { registerXAxis } from './extension/x-axis'
 import { registerYAxis } from './extension/y-axis'
 import { KTR_STEP_PERCENT, KCX_PERIOD, type CraziiLevelsExtendData } from './extension/indicator/finpathCraziiFormulas'
+
+import {
+  createChartSync,
+  SYNC_GROUP_COLORS,
+  type ChartSync,
+  type ChartSyncOptions,
+  type ChartSyncChannel,
+  type ChartSyncChannels,
+  type ChartSyncAttachOptions
+} from './sync/index'
 
 const charts = new Map<string, ChartImp>()
 let chartBaseId = 1
@@ -185,6 +200,13 @@ export {
   registerLocale, getSupportedLocales,
   registerStyles,
   registerXAxis, registerYAxis,
+  createChartSync,
+  SYNC_GROUP_COLORS,
+  type ChartSync,
+  type ChartSyncOptions,
+  type ChartSyncChannel,
+  type ChartSyncChannels,
+  type ChartSyncAttachOptions,
   utils,
   // Per-symbol KTR step for FP_KTR_BANDS calcParams[0]; extendData shape for FP_KTR_BANDS / FP_KCB_TARGETS.
   KTR_STEP_PERCENT,
@@ -194,6 +216,8 @@ export {
   type LineType, type PolygonType, type TooltipShowRule, type TooltipShowType, type FeatureType, type TooltipFeaturePosition, type CandleTooltipRectPosition,
   type CandleType, type FormatDateType, type ZoomAnchor,
   type DomPosition, type ActionType, type IndicatorSeries, type OverlayMode,
+  type Overlay, type OverlayCreate, type OverlayChangeEvent, type OverlayChangeEventType,
+  type Crosshair, type Point, type KLineData, type Period, type SymbolInfo,
   type SegmentExtendData,
   type RegressionTrendExtendData,
   type RegressionSource,

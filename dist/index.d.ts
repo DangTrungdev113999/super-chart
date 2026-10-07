@@ -347,7 +347,7 @@ declare function calcTextWidth(text: string, size?: number, weight?: string | nu
  * limitations under the License.
  */
 export type ActionCallback = (data?: unknown) => void;
-export type ActionType = "onZoom" | "onScroll" | "onVisibleRangeChange" | "onCandleTooltipFeatureClick" | "onIndicatorTooltipFeatureClick" | "onCrosshairFeatureClick" | "onCrosshairChange" | "onCandleBarClick" | "onPaneDrag" | "onIndicatorShapeClick" | "onIndicatorShapeDoubleClick" | "onExtendTextClick" | "onSectorLabelClick";
+export type ActionType = "onZoom" | "onScroll" | "onVisibleRangeChange" | "onCandleTooltipFeatureClick" | "onIndicatorTooltipFeatureClick" | "onCrosshairFeatureClick" | "onCrosshairChange" | "onCandleBarClick" | "onPaneDrag" | "onIndicatorShapeClick" | "onIndicatorShapeDoubleClick" | "onExtendTextClick" | "onSectorLabelClick" | "onOverlayChange" | "onSymbolChange" | "onPeriodChange";
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -735,6 +735,12 @@ export interface Overlay<E = unknown> extends OverlayEventCollection<E> {
 	 */
 	lock: boolean;
 	/**
+	 * Whether the overlay is a ghost (mirror of an overlay being drawn on
+	 * another chart). Ghosts render in the normal overlay list even while
+	 * incomplete, never occupy the drawing-progress slot, and are locked.
+	 */
+	ghost: boolean;
+	/**
 	 * Whether the overlay is visible
 	 */
 	visible: boolean;
@@ -794,9 +800,30 @@ export interface Overlay<E = unknown> extends OverlayEventCollection<E> {
 	 * In drawing, special handling callback when moving events
 	 */
 	performEventMoveForDrawing: Nullable<(params: OverlayPerformEventParams) => void>;
+	/**
+	 * Whether the overlay is still in its drawing steps
+	 */
+	isDrawing: () => boolean;
+	/**
+	 * Whether no point has been committed yet
+	 */
+	isStart: () => boolean;
 }
-export type OverlayTemplate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, "id" | "groupId" | "paneId" | "points" | "currentStep">, "name">;
-export type OverlayCreate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, "currentStep" | "totalStep" | "createPointFigures" | "createXAxisFigures" | "createYAxisFigures" | "performEventPressedMove" | "performEventMoveForDrawing">, "name">;
+export type OverlayTemplate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, "id" | "groupId" | "paneId" | "points" | "currentStep" | "isDrawing" | "isStart">, "name">;
+export type OverlayCreate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, "currentStep" | "totalStep" | "createPointFigures" | "createXAxisFigures" | "createYAxisFigures" | "performEventPressedMove" | "performEventMoveForDrawing" | "isDrawing" | "isStart">, "name">;
+/**
+ * Lifecycle stream emitted through the `onOverlayChange` action.
+ * `create`   — an overlay was created (armed for drawing or already finished).
+ * `progress` — points changed while drawing or while a point/figure is dragged.
+ * `update`   — an existing overlay was overridden via overrideOverlay.
+ * `remove`   — an overlay was removed (also fires for cancelled drawings).
+ * `drawEnd`  — the progress overlay finished its last step and was committed.
+ */
+export type OverlayChangeEventType = "create" | "progress" | "update" | "remove" | "drawEnd";
+export interface OverlayChangeEvent<E = unknown> {
+	type: OverlayChangeEventType;
+	overlay: Overlay<E>;
+}
 export type OverlayFilter<E = unknown> = Partial<Pick<Overlay<E>, "id" | "groupId" | "name" | "paneId">>;
 export type OverlayConstructor<E = unknown> = new () => Overlay<E>;
 export interface Store {
@@ -1276,6 +1303,47 @@ export declare const KCX_PERIOD: Readonly<Record<string, number>>;
 export interface CraziiLevelsExtendData {
 	dailyBars?: KLineData[];
 }
+/**
+ * Synchronizable channels. All default to `true` when a chart is attached.
+ */
+export type ChartSyncChannel = "crosshair" | "timeRange" | "zoom" | "drawings" | "symbol" | "period";
+export type ChartSyncChannels = Partial<Record<ChartSyncChannel, boolean>>;
+/**
+ * Suggested default palette for group indicators. Host apps may map these
+ * onto their own design tokens.
+ */
+export declare const SYNC_GROUP_COLORS: string[];
+export interface ChartSyncOptions {
+	channels?: ChartSyncChannels;
+	/**
+	 * The library never fetches data. When a symbol/period change must be
+	 * propagated to peer charts, the host receives the peer chart plus the
+	 * new value and is expected to call `chart.setSymbol(...)`/`setPeriod(...)`
+	 * (or its own reload routine) on it.
+	 */
+	onApplySymbol?: (chart: Chart, symbol: SymbolInfo) => void;
+	onApplyPeriod?: (chart: Chart, period: Period) => void;
+}
+export interface ChartSyncAttachOptions {
+	/**
+	 * Charts sharing the same non-null group id synchronize with each other.
+	 * Charts without a group never sync.
+	 */
+	groupId?: string | null;
+}
+export interface ChartSync {
+	attach: (chart: Chart, options?: ChartSyncAttachOptions) => void;
+	detach: (chart: Chart) => void;
+	setGroup: (chart: Chart, groupId: Nullable<string>) => void;
+	setChannel: (channel: ChartSyncChannel, enabled: boolean) => void;
+	dispose: () => void;
+}
+/**
+ * Group-scoped multi-chart synchronization. Everything runs at the library
+ * action level — no framework, no React — so per-frame interactions
+ * (crosshair, drags, drawing progress) propagate without a render loop.
+ */
+export declare function createChartSync(options?: ChartSyncOptions): ChartSync;
 /**
  * Chart version
  * @return {string}

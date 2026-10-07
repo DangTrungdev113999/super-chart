@@ -505,6 +505,7 @@ export default class StoreImp implements Store {
       }
       this._synchronizeIndicatorSeriesPrecision()
     })
+    this.executeAction('onSymbolChange', this._symbol)
   }
 
   getSymbol (): Nullable<SymbolInfo> {
@@ -515,6 +516,7 @@ export default class StoreImp implements Store {
     this.resetData(() => {
       this._period = period
     })
+    this.executeAction('onPeriodChange', this._period)
   }
 
   getPeriod (): Nullable<Period> {
@@ -1125,7 +1127,13 @@ export default class StoreImp implements Store {
       // forceInvalidate re-syncs (data ticks, zoom, scroll) also emit — an
       // empty-payload emit lets subscribers refresh the last-bar legend.
       if (isValid(kLineData) && !(notExecuteAction ?? false) && this.hasAction('onCrosshairChange') && (isString(this._crosshair.paneId) || isString(prevCrosshair.paneId) || (forceInvalidate ?? false))) {
-        this.executeAction('onCrosshairChange', crosshair ?? {})
+        // Emit the enriched crosshair (timestamp, dataIndex, kLineData) so
+        // subscribers can sync other charts by time instead of re-deriving
+        // it from the source's pixel x. Clear events stay an empty object.
+        this.executeAction(
+          'onCrosshairChange',
+          isString(this._crosshair.paneId) ? { ...this._crosshair } : {}
+        )
       }
       if (!(notInvalidate ?? false)) {
         this._chart.updatePane(UpdateLevel.Overlay)
@@ -1367,6 +1375,7 @@ export default class StoreImp implements Store {
 
   addOverlays (os: OverlayCreate[], appointPaneFlags: boolean[]): Array<Nullable<string>> {
     const updatePaneIds: string[] = []
+    const createdOverlays: OverlayImp[] = []
     const ids = os.map((create, index) => {
       if (isValid(create.id)) {
         let findOverlay: Nullable<OverlayImp> = null
@@ -1392,10 +1401,15 @@ export default class StoreImp implements Store {
         const zLevel = this.getOverlaysByPaneId(paneId).length
         create.zLevel ??= zLevel
         overlay.override(create)
+        if (overlay.ghost) {
+          // Ghost overlays are passive mirrors of drawings on other charts:
+          // they never occupy the drawing-progress slot and never take input.
+          overlay.lock = true
+        }
         if (!updatePaneIds.includes(paneId)) {
           updatePaneIds.push(paneId)
         }
-        if (overlay.isDrawing()) {
+        if (overlay.isDrawing() && !overlay.ghost) {
           this._progressOverlayInfo = { paneId, overlay, appointPaneFlag: appointPaneFlags[index] }
         } else {
           if (!this._overlays.has(paneId)) {
@@ -1403,9 +1417,10 @@ export default class StoreImp implements Store {
           }
           this._overlays.get(paneId)?.push(overlay)
         }
-        if (overlay.isStart()) {
+        if (overlay.isStart() && !overlay.ghost) {
           overlay.onDrawStart?.(({ overlay, chart: this._chart }))
         }
+        createdOverlays.push(overlay)
         return id
       }
       return null
@@ -1417,6 +1432,9 @@ export default class StoreImp implements Store {
       })
       this._chart.updatePane(UpdateLevel.Overlay, PaneIdConstants.X_AXIS)
     }
+    createdOverlays.forEach(overlay => {
+      this.executeAction('onOverlayChange', { type: 'create', overlay })
+    })
     return ids
   }
 
@@ -1434,6 +1452,7 @@ export default class StoreImp implements Store {
         this._overlays.get(paneId)?.push(overlay)
         this._sortOverlays(paneId)
         this._progressOverlayInfo = null
+        this.executeAction('onOverlayChange', { type: 'drawEnd', overlay })
       }
     }
   }
@@ -1474,6 +1493,9 @@ export default class StoreImp implements Store {
         this._chart.updatePane(UpdateLevel.Overlay, paneId)
       })
       this._chart.updatePane(UpdateLevel.Overlay, PaneIdConstants.X_AXIS)
+      filterOverlays.forEach(overlay => {
+        this.executeAction('onOverlayChange', { type: 'update', overlay })
+      })
       return true
     }
     return false
@@ -1500,6 +1522,7 @@ export default class StoreImp implements Store {
       if (paneOverlays.length === 0) {
         this._overlays.delete(paneId)
       }
+      this.executeAction('onOverlayChange', { type: 'remove', overlay })
     })
     if (updatePaneIds.length > 0) {
       updatePaneIds.forEach(paneId => {

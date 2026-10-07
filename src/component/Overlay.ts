@@ -143,6 +143,13 @@ export interface Overlay<E = unknown> extends OverlayEventCollection<E> {
   lock: boolean
 
   /**
+   * Whether the overlay is a ghost (mirror of an overlay being drawn on
+   * another chart). Ghosts render in the normal overlay list even while
+   * incomplete, never occupy the drawing-progress slot, and are locked.
+   */
+  ghost: boolean
+
+  /**
    * Whether the overlay is visible
    */
   visible: boolean
@@ -216,12 +223,37 @@ export interface Overlay<E = unknown> extends OverlayEventCollection<E> {
    * In drawing, special handling callback when moving events
    */
   performEventMoveForDrawing: Nullable<(params: OverlayPerformEventParams) => void>
+
+  /**
+   * Whether the overlay is still in its drawing steps
+   */
+  isDrawing: () => boolean
+
+  /**
+   * Whether no point has been committed yet
+   */
+  isStart: () => boolean
 }
 
-export type OverlayTemplate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, 'id' | 'groupId' | 'paneId' | 'points' | 'currentStep'>, 'name'>
+export type OverlayTemplate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, 'id' | 'groupId' | 'paneId' | 'points' | 'currentStep' | 'isDrawing' | 'isStart'>, 'name'>
 
-export type OverlayCreate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, 'currentStep' | 'totalStep' | 'createPointFigures' | 'createXAxisFigures' | 'createYAxisFigures' | 'performEventPressedMove' | 'performEventMoveForDrawing'>, 'name'>
-export type OverlayOverride<E = unknown> = Partial<Omit<Overlay<E>, 'currentStep' | 'totalStep' | 'createPointFigures' | 'createXAxisFigures' | 'createYAxisFigures' | 'performEventPressedMove' | 'performEventMoveForDrawing'>>
+export type OverlayCreate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, 'currentStep' | 'totalStep' | 'createPointFigures' | 'createXAxisFigures' | 'createYAxisFigures' | 'performEventPressedMove' | 'performEventMoveForDrawing' | 'isDrawing' | 'isStart'>, 'name'>
+export type OverlayOverride<E = unknown> = Partial<Omit<Overlay<E>, 'currentStep' | 'totalStep' | 'createPointFigures' | 'createXAxisFigures' | 'createYAxisFigures' | 'performEventPressedMove' | 'performEventMoveForDrawing' | 'isDrawing' | 'isStart'>>
+
+/**
+ * Lifecycle stream emitted through the `onOverlayChange` action.
+ * `create`   — an overlay was created (armed for drawing or already finished).
+ * `progress` — points changed while drawing or while a point/figure is dragged.
+ * `update`   — an existing overlay was overridden via overrideOverlay.
+ * `remove`   — an overlay was removed (also fires for cancelled drawings).
+ * `drawEnd`  — the progress overlay finished its last step and was committed.
+ */
+export type OverlayChangeEventType = 'create' | 'progress' | 'update' | 'remove' | 'drawEnd'
+
+export interface OverlayChangeEvent<E = unknown> {
+  type: OverlayChangeEventType
+  overlay: Overlay<E>
+}
 
 export type OverlayFilter<E = unknown> = Partial<Pick<Overlay<E>, 'id' | 'groupId' | 'name' | 'paneId'>>
 
@@ -243,6 +275,7 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
   totalStep = 1
   currentStep = OVERLAY_DRAW_STEP_START
   lock = false
+  ghost = false
   visible = true
   zLevel = 0
   needDefaultPointFigure = false

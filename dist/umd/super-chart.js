@@ -8749,6 +8749,7 @@ var OverlayImp = /** @class */ (function () {
         this.totalStep = 1;
         this.currentStep = OVERLAY_DRAW_STEP_START;
         this.lock = false;
+        this.ghost = false;
         this.visible = true;
         this.zLevel = 0;
         this.needDefaultPointFigure = false;
@@ -17701,6 +17702,7 @@ var StoreImp = /** @class */ (function () {
             _this._symbol = __assign(__assign({ pricePrecision: SymbolDefaultPrecisionConstants.PRICE, volumePrecision: SymbolDefaultPrecisionConstants.VOLUME }, _this._symbol), symbol);
             _this._synchronizeIndicatorSeriesPrecision();
         });
+        this.executeAction('onSymbolChange', this._symbol);
     };
     StoreImp.prototype.getSymbol = function () {
         return this._symbol;
@@ -17710,6 +17712,7 @@ var StoreImp = /** @class */ (function () {
         this.resetData(function () {
             _this._period = period;
         });
+        this.executeAction('onPeriodChange', this._period);
     };
     StoreImp.prototype.getPeriod = function () {
         return this._period;
@@ -18272,7 +18275,10 @@ var StoreImp = /** @class */ (function () {
             // forceInvalidate re-syncs (data ticks, zoom, scroll) also emit — an
             // empty-payload emit lets subscribers refresh the last-bar legend.
             if (isValid(kLineData) && !(notExecuteAction !== null && notExecuteAction !== void 0 ? notExecuteAction : false) && this.hasAction('onCrosshairChange') && (isString(this._crosshair.paneId) || isString(prevCrosshair.paneId) || (forceInvalidate !== null && forceInvalidate !== void 0 ? forceInvalidate : false))) {
-                this.executeAction('onCrosshairChange', crosshair !== null && crosshair !== void 0 ? crosshair : {});
+                // Emit the enriched crosshair (timestamp, dataIndex, kLineData) so
+                // subscribers can sync other charts by time instead of re-deriving
+                // it from the source's pixel x. Clear events stay an empty object.
+                this.executeAction('onCrosshairChange', isString(this._crosshair.paneId) ? __assign({}, this._crosshair) : {});
             }
             if (!(notInvalidate !== null && notInvalidate !== void 0 ? notInvalidate : false)) {
                 this._chart.updatePane(1 /* UpdateLevel.Overlay */);
@@ -18506,6 +18512,7 @@ var StoreImp = /** @class */ (function () {
     StoreImp.prototype.addOverlays = function (os, appointPaneFlags) {
         var _this = this;
         var updatePaneIds = [];
+        var createdOverlays = [];
         var ids = os.map(function (create, index) {
             var e_1, _a;
             var _b, _c, _d, _e, _f, _g;
@@ -18543,10 +18550,15 @@ var StoreImp = /** @class */ (function () {
                 var zLevel = _this.getOverlaysByPaneId(paneId).length;
                 (_e = create.zLevel) !== null && _e !== void 0 ? _e : (create.zLevel = zLevel);
                 overlay.override(create);
+                if (overlay.ghost) {
+                    // Ghost overlays are passive mirrors of drawings on other charts:
+                    // they never occupy the drawing-progress slot and never take input.
+                    overlay.lock = true;
+                }
                 if (!updatePaneIds.includes(paneId)) {
                     updatePaneIds.push(paneId);
                 }
-                if (overlay.isDrawing()) {
+                if (overlay.isDrawing() && !overlay.ghost) {
                     _this._progressOverlayInfo = { paneId: paneId, overlay: overlay, appointPaneFlag: appointPaneFlags[index] };
                 }
                 else {
@@ -18555,9 +18567,10 @@ var StoreImp = /** @class */ (function () {
                     }
                     (_f = _this._overlays.get(paneId)) === null || _f === void 0 ? void 0 : _f.push(overlay);
                 }
-                if (overlay.isStart()) {
+                if (overlay.isStart() && !overlay.ghost) {
                     (_g = overlay.onDrawStart) === null || _g === void 0 ? void 0 : _g.call(overlay, ({ overlay: overlay, chart: _this._chart }));
                 }
+                createdOverlays.push(overlay);
                 return id;
             }
             return null;
@@ -18569,6 +18582,9 @@ var StoreImp = /** @class */ (function () {
             });
             this._chart.updatePane(1 /* UpdateLevel.Overlay */, PaneIdConstants.X_AXIS);
         }
+        createdOverlays.forEach(function (overlay) {
+            _this.executeAction('onOverlayChange', { type: 'create', overlay: overlay });
+        });
         return ids;
     };
     StoreImp.prototype.getProgressOverlayInfo = function () {
@@ -18585,6 +18601,7 @@ var StoreImp = /** @class */ (function () {
                 (_a = this._overlays.get(paneId)) === null || _a === void 0 ? void 0 : _a.push(overlay);
                 this._sortOverlays(paneId);
                 this._progressOverlayInfo = null;
+                this.executeAction('onOverlayChange', { type: 'drawEnd', overlay: overlay });
             }
         }
     };
@@ -18623,6 +18640,9 @@ var StoreImp = /** @class */ (function () {
                 _this._chart.updatePane(1 /* UpdateLevel.Overlay */, paneId);
             });
             this._chart.updatePane(1 /* UpdateLevel.Overlay */, PaneIdConstants.X_AXIS);
+            filterOverlays.forEach(function (overlay) {
+                _this.executeAction('onOverlayChange', { type: 'update', overlay: overlay });
+            });
             return true;
         }
         return false;
@@ -18651,6 +18671,7 @@ var StoreImp = /** @class */ (function () {
             if (paneOverlays.length === 0) {
                 _this._overlays.delete(paneId);
             }
+            _this.executeAction('onOverlayChange', { type: 'remove', overlay: overlay });
         });
         if (updatePaneIds.length > 0) {
             updatePaneIds.forEach(function (paneId) {
@@ -21032,6 +21053,7 @@ var OverlayView = /** @class */ (function (_super) {
                 if (overlay.isDrawing() && progressOverlayPaneId === paneId) {
                     overlay.eventMoveForDrawing(_this._coordinateToPoint(overlay, event));
                     (_a = overlay.onDrawing) === null || _a === void 0 ? void 0 : _a.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
+                    chartStore.executeAction('onOverlayChange', { type: 'progress', overlay: overlay });
                 }
                 return _this._figureMouseMoveEvent(overlay, 'point', index, { key: "".concat(OVERLAY_FIGURE_KEY_PREFIX, "point_").concat(index), type: 'circle', attrs: {} })(event);
             }
@@ -21059,6 +21081,7 @@ var OverlayView = /** @class */ (function (_super) {
                     overlay.eventMoveForDrawing(_this._coordinateToPoint(overlay, event));
                     (_a = overlay.onDrawing) === null || _a === void 0 ? void 0 : _a.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
                     overlay.nextStep();
+                    chartStore.executeAction('onOverlayChange', { type: 'progress', overlay: overlay });
                     if (!overlay.isDrawing()) {
                         chartStore.progressOverlayComplete();
                         (_b = overlay.onDrawEnd) === null || _b === void 0 ? void 0 : _b.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
@@ -21142,6 +21165,7 @@ var OverlayView = /** @class */ (function (_super) {
                         else {
                             overlay.eventPressedOtherMove(point, _this.getWidget().getPane().getChart().getChartStore());
                         }
+                        chartStore.executeAction('onOverlayChange', { type: 'progress', overlay: overlay });
                         var prevented_1 = false;
                         (_b = overlay.onPressedMoving) === null || _b === void 0 ? void 0 : _b.call(overlay, __assign(__assign({ chart: chart, overlay: overlay, figure: figure !== null && figure !== void 0 ? figure : undefined }, event), { preventDefault: function () { prevented_1 = true; } }));
                         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- ignore
@@ -27752,6 +27776,347 @@ var ChartImp = /** @class */ (function () {
 }());
 
 /**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * Suggested default palette for group indicators. Host apps may map these
+ * onto their own design tokens.
+ */
+var SYNC_GROUP_COLORS = [
+    '#2962FF', '#F23645', '#FF9800', '#9C27B0',
+    '#00BCD4', '#4CAF50', '#795548', '#607D8B'
+];
+var frameHost = globalThis;
+var requestFrame = isFunction(frameHost.requestAnimationFrame)
+    ? function (cb) { var _a, _b; return (_b = (_a = frameHost.requestAnimationFrame) === null || _a === void 0 ? void 0 : _a.call(frameHost, cb)) !== null && _b !== void 0 ? _b : 0; }
+    : function (cb) { return setTimeout(cb, 16); };
+var cancelFrame = isFunction(frameHost.cancelAnimationFrame)
+    ? function (id) { var _a; (_a = frameHost.cancelAnimationFrame) === null || _a === void 0 ? void 0 : _a.call(frameHost, id); }
+    : function (id) { clearTimeout(id); };
+function getStore(chart) {
+    return chart.getChartStore();
+}
+function serializeOverlay(overlay) {
+    return {
+        id: overlay.id,
+        groupId: overlay.groupId,
+        paneId: overlay.paneId,
+        name: overlay.name,
+        lock: overlay.lock,
+        visible: overlay.visible,
+        zLevel: overlay.zLevel,
+        needDefaultPointFigure: overlay.needDefaultPointFigure,
+        needDefaultXAxisFigure: overlay.needDefaultXAxisFigure,
+        needDefaultYAxisFigure: overlay.needDefaultYAxisFigure,
+        mode: overlay.mode,
+        modeSensitivity: overlay.modeSensitivity,
+        points: overlay.points.map(function (p) { return (__assign({}, p)); }),
+        extendData: overlay.extendData,
+        styles: overlay.styles
+    };
+}
+/**
+ * Group-scoped multi-chart synchronization. Everything runs at the library
+ * action level — no framework, no React — so per-frame interactions
+ * (crosshair, drags, drawing progress) propagate without a render loop.
+ */
+function createChartSync(options) {
+    if (options === void 0) { options = {}; }
+    var channels = __assign({ crosshair: true, timeRange: true, zoom: true, drawings: true, symbol: true, period: true }, options.channels);
+    var charts = new Map();
+    // Charts currently being written to by the sync engine — events emitted
+    // while applying are echoes and must not be re-broadcast.
+    var applying = new Set();
+    function peers(source) {
+        var sourceEntry = charts.get(source);
+        if (!isValid(sourceEntry) || !isString(sourceEntry.groupId)) {
+            return [];
+        }
+        var list = [];
+        charts.forEach(function (entry) {
+            if (entry.chart !== source && entry.groupId === sourceEntry.groupId) {
+                list.push(entry);
+            }
+        });
+        return list;
+    }
+    var pending = new Map();
+    var frame = 0;
+    function schedule(source, channel, payload) {
+        var p = pending.get(source);
+        if (!isValid(p)) {
+            p = {};
+            pending.set(source, p);
+        }
+        if (channel === 'crosshair') {
+            p.crosshair = payload;
+        }
+        else if (channel === 'timeRange') {
+            p.timeRange = payload;
+        }
+        else {
+            p.zoom = true;
+        }
+        if (frame === 0) {
+            frame = requestFrame(flush);
+        }
+    }
+    function flush() {
+        frame = 0;
+        pending.forEach(function (p, source) {
+            if (!charts.has(source)) {
+                return;
+            }
+            if (p.crosshair !== undefined && channels.crosshair) {
+                dispatchCrosshair(source, p.crosshair);
+            }
+            if (p.timeRange !== undefined && channels.timeRange) {
+                dispatchTimeRange(source, p.timeRange);
+            }
+            if (p.zoom === true && channels.zoom) {
+                dispatchZoom(source);
+            }
+        });
+        pending.clear();
+    }
+    function dispatchCrosshair(source, crosshair) {
+        peers(source).forEach(function (_a) {
+            var chart = _a.chart;
+            var store = getStore(chart);
+            applying.add(chart);
+            try {
+                if (!isString(crosshair.paneId) || !isNumber(crosshair.timestamp)) {
+                    store.setCrosshair({});
+                }
+                else {
+                    var dataIndex = store.timestampToDataIndex(crosshair.timestamp);
+                    var x = store.dataIndexToCoordinate(dataIndex);
+                    store.setCrosshair({ x: x, paneId: crosshair.paneId });
+                }
+            }
+            finally {
+                applying.delete(chart);
+            }
+        });
+    }
+    function dispatchTimeRange(source, range) {
+        // Anchor on the last visible bar's timestamp so followers land on the
+        // same moment regardless of their timeframe.
+        var sourceStore = getStore(source);
+        var dataList = sourceStore.getDataList();
+        var anchorIndex = Math.min(range.to - 1, dataList.length - 1);
+        var timestamp = sourceStore.dataIndexToTimestamp(anchorIndex);
+        if (!isNumber(timestamp)) {
+            return;
+        }
+        peers(source).forEach(function (_a) {
+            var chart = _a.chart;
+            applying.add(chart);
+            try {
+                chart.scrollToTimestamp(timestamp);
+            }
+            finally {
+                applying.delete(chart);
+            }
+        });
+    }
+    function dispatchZoom(source) {
+        // Absolute bar-space parity — same bar width on every grouped chart.
+        var bar = source.getBarSpace().bar;
+        peers(source).forEach(function (_a) {
+            var chart = _a.chart;
+            applying.add(chart);
+            try {
+                chart.setBarSpace(bar);
+            }
+            finally {
+                applying.delete(chart);
+            }
+        });
+    }
+    function dispatchOverlay(source, event) {
+        var overlay = event.overlay;
+        peers(source).forEach(function (_a) {
+            var chart = _a.chart;
+            applying.add(chart);
+            try {
+                switch (event.type) {
+                    case 'create': {
+                        var create = serializeOverlay(overlay);
+                        if (overlay.isDrawing()) {
+                            // Mirror the in-progress drawing as a locked ghost — renders
+                            // partial points without arming or swallowing input.
+                            chart.createOverlay(__assign(__assign({}, create), { ghost: true, lock: true }));
+                        }
+                        else {
+                            chart.createOverlay(create);
+                        }
+                        break;
+                    }
+                    case 'progress':
+                    case 'update': {
+                        var updated = chart.overrideOverlay({
+                            id: overlay.id,
+                            points: overlay.points.map(function (p) { return (__assign({}, p)); }),
+                            visible: overlay.visible
+                        });
+                        if (!updated) {
+                            // Follower may have attached after the overlay was created —
+                            // materialize it instead of dropping the update.
+                            var create = serializeOverlay(overlay);
+                            chart.createOverlay(overlay.isDrawing() ? __assign(__assign({}, create), { ghost: true, lock: true }) : create);
+                        }
+                        break;
+                    }
+                    case 'drawEnd': {
+                        // Replace the ghost with a real, interactive overlay.
+                        chart.removeOverlay({ id: overlay.id });
+                        chart.createOverlay(serializeOverlay(overlay));
+                        break;
+                    }
+                    case 'remove': {
+                        chart.removeOverlay({ id: overlay.id });
+                        break;
+                    }
+                }
+            }
+            finally {
+                applying.delete(chart);
+            }
+        });
+    }
+    function dispatchSymbol(source, symbol) {
+        if (!isValid(options.onApplySymbol)) {
+            return;
+        }
+        var apply = options.onApplySymbol;
+        peers(source).forEach(function (_a) {
+            var chart = _a.chart;
+            applying.add(chart);
+            try {
+                apply(chart, symbol);
+            }
+            finally {
+                applying.delete(chart);
+            }
+        });
+    }
+    function dispatchPeriod(source, period) {
+        if (!isValid(options.onApplyPeriod)) {
+            return;
+        }
+        var apply = options.onApplyPeriod;
+        peers(source).forEach(function (_a) {
+            var chart = _a.chart;
+            applying.add(chart);
+            try {
+                apply(chart, period);
+            }
+            finally {
+                applying.delete(chart);
+            }
+        });
+    }
+    function attach(chart, attachOptions) {
+        var _a;
+        if (attachOptions === void 0) { attachOptions = {}; }
+        if (charts.has(chart)) {
+            return;
+        }
+        var onCrosshairChange = function (data) {
+            if (!applying.has(chart)) {
+                schedule(chart, 'crosshair', data);
+            }
+        };
+        var onVisibleRangeChange = function (data) {
+            if (!applying.has(chart)) {
+                schedule(chart, 'timeRange', data);
+            }
+        };
+        var onZoom = function () {
+            if (!applying.has(chart)) {
+                schedule(chart, 'zoom');
+            }
+        };
+        var onOverlayChange = function (data) {
+            if (!applying.has(chart) && channels.drawings && isValid(data)) {
+                dispatchOverlay(chart, data);
+            }
+        };
+        var onSymbolChange = function (data) {
+            if (!applying.has(chart) && channels.symbol && isValid(data)) {
+                dispatchSymbol(chart, data);
+            }
+        };
+        var onPeriodChange = function (data) {
+            if (!applying.has(chart) && channels.period && isValid(data)) {
+                dispatchPeriod(chart, data);
+            }
+        };
+        chart.subscribeAction('onCrosshairChange', onCrosshairChange);
+        chart.subscribeAction('onVisibleRangeChange', onVisibleRangeChange);
+        chart.subscribeAction('onZoom', onZoom);
+        chart.subscribeAction('onOverlayChange', onOverlayChange);
+        chart.subscribeAction('onSymbolChange', onSymbolChange);
+        chart.subscribeAction('onPeriodChange', onPeriodChange);
+        charts.set(chart, {
+            chart: chart,
+            groupId: (_a = attachOptions.groupId) !== null && _a !== void 0 ? _a : null,
+            unsubscribes: [
+                function () { chart.unsubscribeAction('onCrosshairChange', onCrosshairChange); },
+                function () { chart.unsubscribeAction('onVisibleRangeChange', onVisibleRangeChange); },
+                function () { chart.unsubscribeAction('onZoom', onZoom); },
+                function () { chart.unsubscribeAction('onOverlayChange', onOverlayChange); },
+                function () { chart.unsubscribeAction('onSymbolChange', onSymbolChange); },
+                function () { chart.unsubscribeAction('onPeriodChange', onPeriodChange); }
+            ]
+        });
+    }
+    function detach(chart) {
+        var entry = charts.get(chart);
+        if (isValid(entry)) {
+            entry.unsubscribes.forEach(function (unsub) { unsub(); });
+            charts.delete(chart);
+            pending.delete(chart);
+        }
+    }
+    return {
+        attach: attach,
+        detach: detach,
+        setGroup: function (chart, groupId) {
+            var entry = charts.get(chart);
+            if (isValid(entry)) {
+                entry.groupId = groupId;
+            }
+        },
+        setChannel: function (channel, enabled) {
+            channels[channel] = enabled;
+        },
+        dispose: function () {
+            charts.forEach(function (entry) {
+                entry.unsubscribes.forEach(function (unsub) { unsub(); });
+            });
+            charts.clear();
+            pending.clear();
+            if (frame !== 0) {
+                cancelFrame(frame);
+                frame = 0;
+            }
+        }
+    };
+}
+
+/**
  *       ___           ___                   ___           ___           ___           ___           ___           ___           ___
  *      /\__\         /\__\      ___        /\__\         /\  \         /\  \         /\__\         /\  \         /\  \         /\  \
  *     /:/  /        /:/  /     /\  \      /::|  |       /::\  \       /::\  \       /:/  /        /::\  \       /::\  \        \:\  \
@@ -27871,6 +28236,8 @@ var utils = {
 
 exports.KCX_PERIOD = KCX_PERIOD;
 exports.KTR_STEP_PERCENT = KTR_STEP_PERCENT;
+exports.SYNC_GROUP_COLORS = SYNC_GROUP_COLORS;
+exports.createChartSync = createChartSync;
 exports.dispose = dispose;
 exports.getFigureClass = getFigureClass;
 exports.getOverlayClass = getOverlayClass;
