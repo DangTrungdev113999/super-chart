@@ -741,6 +741,12 @@ export interface Overlay<E = unknown> extends OverlayEventCollection<E> {
 	 */
 	ghost: boolean;
 	/**
+	 * Whether the overlay was mirrored onto this chart by a chart-sync layer
+	 * (as opposed to created by this chart's own user/persistence). Hosts can
+	 * use this to skip duplicate persistence/history bookkeeping for mirrors.
+	 */
+	synced: boolean;
+	/**
 	 * Whether the overlay is visible
 	 */
 	visible: boolean;
@@ -850,7 +856,9 @@ export interface Store {
 	setMaxOffsetRightDistance: (distance: number) => void;
 	setLeftMinVisibleBarCount: (barCount: number) => void;
 	setRightMinVisibleBarCount: (barCount: number) => void;
-	setBarSpace: (space: number) => void;
+	setBarSpace: (space: number, options?: {
+		notExecuteAction?: boolean;
+	}) => void;
 	getBarSpace: () => BarSpace;
 	getVisibleRange: () => VisibleRange;
 	setDataLoader: (dataLoader: DataLoader) => void;

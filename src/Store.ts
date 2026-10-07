@@ -30,7 +30,7 @@ import Action from './common/Action'
 import type { ActionType, ActionCallback } from './common/Action'
 import { formatValue, formatTimestampByTemplate, formatBigNumber, formatThousands, formatFoldDecimal } from './common/utils/format'
 import { getDefaultStyles, type Styles, type TooltipLegend } from './common/Styles'
-import { isArray, isString, isValid, isNumber, isBoolean, merge } from './common/utils/typeChecks'
+import { isArray, isString, isValid, isNumber, isBoolean, isFunction, merge } from './common/utils/typeChecks'
 import { createId } from './common/utils/id'
 import { binarySearchNearest } from './common/utils/number'
 import { logWarn } from './common/utils/logger'
@@ -112,7 +112,7 @@ export interface Store {
   setMaxOffsetRightDistance: (distance: number) => void
   setLeftMinVisibleBarCount: (barCount: number) => void
   setRightMinVisibleBarCount: (barCount: number) => void
-  setBarSpace: (space: number) => void
+  setBarSpace: (space: number, options?: { notExecuteAction?: boolean }) => void
   getBarSpace: () => BarSpace
   getVisibleRange: () => VisibleRange
   setDataLoader: (dataLoader: DataLoader) => void
@@ -778,13 +778,16 @@ export default class StoreImp implements Store {
     }
   }
 
-  setBarSpace (barSpace: number, adjustBeforeFunc?: () => void): void {
+  setBarSpace (barSpace: number, adjustBeforeFunc?: (() => void) | { notExecuteAction?: boolean }, options?: { notExecuteAction?: boolean }): void {
     if (barSpace < BarSpaceLimitConstants.MIN || barSpace > BarSpaceLimitConstants.MAX || this._barSpace === barSpace) {
       return
     }
+    const prevBarSpace = this._barSpace
     this._barSpace = barSpace
     this._calcOptimalBarSpace()
-    adjustBeforeFunc?.()
+    const adjustFunc = isFunction(adjustBeforeFunc) ? adjustBeforeFunc : undefined
+    const actionOptions = isFunction(adjustBeforeFunc) ? options : adjustBeforeFunc
+    adjustFunc?.()
     this._adjustVisibleRange()
     this.setCrosshair(this._crosshair, { notInvalidate: true, forceInvalidate: true })
     this._chart.layout({
@@ -793,6 +796,9 @@ export default class StoreImp implements Store {
       buildYAxisTick: true,
       cacheYAxisWidth: true
     })
+    if (!(actionOptions?.notExecuteAction ?? false)) {
+      this.executeAction('onZoom', { scale: this._barSpace / prevBarSpace })
+    }
   }
 
   setTotalBarSpace (totalSpace: number): void {
@@ -1046,15 +1052,11 @@ export default class StoreImp implements Store {
     }
     const x = zoomCoordinate.x!
     const floatIndex = this.coordinateToFloatIndex(x)
-    const prevBarSpace = this._barSpace
     const barSpace = this._barSpace + scale * (this._barSpace / SCALE_MULTIPLIER)
+    // setBarSpace emits onZoom itself once the space actually changed.
     this.setBarSpace(barSpace, () => {
       this._lastBarRightSideDiffBarCount += (floatIndex - this.coordinateToFloatIndex(x))
     })
-    const realScale = this._barSpace / prevBarSpace
-    if (realScale !== 1) {
-      this.executeAction('onZoom', { scale: realScale })
-    }
   }
 
   setZoomEnabled (enabled: boolean): void {
@@ -1410,6 +1412,12 @@ export default class StoreImp implements Store {
           updatePaneIds.push(paneId)
         }
         if (overlay.isDrawing() && !overlay.ghost) {
+          // A new drawing displaces any unfinished one without a remove — emit
+          // it so subscribers (sync mirrors) can drop the abandoned overlay.
+          const displaced = this._progressOverlayInfo
+          if (isValid(displaced)) {
+            this.executeAction('onOverlayChange', { type: 'remove', overlay: displaced.overlay })
+          }
           this._progressOverlayInfo = { paneId, overlay, appointPaneFlag: appointPaneFlags[index] }
         } else {
           if (!this._overlays.has(paneId)) {
@@ -1493,6 +1501,11 @@ export default class StoreImp implements Store {
         this._chart.updatePane(UpdateLevel.Overlay, paneId)
       })
       this._chart.updatePane(UpdateLevel.Overlay, PaneIdConstants.X_AXIS)
+    }
+    if (filterOverlays.length > 0) {
+      // Emit even when nothing visually changed (shouldUpdate only watches
+      // points/visible/styles/zLevel) — consumers also care about fields like
+      // lock/mode/extendData, and silent non-visual overrides used to desync.
       filterOverlays.forEach(overlay => {
         this.executeAction('onOverlayChange', { type: 'update', overlay })
       })
@@ -1651,6 +1664,11 @@ export default class StoreImp implements Store {
   }
 
   destroy (): void {
+    // Tell subscribers (e.g. ChartSyncManager) the in-progress drawing is gone
+    // so peers can drop their ghost mirrors instead of leaking them.
+    if (this._progressOverlayInfo?.overlay.isDrawing() === true) {
+      this.executeAction('onOverlayChange', { type: 'remove', overlay: this._progressOverlayInfo.overlay })
+    }
     this._clearData()
     this._clearLastPriceMarkExtendTextUpdateTimer()
     this._taskScheduler.clear()

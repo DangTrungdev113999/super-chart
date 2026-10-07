@@ -226,7 +226,7 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
     figureIndex: number,
     figure: OverlayFigure
   ): Nullable<EventHandler> {
-    if (overlay.isDrawing()) {
+    if (overlay.isDrawing() || overlay.ghost) {
       return null
     }
     return {
@@ -296,6 +296,9 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
 
   private _figureMouseDownEvent (overlay: OverlayImp, figureType: EventOverlayInfoFigureType, figureIndex: number, figure: OverlayFigure): MouseTouchEventCallback {
     return (event: MouseTouchEvent) => {
+      if (overlay.ghost || overlay.lock) {
+        return false
+      }
       const pane = this.getWidget().getPane()
       const paneId = pane.getId()
       overlay.startPressedMove(this._coordinateToPoint(overlay, event))
@@ -337,6 +340,9 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
 
   private _figureMouseRightClickEvent (overlay: OverlayImp, _figureType: EventOverlayInfoFigureType, _figureIndex: number, figure: OverlayFigure): MouseTouchEventCallback {
     return (event: MouseTouchEvent) => {
+      if (overlay.ghost || overlay.lock) {
+        return false
+      }
       if (checkOverlayFigureEvent('onRightClick', figure)) {
         let prevented = false
         overlay.onRightClick?.({ chart: this.getWidget().getPane().getChart(), overlay, figure, ...event, preventDefault: () => { prevented = true } })

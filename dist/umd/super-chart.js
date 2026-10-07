@@ -656,6 +656,9 @@ function createDom(tagName, styles) {
  * @return {number}
  */
 function binarySearchNearest(dataList, valueKey, targetValue) {
+    if (dataList.length === 0) {
+        return 0;
+    }
     var left = 0;
     var right = 0;
     for (right = dataList.length - 1; left !== right;) {
@@ -8750,6 +8753,7 @@ var OverlayImp = /** @class */ (function () {
         this.currentStep = OVERLAY_DRAW_STEP_START;
         this.lock = false;
         this.ghost = false;
+        this.synced = false;
         this.visible = true;
         this.zLevel = 0;
         this.needDefaultPointFigure = false;
@@ -17958,13 +17962,17 @@ var StoreImp = /** @class */ (function () {
             halfGapBar: Math.floor(this._gapBarSpace / 2)
         };
     };
-    StoreImp.prototype.setBarSpace = function (barSpace, adjustBeforeFunc) {
+    StoreImp.prototype.setBarSpace = function (barSpace, adjustBeforeFunc, options) {
+        var _a;
         if (barSpace < BarSpaceLimitConstants.MIN || barSpace > BarSpaceLimitConstants.MAX || this._barSpace === barSpace) {
             return;
         }
+        var prevBarSpace = this._barSpace;
         this._barSpace = barSpace;
         this._calcOptimalBarSpace();
-        adjustBeforeFunc === null || adjustBeforeFunc === void 0 ? void 0 : adjustBeforeFunc();
+        var adjustFunc = isFunction(adjustBeforeFunc) ? adjustBeforeFunc : undefined;
+        var actionOptions = isFunction(adjustBeforeFunc) ? options : adjustBeforeFunc;
+        adjustFunc === null || adjustFunc === void 0 ? void 0 : adjustFunc();
         this._adjustVisibleRange();
         this.setCrosshair(this._crosshair, { notInvalidate: true, forceInvalidate: true });
         this._chart.layout({
@@ -17973,6 +17981,9 @@ var StoreImp = /** @class */ (function () {
             buildYAxisTick: true,
             cacheYAxisWidth: true
         });
+        if (!((_a = actionOptions === null || actionOptions === void 0 ? void 0 : actionOptions.notExecuteAction) !== null && _a !== void 0 ? _a : false)) {
+            this.executeAction('onZoom', { scale: this._barSpace / prevBarSpace });
+        }
     };
     StoreImp.prototype.setTotalBarSpace = function (totalSpace) {
         if (this._totalBarSpace !== totalSpace) {
@@ -18201,15 +18212,11 @@ var StoreImp = /** @class */ (function () {
         }
         var x = zoomCoordinate.x;
         var floatIndex = this.coordinateToFloatIndex(x);
-        var prevBarSpace = this._barSpace;
         var barSpace = this._barSpace + scale * (this._barSpace / SCALE_MULTIPLIER);
+        // setBarSpace emits onZoom itself once the space actually changed.
         this.setBarSpace(barSpace, function () {
             _this._lastBarRightSideDiffBarCount += (floatIndex - _this.coordinateToFloatIndex(x));
         });
-        var realScale = this._barSpace / prevBarSpace;
-        if (realScale !== 1) {
-            this.executeAction('onZoom', { scale: realScale });
-        }
     };
     StoreImp.prototype.setZoomEnabled = function (enabled) {
         this._zoomEnabled = enabled;
@@ -18559,6 +18566,12 @@ var StoreImp = /** @class */ (function () {
                     updatePaneIds.push(paneId);
                 }
                 if (overlay.isDrawing() && !overlay.ghost) {
+                    // A new drawing displaces any unfinished one without a remove — emit
+                    // it so subscribers (sync mirrors) can drop the abandoned overlay.
+                    var displaced = _this._progressOverlayInfo;
+                    if (isValid(displaced)) {
+                        _this.executeAction('onOverlayChange', { type: 'remove', overlay: displaced.overlay });
+                    }
                     _this._progressOverlayInfo = { paneId: paneId, overlay: overlay, appointPaneFlag: appointPaneFlags[index] };
                 }
                 else {
@@ -18640,6 +18653,11 @@ var StoreImp = /** @class */ (function () {
                 _this._chart.updatePane(1 /* UpdateLevel.Overlay */, paneId);
             });
             this._chart.updatePane(1 /* UpdateLevel.Overlay */, PaneIdConstants.X_AXIS);
+        }
+        if (filterOverlays.length > 0) {
+            // Emit even when nothing visually changed (shouldUpdate only watches
+            // points/visible/styles/zLevel) — consumers also care about fields like
+            // lock/mode/extendData, and silent non-visual overrides used to desync.
             filterOverlays.forEach(function (overlay) {
                 _this.executeAction('onOverlayChange', { type: 'update', overlay: overlay });
             });
@@ -18778,6 +18796,12 @@ var StoreImp = /** @class */ (function () {
         return this._chart;
     };
     StoreImp.prototype.destroy = function () {
+        var _a;
+        // Tell subscribers (e.g. ChartSyncManager) the in-progress drawing is gone
+        // so peers can drop their ghost mirrors instead of leaking them.
+        if (((_a = this._progressOverlayInfo) === null || _a === void 0 ? void 0 : _a.overlay.isDrawing()) === true) {
+            this.executeAction('onOverlayChange', { type: 'remove', overlay: this._progressOverlayInfo.overlay });
+        }
         this._clearData();
         this._clearLastPriceMarkExtendTextUpdateTimer();
         this._taskScheduler.clear();
@@ -21184,7 +21208,7 @@ var OverlayView = /** @class */ (function (_super) {
         });
     };
     OverlayView.prototype._createFigureEvents = function (overlay, figureType, figureIndex, figure) {
-        if (overlay.isDrawing()) {
+        if (overlay.isDrawing() || overlay.ghost) {
             return null;
         }
         return {
@@ -21250,6 +21274,9 @@ var OverlayView = /** @class */ (function (_super) {
         var _this = this;
         return function (event) {
             var _a;
+            if (overlay.ghost || overlay.lock) {
+                return false;
+            }
             var pane = _this.getWidget().getPane();
             var paneId = pane.getId();
             overlay.startPressedMove(_this._coordinateToPoint(overlay, event));
@@ -21290,6 +21317,9 @@ var OverlayView = /** @class */ (function (_super) {
         var _this = this;
         return function (event) {
             var _a;
+            if (overlay.ghost || overlay.lock) {
+                return false;
+            }
             if (checkOverlayFigureEvent('onRightClick', figure)) {
                 var prevented_3 = false;
                 (_a = overlay.onRightClick) === null || _a === void 0 ? void 0 : _a.call(overlay, __assign(__assign({ chart: _this.getWidget().getPane().getChart(), overlay: overlay, figure: figure }, event), { preventDefault: function () { prevented_3 = true; } }));
@@ -23363,6 +23393,12 @@ var CrosshairHorizontalLabelView = /** @class */ (function (_super) {
             return;
         }
         if (isYAxis) {
+            // A synced crosshair can arrive without a y coordinate (the source
+            // hovered a pane this chart does not have) — no label then.
+            if (!isNumber(crosshair.y)) {
+                this._hideHtmlLabel();
+                return;
+            }
             // Y-axis: HTML overlay (avoids canvas clipping on narrow Y-axis)
             this._renderHtmlLabel(crosshair, chartStore, axis, textStyles);
         }
@@ -27288,8 +27324,8 @@ var ChartImp = /** @class */ (function () {
         }
         this._chartStore.setRightMinVisibleBarCount(Math.ceil(barCount));
     };
-    ChartImp.prototype.setBarSpace = function (space) {
-        this._chartStore.setBarSpace(space);
+    ChartImp.prototype.setBarSpace = function (space, options) {
+        this._chartStore.setBarSpace(space, options);
     };
     ChartImp.prototype.getBarSpace = function () {
         return this._chartStore.getBarSpace();
@@ -27821,8 +27857,9 @@ function serializeOverlay(overlay) {
         mode: overlay.mode,
         modeSensitivity: overlay.modeSensitivity,
         points: overlay.points.map(function (p) { return (__assign({}, p)); }),
-        extendData: overlay.extendData,
-        styles: overlay.styles
+        // Deep-copy so the mirror never shares mutable objects with the source.
+        extendData: isValid(overlay.extendData) ? clone(overlay.extendData) : overlay.extendData,
+        styles: isValid(overlay.styles) ? clone(overlay.styles) : overlay.styles
     };
 }
 /**
@@ -27841,13 +27878,61 @@ function createChartSync(options) {
     // adapter goes through its own state before calling chart.setSymbol) —
     // suppress echoes by value instead of only by synchronous flag.
     var appliedMeta = new Map();
-    function metaKey(value) {
-        try {
-            return JSON.stringify(value);
+    // Group assignments made before the chart was attached.
+    var pendingGroups = new Map();
+    // Canonical identity keys. Whole-object JSON.stringify is fragile — a
+    // merged symbol (leftover fields, different key order) serializes
+    // differently from the source's and defeats dedupe.
+    function symbolKey(symbol) {
+        return symbol.ticker;
+    }
+    function periodKey(period) {
+        return "".concat(period.type, "/").concat(period.span);
+    }
+    var PRIME_QUIET_MS = 250;
+    var PRIME_MAX_MS = 2000;
+    function clearPrimeTimer(entry) {
+        if (isValid(entry.primeTimer)) {
+            clearTimeout(entry.primeTimer);
+            entry.primeTimer = undefined;
         }
-        catch (_a) {
-            return String(value);
+    }
+    function armPrimeTimer(entry) {
+        clearPrimeTimer(entry);
+        entry.primeTimer = setTimeout(function () {
+            entry.priming.clear();
+            entry.primeTimer = undefined;
+        }, PRIME_QUIET_MS);
+    }
+    /**
+     * Returns true when the emit should be absorbed (still priming within the
+     * lifetime cap). Rearms the quiet timer so a burst drains together; once
+     * the deadline passes, priming clears and emits flow normally.
+     */
+    function absorbPrimed(entry, channel) {
+        if (!entry.priming.has(channel)) {
+            return false;
         }
+        if (Date.now() >= entry.primeDeadline) {
+            entry.priming.clear();
+            clearPrimeTimer(entry);
+            return false;
+        }
+        armPrimeTimer(entry);
+        return true;
+    }
+    /**
+     * After a symbol/period apply, the peer's reload pipeline re-emits
+     * asynchronously (resetData → range adjusts, housekeeping crosshair emits,
+     * bar-space restores). Prime those channels so the burst can't echo the
+     * group's state back at the source.
+     */
+    function primeAfterApply(entry) {
+        entry.priming.add('timeRange');
+        entry.priming.add('crosshair');
+        entry.priming.add('zoom');
+        entry.primeDeadline = Date.now() + PRIME_MAX_MS;
+        armPrimeTimer(entry);
     }
     function peers(source) {
         var sourceEntry = charts.get(source);
@@ -27876,6 +27961,15 @@ function createChartSync(options) {
         else if (channel === 'timeRange') {
             p.timeRange = payload;
         }
+        else if (channel === 'drawings') {
+            var event_1 = payload;
+            var map = p.drawings;
+            if (!isValid(map)) {
+                map = new Map();
+                p.drawings = map;
+            }
+            map.set(event_1.overlay.id, event_1);
+        }
         else {
             p.zoom = true;
         }
@@ -27886,17 +27980,29 @@ function createChartSync(options) {
     function flush() {
         frame = 0;
         pending.forEach(function (p, source) {
-            if (!charts.has(source)) {
-                return;
+            // Isolate per-source failures: a throwing dispatch must not abort the
+            // rest of the queue or leave a poisoned entry that re-fails every frame.
+            try {
+                if (!charts.has(source)) {
+                    return;
+                }
+                if (p.crosshair !== undefined && channels.crosshair) {
+                    dispatchCrosshair(source, p.crosshair);
+                }
+                if (p.timeRange !== undefined && channels.timeRange) {
+                    dispatchTimeRange(source, p.timeRange);
+                }
+                if (p.zoom === true && channels.zoom) {
+                    dispatchZoom(source);
+                }
+                if (isValid(p.drawings) && channels.drawings) {
+                    p.drawings.forEach(function (event) {
+                        dispatchOverlay(source, event);
+                    });
+                }
             }
-            if (p.crosshair !== undefined && channels.crosshair) {
-                dispatchCrosshair(source, p.crosshair);
-            }
-            if (p.timeRange !== undefined && channels.timeRange) {
-                dispatchTimeRange(source, p.timeRange);
-            }
-            if (p.zoom === true && channels.zoom) {
-                dispatchZoom(source);
+            catch (_a) {
+                // Swallowed intentionally — see comment above.
             }
         });
         pending.clear();
@@ -27932,6 +28038,11 @@ function createChartSync(options) {
         peers(source).forEach(function (_a) {
             var chart = _a.chart;
             var store = getStore(chart);
+            if (store.getDataList().length === 0) {
+                // Nothing to anchor onto yet — writing a crosshair here would draw a
+                // stray line near the right edge of an empty chart.
+                return;
+            }
             applying.add(chart);
             try {
                 var toCoordinate = function (point, targetPaneId) {
@@ -27961,16 +28072,28 @@ function createChartSync(options) {
         // same moment regardless of their timeframe.
         var sourceStore = getStore(source);
         var dataList = sourceStore.getDataList();
+        if (dataList.length === 0) {
+            return;
+        }
         var anchorIndex = Math.min(range.to - 1, dataList.length - 1);
         var timestamp = sourceStore.dataIndexToTimestamp(anchorIndex);
         if (!isNumber(timestamp)) {
             return;
         }
+        // When the source is parked at the realtime edge, carry the right-edge
+        // margin too — otherwise followers glue the last bar to the border.
+        var margin = sourceStore.getOffsetRightDistance();
         peers(source).forEach(function (_a) {
             var chart = _a.chart;
+            if (getStore(chart).getDataList().length === 0) {
+                return;
+            }
             applying.add(chart);
             try {
                 chart.scrollToTimestamp(timestamp);
+                if (margin > 0) {
+                    chart.setOffsetRightDistance(margin);
+                }
             }
             finally {
                 applying.delete(chart);
@@ -28013,15 +28136,15 @@ function createChartSync(options) {
                         if (overlay.isDrawing()) {
                             // Mirror the in-progress drawing as a locked ghost — renders
                             // partial points without arming or swallowing input.
-                            chart.createOverlay(__assign(__assign({}, create), { ghost: true, lock: true }));
+                            chart.createOverlay(__assign(__assign({}, create), { ghost: true, lock: true, synced: true }));
                         }
                         else {
-                            chart.createOverlay(create);
+                            chart.createOverlay(__assign(__assign({}, create), { synced: true }));
                         }
                         break;
                     }
-                    case 'progress':
-                    case 'update': {
+                    case 'progress': {
+                        // Hot path — narrow payload, no structural changes.
                         var updated = chart.overrideOverlay({
                             id: overlay.id,
                             points: overlay.points.map(function (p) { return (__assign({}, p)); }),
@@ -28031,14 +28154,26 @@ function createChartSync(options) {
                             // Follower may have attached after the overlay was created —
                             // materialize it instead of dropping the update.
                             var create = serializeOverlay(overlay);
-                            chart.createOverlay(overlay.isDrawing() ? __assign(__assign({}, create), { ghost: true, lock: true }) : create);
+                            chart.createOverlay(overlay.isDrawing() ? __assign(__assign({}, create), { ghost: true, lock: true, synced: true }) : __assign(__assign({}, create), { synced: true }));
+                        }
+                        break;
+                    }
+                    case 'update': {
+                        // Forward the full mutable surface (styles/lock/mode/extendData/
+                        // zLevel...) — but never paneId/name/groupId: paneId isn't
+                        // re-keyed by overrideOverlay and identity fields can't change.
+                        var _c = serializeOverlay(overlay), _p = _c.paneId, _n = _c.name, _g = _c.groupId, _gh = _c.ghost, rest = __rest(_c, ["paneId", "name", "groupId", "ghost"]);
+                        var updated = chart.overrideOverlay(rest);
+                        if (!updated) {
+                            var create = serializeOverlay(overlay);
+                            chart.createOverlay(overlay.isDrawing() ? __assign(__assign({}, create), { ghost: true, lock: true, synced: true }) : __assign(__assign({}, create), { synced: true }));
                         }
                         break;
                     }
                     case 'drawEnd': {
                         // Replace the ghost with a real, interactive overlay.
                         chart.removeOverlay({ id: overlay.id });
-                        chart.createOverlay(serializeOverlay(overlay));
+                        chart.createOverlay(__assign(__assign({}, serializeOverlay(overlay)), { synced: true }));
                         break;
                     }
                     case 'remove': {
@@ -28057,19 +28192,26 @@ function createChartSync(options) {
             return;
         }
         var apply = options.onApplySymbol;
-        var key = metaKey(symbol);
-        peers(source).forEach(function (_a) {
-            var _b;
-            var chart = _a.chart;
-            var meta = (_b = appliedMeta.get(chart)) !== null && _b !== void 0 ? _b : {};
-            if (meta.symbol === key) {
+        var key = symbolKey(symbol);
+        peers(source).forEach(function (entry) {
+            var _a;
+            var chart = entry.chart;
+            var meta = (_a = appliedMeta.get(chart)) !== null && _a !== void 0 ? _a : {};
+            if (meta.symbol === key || !charts.has(chart)) {
                 return;
             }
+            var prevKey = meta.symbol;
             meta.symbol = key;
             appliedMeta.set(chart, meta);
             applying.add(chart);
             try {
                 apply(chart, symbol);
+                primeAfterApply(entry);
+            }
+            catch (_b) {
+                // Roll the dedupe key back so a failed apply stays retryable and the
+                // remaining peers still get their chance.
+                meta.symbol = prevKey;
             }
             finally {
                 applying.delete(chart);
@@ -28081,19 +28223,24 @@ function createChartSync(options) {
             return;
         }
         var apply = options.onApplyPeriod;
-        var key = metaKey(period);
-        peers(source).forEach(function (_a) {
-            var _b;
-            var chart = _a.chart;
-            var meta = (_b = appliedMeta.get(chart)) !== null && _b !== void 0 ? _b : {};
-            if (meta.period === key) {
+        var key = periodKey(period);
+        peers(source).forEach(function (entry) {
+            var _a;
+            var chart = entry.chart;
+            var meta = (_a = appliedMeta.get(chart)) !== null && _a !== void 0 ? _a : {};
+            if (meta.period === key || !charts.has(chart)) {
                 return;
             }
+            var prevKey = meta.period;
             meta.period = key;
             appliedMeta.set(chart, meta);
             applying.add(chart);
             try {
                 apply(chart, period);
+                primeAfterApply(entry);
+            }
+            catch (_b) {
+                meta.period = prevKey;
             }
             finally {
                 applying.delete(chart);
@@ -28101,7 +28248,7 @@ function createChartSync(options) {
         });
     }
     function attach(chart, attachOptions) {
-        var _a, _b, _c;
+        var _a, _b, _c, _d;
         if (attachOptions === void 0) { attachOptions = {}; }
         if (charts.has(chart)) {
             return;
@@ -28114,16 +28261,20 @@ function createChartSync(options) {
         var currentSymbol = store.getSymbol();
         var currentPeriod = store.getPeriod();
         if (isValid(currentSymbol)) {
-            meta.symbol = metaKey(currentSymbol);
+            meta.symbol = symbolKey(currentSymbol);
         }
         if (isValid(currentPeriod)) {
-            meta.period = metaKey(currentPeriod);
+            meta.period = periodKey(currentPeriod);
         }
         appliedMeta.set(chart, meta);
         var alreadySetup = isValid(currentSymbol) && store.getDataList().length > 0;
         var priming = new Set();
         if ((_b = attachOptions.skipInitialEmits) !== null && _b !== void 0 ? _b : !alreadySetup) {
             priming.add('timeRange');
+            // Zoom/zoom-restore emits ride along with the setup burst now that
+            // setBarSpace emits onZoom — absorb them like the range emits.
+            priming.add('zoom');
+            priming.add('crosshair');
             if (!isValid(currentSymbol)) {
                 priming.add('symbol');
             }
@@ -28133,32 +28284,37 @@ function createChartSync(options) {
         }
         var entry = {
             chart: chart,
-            groupId: (_c = attachOptions.groupId) !== null && _c !== void 0 ? _c : null,
+            groupId: (_d = (_c = attachOptions.groupId) !== null && _c !== void 0 ? _c : pendingGroups.get(chart)) !== null && _d !== void 0 ? _d : null,
             unsubscribes: [],
-            priming: priming
+            priming: priming,
+            primeDeadline: Date.now() + PRIME_MAX_MS,
+            lastCrosshairActive: false
         };
+        pendingGroups.delete(chart);
         var onCrosshairChange = function (data) {
-            if (!applying.has(chart)) {
-                schedule(chart, 'crosshair', data);
+            if (applying.has(chart)) {
+                return;
             }
-        };
-        // Setup emits arrive as a burst (setSymbol → setPeriod → data → range
-        // adjusts). While priming, keep absorbing and rearm a quiet timer — the
-        // burst drains together, so trailing emits can't slip through and hijack
-        // peers. The first emit after ~250ms of quiet is a real user change.
-        var absorbPrimed = function () {
-            if (isValid(entry.primeTimer)) {
-                clearTimeout(entry.primeTimer);
+            var active = isString(data === null || data === void 0 ? void 0 : data.paneId);
+            if (active) {
+                entry.lastCrosshairActive = true;
             }
-            entry.primeTimer = setTimeout(function () {
-                entry.priming.clear();
-                entry.primeTimer = undefined;
-            }, 250);
+            else {
+                // Housekeeping re-sync emits `{}` on every data tick — only let a
+                // real active→cleared transition propagate, never a bare clear.
+                if (!entry.lastCrosshairActive) {
+                    return;
+                }
+                entry.lastCrosshairActive = false;
+            }
+            if (absorbPrimed(entry, 'crosshair')) {
+                return;
+            }
+            schedule(chart, 'crosshair', data);
         };
         var onVisibleRangeChange = function (data) {
             if (!applying.has(chart)) {
-                if (entry.priming.has('timeRange')) {
-                    absorbPrimed();
+                if (absorbPrimed(entry, 'timeRange')) {
                     return;
                 }
                 schedule(chart, 'timeRange', data);
@@ -28166,12 +28322,15 @@ function createChartSync(options) {
         };
         var onZoom = function () {
             if (!applying.has(chart)) {
+                if (absorbPrimed(entry, 'zoom')) {
+                    return;
+                }
                 schedule(chart, 'zoom');
             }
         };
         var onOverlayChange = function (data) {
             if (!applying.has(chart) && channels.drawings && isValid(data)) {
-                dispatchOverlay(chart, data);
+                schedule(chart, 'drawings', data);
             }
         };
         var onSymbolChange = function (data) {
@@ -28179,15 +28338,14 @@ function createChartSync(options) {
             if (!channels.symbol || !isValid(data)) {
                 return;
             }
-            var key = metaKey(data);
+            var key = symbolKey(data);
             var meta = (_a = appliedMeta.get(chart)) !== null && _a !== void 0 ? _a : {};
             if (meta.symbol === key) {
                 return;
             }
             meta.symbol = key;
             appliedMeta.set(chart, meta);
-            if (entry.priming.has('symbol')) {
-                absorbPrimed();
+            if (absorbPrimed(entry, 'symbol')) {
                 return;
             }
             dispatchSymbol(chart, data);
@@ -28197,42 +28355,70 @@ function createChartSync(options) {
             if (!channels.period || !isValid(data)) {
                 return;
             }
-            var key = metaKey(data);
+            var key = periodKey(data);
             var meta = (_a = appliedMeta.get(chart)) !== null && _a !== void 0 ? _a : {};
             if (meta.period === key) {
                 return;
             }
             meta.period = key;
             appliedMeta.set(chart, meta);
-            if (entry.priming.has('period')) {
-                absorbPrimed();
+            if (absorbPrimed(entry, 'period')) {
                 return;
             }
             dispatchPeriod(chart, data);
         };
-        chart.subscribeAction('onCrosshairChange', onCrosshairChange);
-        chart.subscribeAction('onVisibleRangeChange', onVisibleRangeChange);
-        chart.subscribeAction('onZoom', onZoom);
-        chart.subscribeAction('onOverlayChange', onOverlayChange);
-        chart.subscribeAction('onSymbolChange', onSymbolChange);
-        chart.subscribeAction('onPeriodChange', onPeriodChange);
-        entry.unsubscribes = [
-            function () { chart.unsubscribeAction('onCrosshairChange', onCrosshairChange); },
-            function () { chart.unsubscribeAction('onVisibleRangeChange', onVisibleRangeChange); },
-            function () { chart.unsubscribeAction('onZoom', onZoom); },
-            function () { chart.unsubscribeAction('onOverlayChange', onOverlayChange); },
-            function () { chart.unsubscribeAction('onSymbolChange', onSymbolChange); },
-            function () { chart.unsubscribeAction('onPeriodChange', onPeriodChange); }
+        var subs = [
+            ['onCrosshairChange', onCrosshairChange],
+            ['onVisibleRangeChange', onVisibleRangeChange],
+            ['onZoom', onZoom],
+            ['onOverlayChange', onOverlayChange],
+            ['onSymbolChange', onSymbolChange],
+            ['onPeriodChange', onPeriodChange]
         ];
+        var unsubscribes = [];
+        try {
+            subs.forEach(function (_a) {
+                var _b = __read(_a, 2), type = _b[0], callback = _b[1];
+                chart.subscribeAction(type, callback);
+                unsubscribes.push(function () { chart.unsubscribeAction(type, callback); });
+            });
+        }
+        catch (e) {
+            // Roll back partial subscriptions — a half-attached chart would leak.
+            unsubscribes.forEach(function (unsub) { unsub(); });
+            appliedMeta.delete(chart);
+            throw e instanceof Error ? e : new Error(String(e));
+        }
+        entry.unsubscribes = unsubscribes;
         charts.set(chart, entry);
+        // Arm the quiet timer immediately — a chart that emits nothing after
+        // attach must still disarm priming on its own.
+        if (entry.priming.size > 0) {
+            armPrimeTimer(entry);
+        }
+    }
+    /**
+     * Remove a source's in-progress drawing mirror from its peers — ghosts are
+     * locked and undeletable, so a stranded one renders (and swallows input)
+     * until the chart remounts.
+     */
+    function purgeInProgressMirror(entry) {
+        try {
+            var progress = getStore(entry.chart).getProgressOverlayInfo();
+            if (isValid(progress) && isValid(progress.overlay)) {
+                dispatchOverlay(entry.chart, { type: 'remove', overlay: progress.overlay });
+            }
+        }
+        catch (_a) {
+            // Torn-down chart — nothing to purge.
+        }
     }
     function detach(chart) {
         var entry = charts.get(chart);
         if (isValid(entry)) {
+            purgeInProgressMirror(entry);
             entry.unsubscribes.forEach(function (unsub) { unsub(); });
-            if (isValid(entry.primeTimer)) {
-                clearTimeout(entry.primeTimer);
-            }
+            clearPrimeTimer(entry);
             charts.delete(chart);
             pending.delete(chart);
             appliedMeta.delete(chart);
@@ -28244,17 +28430,28 @@ function createChartSync(options) {
         setGroup: function (chart, groupId) {
             var entry = charts.get(chart);
             if (isValid(entry)) {
-                entry.groupId = groupId;
+                if (entry.groupId !== groupId) {
+                    // Dropping out of a group must not strand ghost mirrors on the
+                    // now-former peers.
+                    purgeInProgressMirror(entry);
+                    entry.groupId = groupId;
+                }
+            }
+            else {
+                pendingGroups.set(chart, groupId);
             }
         },
         setChannel: function (channel, enabled) {
+            var was = channels[channel];
             channels[channel] = enabled;
+            if (was && !enabled && channel === 'drawings') {
+                // Turning drawing sync off mid-draw would strand locked ghosts on
+                // peers — purge the in-progress mirrors everywhere.
+                charts.forEach(function (entry) { purgeInProgressMirror(entry); });
+            }
         },
         dispose: function () {
-            charts.forEach(function (entry) {
-                entry.unsubscribes.forEach(function (unsub) { unsub(); });
-            });
-            charts.clear();
+            charts.forEach(function (_, chart) { detach(chart); });
             pending.clear();
             appliedMeta.clear();
             if (frame !== 0) {

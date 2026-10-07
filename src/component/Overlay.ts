@@ -150,6 +150,13 @@ export interface Overlay<E = unknown> extends OverlayEventCollection<E> {
   ghost: boolean
 
   /**
+   * Whether the overlay was mirrored onto this chart by a chart-sync layer
+   * (as opposed to created by this chart's own user/persistence). Hosts can
+   * use this to skip duplicate persistence/history bookkeeping for mirrors.
+   */
+  synced: boolean
+
+  /**
    * Whether the overlay is visible
    */
   visible: boolean
@@ -276,6 +283,8 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
   currentStep = OVERLAY_DRAW_STEP_START
   lock = false
   ghost = false
+
+  synced = false
   visible = true
   zLevel = 0
   needDefaultPointFigure = false

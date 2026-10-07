@@ -20,6 +20,9 @@
  * @return {number}
  */
 export function binarySearchNearest<T> (dataList: T[], valueKey: keyof T, targetValue: T[keyof T]): number {
+  if (dataList.length === 0) {
+    return 0
+  }
   let left = 0
   let right = 0
   for (right = dataList.length - 1; left !== right;) {

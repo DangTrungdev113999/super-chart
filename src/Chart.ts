@@ -678,8 +678,8 @@ export default class ChartImp implements Chart {
     this._chartStore.setRightMinVisibleBarCount(Math.ceil(barCount))
   }
 
-  setBarSpace (space: number): void {
-    this._chartStore.setBarSpace(space)
+  setBarSpace (space: number, options?: { notExecuteAction?: boolean }): void {
+    this._chartStore.setBarSpace(space, options)
   }
 
   getBarSpace (): BarSpace {

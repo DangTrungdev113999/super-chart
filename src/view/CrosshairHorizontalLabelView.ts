@@ -15,7 +15,7 @@
 import type Bounding from '../common/Bounding'
 import type Crosshair from '../common/Crosshair'
 import type { CrosshairStyle, CrosshairDirectionStyle, StateTextStyle } from '../common/Styles'
-import { isString } from '../common/utils/typeChecks'
+import { isString, isNumber } from '../common/utils/typeChecks'
 import { createFont } from '../common/utils/canvas'
 import { createDom } from '../common/utils/dom'
 import { SymbolDefaultPrecisionConstants } from '../common/SymbolInfo'
@@ -105,6 +105,12 @@ export default class CrosshairHorizontalLabelView<C extends Axis = YAxis> extend
     }
 
     if (isYAxis) {
+      // A synced crosshair can arrive without a y coordinate (the source
+      // hovered a pane this chart does not have) — no label then.
+      if (!isNumber(crosshair.y)) {
+        this._hideHtmlLabel()
+        return
+      }
       // Y-axis: HTML overlay (avoids canvas clipping on narrow Y-axis)
       this._renderHtmlLabel(crosshair, chartStore, axis as unknown as YAxis, textStyles)
     } else {
