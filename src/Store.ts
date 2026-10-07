@@ -672,8 +672,16 @@ export default class StoreImp implements Store {
       from = 0
     }
     const realFrom = this._lastBarRightSideDiffBarCount > 0 ? Math.round(totalBarCount + this._lastBarRightSideDiffBarCount - visibleBarCount) - 1 : from
+    const prevVisibleRange = this._visibleRange
     this._visibleRange = { from, to, realFrom, realTo }
-    this.executeAction('onVisibleRangeChange', this._visibleRange)
+    // Emit only when the range actually moved — intra-bar data ticks would
+    // otherwise re-broadcast the identical range every tick.
+    if (
+      prevVisibleRange.from !== from || prevVisibleRange.to !== to ||
+      prevVisibleRange.realFrom !== realFrom || prevVisibleRange.realTo !== realTo
+    ) {
+      this.executeAction('onVisibleRangeChange', this._visibleRange)
+    }
     this._visibleRangeDataList = []
     this._visibleRangeHighLowPrice = [
       { x: 0, price: Number.MIN_SAFE_INTEGER },
@@ -1520,17 +1528,24 @@ export default class StoreImp implements Store {
     filterOverlays.forEach(overlay => {
       const paneId = overlay.paneId
       const paneOverlays = this.getOverlaysByPaneId(overlay.paneId)
-      overlay.onRemoved?.({ overlay, chart: this._chart })
+      // A throwing host callback must not abort the removal loop — callers
+      // wipe overlays in bulk (symbol switch, destroy) and a partial wipe
+      // would strand zombie overlays and their peer mirrors.
+      try {
+        overlay.onRemoved?.({ overlay, chart: this._chart })
+      } catch {}
       if (!updatePaneIds.includes(paneId)) {
         updatePaneIds.push(paneId)
       }
-      if (overlay.isDrawing()) {
+      // Only null the progress slot when this overlay IS the local in-progress
+      // drawing — a mid-draw ghost mirror also reports isDrawing() but lives in
+      // _overlays, and a foreign remove must not kill our own drawing.
+      if (this._progressOverlayInfo?.overlay === overlay) {
         this._progressOverlayInfo = null
-      } else {
-        const index = paneOverlays.findIndex(o => o.id === overlay.id)
-        if (index > -1) {
-          paneOverlays.splice(index, 1)
-        }
+      }
+      const index = paneOverlays.findIndex(o => o.id === overlay.id)
+      if (index > -1) {
+        paneOverlays.splice(index, 1)
       }
       if (paneOverlays.length === 0) {
         this._overlays.delete(paneId)
@@ -1665,10 +1680,14 @@ export default class StoreImp implements Store {
 
   destroy (): void {
     // Tell subscribers (e.g. ChartSyncManager) the in-progress drawing is gone
-    // so peers can drop their ghost mirrors instead of leaking them.
+    // so peers can drop their ghost mirrors instead of leaking them. A throwing
+    // subscriber must not abort the rest of teardown.
     if (this._progressOverlayInfo?.overlay.isDrawing() === true) {
-      this.executeAction('onOverlayChange', { type: 'remove', overlay: this._progressOverlayInfo.overlay })
+      try {
+        this.executeAction('onOverlayChange', { type: 'remove', overlay: this._progressOverlayInfo.overlay })
+      } catch {}
     }
+    this._progressOverlayInfo = null
     this._clearData()
     this._clearLastPriceMarkExtendTextUpdateTimer()
     this._taskScheduler.clear()

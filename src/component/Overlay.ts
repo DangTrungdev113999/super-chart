@@ -416,8 +416,27 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
 
   shouldUpdate (): { draw: boolean, sort: boolean } {
     const sort = this._prevOverlay.zLevel !== this.zLevel
+    // Field-wise compare — JSON.stringify(points) twice per override was the
+    // hot-path bottleneck during drag/draw bursts (O(N) serialization + allocs).
+    const prevPoints = this._prevOverlay.points
+    const points = this.points
+    let pointsChanged = prevPoints.length !== points.length
+    if (!pointsChanged) {
+      for (let i = 0; i < points.length; i++) {
+        const prev = prevPoints[i]
+        const curr = points[i]
+        if (
+          prev.timestamp !== curr.timestamp ||
+          prev.value !== curr.value ||
+          prev.dataIndex !== curr.dataIndex
+        ) {
+          pointsChanged = true
+          break
+        }
+      }
+    }
     const draw = sort ||
-      JSON.stringify(this._prevOverlay.points) !== JSON.stringify(this.points) ||
+      pointsChanged ||
       this._prevOverlay.visible !== this.visible ||
       this._prevOverlay.extendData !== this.extendData ||
       this._prevOverlay.styles !== this.styles
