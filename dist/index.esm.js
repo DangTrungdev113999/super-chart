@@ -17783,7 +17783,7 @@ var StoreImp = /** @class */ (function () {
         }
         if (success && adjustFlag) {
             this._adjustVisibleRange();
-            this.setCrosshair(this._crosshair, { notInvalidate: true });
+            this.setCrosshair(this._crosshair, { notInvalidate: true, forceInvalidate: true });
             var filterIndicators = this.getIndicatorsByFilter({});
             if (filterIndicators.length > 0) {
                 this._calcIndicator(filterIndicators);
@@ -17958,7 +17958,7 @@ var StoreImp = /** @class */ (function () {
         this._calcOptimalBarSpace();
         adjustBeforeFunc === null || adjustBeforeFunc === void 0 ? void 0 : adjustBeforeFunc();
         this._adjustVisibleRange();
-        this.setCrosshair(this._crosshair, { notInvalidate: true });
+        this.setCrosshair(this._crosshair, { notInvalidate: true, forceInvalidate: true });
         this._chart.layout({
             measureWidth: true,
             update: true,
@@ -17970,7 +17970,7 @@ var StoreImp = /** @class */ (function () {
         if (this._totalBarSpace !== totalSpace) {
             this._totalBarSpace = totalSpace;
             this._adjustVisibleRange();
-            this.setCrosshair(this._crosshair, { notInvalidate: true });
+            this.setCrosshair(this._crosshair, { notInvalidate: true, forceInvalidate: true });
         }
     };
     StoreImp.prototype.setOffsetRightDistance = function (distance, isUpdate) {
@@ -17978,7 +17978,7 @@ var StoreImp = /** @class */ (function () {
         this._lastBarRightSideDiffBarCount = this._offsetRightDistance / this._barSpace;
         if (isUpdate !== null && isUpdate !== void 0 ? isUpdate : false) {
             this._adjustVisibleRange();
-            this.setCrosshair(this._crosshair, { notInvalidate: true });
+            this.setCrosshair(this._crosshair, { notInvalidate: true, forceInvalidate: true });
             this._chart.layout({
                 measureWidth: true,
                 update: true,
@@ -18030,7 +18030,7 @@ var StoreImp = /** @class */ (function () {
         var prevLastBarRightSideDistance = this._lastBarRightSideDiffBarCount * this._barSpace;
         this._lastBarRightSideDiffBarCount = this._startLastBarRightSideDiffBarCount - distanceBarCount;
         this._adjustVisibleRange();
-        this.setCrosshair(this._crosshair, { notInvalidate: true });
+        this.setCrosshair(this._crosshair, { notInvalidate: true, forceInvalidate: true });
         this._chart.layout({
             measureWidth: true,
             update: true,
@@ -18262,8 +18262,12 @@ var StoreImp = /** @class */ (function () {
             prevCrosshair.y !== cr.y ||
             prevCrosshair.paneId !== cr.paneId ||
             (forceInvalidate !== null && forceInvalidate !== void 0 ? forceInvalidate : false)) {
-            if (isValid(kLineData) && !(notExecuteAction !== null && notExecuteAction !== void 0 ? notExecuteAction : false) && this.hasAction('onCrosshairChange') && isString(this._crosshair.paneId)) {
-                this.executeAction('onCrosshairChange', crosshair);
+            // Fire on pane changes AND on leave (prev had paneId, new doesn't) so
+            // subscribers can reset to the last bar — TradingView legend behavior.
+            // forceInvalidate re-syncs (data ticks, zoom, scroll) also emit — an
+            // empty-payload emit lets subscribers refresh the last-bar legend.
+            if (isValid(kLineData) && !(notExecuteAction !== null && notExecuteAction !== void 0 ? notExecuteAction : false) && this.hasAction('onCrosshairChange') && (isString(this._crosshair.paneId) || isString(prevCrosshair.paneId) || (forceInvalidate !== null && forceInvalidate !== void 0 ? forceInvalidate : false))) {
+                this.executeAction('onCrosshairChange', crosshair !== null && crosshair !== void 0 ? crosshair : {});
             }
             if (!(notInvalidate !== null && notInvalidate !== void 0 ? notInvalidate : false)) {
                 this._chart.updatePane(1 /* UpdateLevel.Overlay */);

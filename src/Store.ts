@@ -601,7 +601,7 @@ export default class StoreImp implements Store {
     }
     if (success && adjustFlag) {
       this._adjustVisibleRange()
-      this.setCrosshair(this._crosshair, { notInvalidate: true })
+      this.setCrosshair(this._crosshair, { notInvalidate: true, forceInvalidate: true })
       const filterIndicators = this.getIndicatorsByFilter({})
       if (filterIndicators.length > 0) {
         this._calcIndicator(filterIndicators)
@@ -784,7 +784,7 @@ export default class StoreImp implements Store {
     this._calcOptimalBarSpace()
     adjustBeforeFunc?.()
     this._adjustVisibleRange()
-    this.setCrosshair(this._crosshair, { notInvalidate: true })
+    this.setCrosshair(this._crosshair, { notInvalidate: true, forceInvalidate: true })
     this._chart.layout({
       measureWidth: true,
       update: true,
@@ -797,7 +797,7 @@ export default class StoreImp implements Store {
     if (this._totalBarSpace !== totalSpace) {
       this._totalBarSpace = totalSpace
       this._adjustVisibleRange()
-      this.setCrosshair(this._crosshair, { notInvalidate: true })
+      this.setCrosshair(this._crosshair, { notInvalidate: true, forceInvalidate: true })
     }
   }
 
@@ -806,7 +806,7 @@ export default class StoreImp implements Store {
     this._lastBarRightSideDiffBarCount = this._offsetRightDistance / this._barSpace
     if (isUpdate ?? false) {
       this._adjustVisibleRange()
-      this.setCrosshair(this._crosshair, { notInvalidate: true })
+      this.setCrosshair(this._crosshair, { notInvalidate: true, forceInvalidate: true })
       this._chart.layout({
         measureWidth: true,
         update: true,
@@ -869,7 +869,7 @@ export default class StoreImp implements Store {
     const prevLastBarRightSideDistance = this._lastBarRightSideDiffBarCount * this._barSpace
     this._lastBarRightSideDiffBarCount = this._startLastBarRightSideDiffBarCount - distanceBarCount
     this._adjustVisibleRange()
-    this.setCrosshair(this._crosshair, { notInvalidate: true })
+    this.setCrosshair(this._crosshair, { notInvalidate: true, forceInvalidate: true })
     this._chart.layout({
       measureWidth: true,
       update: true,
@@ -1120,8 +1120,12 @@ export default class StoreImp implements Store {
       prevCrosshair.paneId !== cr.paneId ||
       (forceInvalidate ?? false)
     ) {
-      if (isValid(kLineData) && !(notExecuteAction ?? false) && this.hasAction('onCrosshairChange') && isString(this._crosshair.paneId)) {
-        this.executeAction('onCrosshairChange', crosshair)
+      // Fire on pane changes AND on leave (prev had paneId, new doesn't) so
+      // subscribers can reset to the last bar — TradingView legend behavior.
+      // forceInvalidate re-syncs (data ticks, zoom, scroll) also emit — an
+      // empty-payload emit lets subscribers refresh the last-bar legend.
+      if (isValid(kLineData) && !(notExecuteAction ?? false) && this.hasAction('onCrosshairChange') && (isString(this._crosshair.paneId) || isString(prevCrosshair.paneId) || (forceInvalidate ?? false))) {
+        this.executeAction('onCrosshairChange', crosshair ?? {})
       }
       if (!(notInvalidate ?? false)) {
         this._chart.updatePane(UpdateLevel.Overlay)
