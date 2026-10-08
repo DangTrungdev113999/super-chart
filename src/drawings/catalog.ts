@@ -186,8 +186,8 @@ function buildCatalog (): DrawingToolGroup[] {
           items: [
             item('parallelChannel', 'parallelStraightLine', 'Parallel Channel', 'parallelChannel', caps({ anchorCount: 3 }), LINE_RECIPE),
             item('priceChannel', 'priceChannelLine', 'Price Channel', 'priceChannel', caps({ anchorCount: 2 }), LINE_RECIPE),
-            item('flatTopBottom', 'flatTopBottom', 'Flat Top/Bottom', 'flatTopBottom', caps({ anchorCount: 2 }), LINE_RECIPE, { available: false }),
-            item('disjointChannel', 'disjointChannel', 'Disjoint Channel', 'disjointChannel', caps({ anchorCount: 3 }), LINE_RECIPE, { available: false }),
+            item('flatTopBottom', 'flatTopBottom', 'Flat Top/Bottom', 'flatTopBottom', caps({ anchorCount: 3 }), LINE_RECIPE),
+            item('disjointChannel', 'disjointChannel', 'Disjoint Channel', 'disjointChannel', caps({ anchorCount: 3 }), LINE_RECIPE),
             item('regressionTrend', 'regressionTrend', 'Regression Trend', 'parallelChannel', caps({ anchorCount: 2 }), LINE_RECIPE)
           ]
         },
@@ -303,7 +303,7 @@ function buildCatalog (): DrawingToolGroup[] {
           items: [
             item('brush', 'brush', 'Brush', 'brush', caps({ anchorCount: 0, freehand: true, snap45: false }), SHAPE_RECIPE, { available: false }),
             item('highlighter', 'highlighter', 'Highlighter', 'highlighter', caps({ anchorCount: 0, freehand: true, snap45: false }), SHAPE_RECIPE, { available: false }),
-            item('path', 'path', 'Path', 'path', caps({ anchorCount: -1, snap45: false }), SHAPE_RECIPE, { available: false })
+            item('path', 'path', 'Path', 'path', caps({ anchorCount: -1, snap45: false }), SHAPE_RECIPE)
           ]
         },
         {
@@ -320,15 +320,15 @@ function buildCatalog (): DrawingToolGroup[] {
           id: 'shapes',
           items: [
             item('rect', 'rect', 'Rectangle', 'rect', caps({ anchorCount: 2 }), SHAPE_RECIPE),
-            item('rotatedRect', 'rotatedRect', 'Rotated Rectangle', 'rotatedRect', caps({ anchorCount: 3 }), SHAPE_RECIPE, { available: false }),
-            item('parallelogram', 'parallelogram', 'Parallelogram', 'rect', caps({ anchorCount: 3 }), SHAPE_RECIPE, { available: false }),
+            item('rotatedRect', 'rotatedRect', 'Rotated Rectangle', 'rotatedRect', caps({ anchorCount: 3 }), SHAPE_RECIPE),
+            item('parallelogram', 'parallelogram', 'Parallelogram', 'rect', caps({ anchorCount: 3 }), SHAPE_RECIPE),
             item('circle', 'circle', 'Circle', 'circle', caps({ anchorCount: 2 }), SHAPE_RECIPE),
             item('ellipse', 'ellipse', 'Ellipse', 'ellipse', caps({ anchorCount: 2 }), SHAPE_RECIPE),
-            item('triangle', 'triangle', 'Triangle', 'triangle', caps({ anchorCount: 3 }), SHAPE_RECIPE, { available: false }),
-            item('arc', 'arc', 'Arc', 'arc', caps({ anchorCount: 2 }), SHAPE_RECIPE, { available: false }),
-            item('curve', 'curve', 'Curve', 'curve', caps({ anchorCount: 2 }), SHAPE_RECIPE, { available: false }),
-            item('doubleCurve', 'doubleCurve', 'Double Curve', 'curve', caps({ anchorCount: 3 }), SHAPE_RECIPE, { available: false }),
-            item('polyline', 'polyline', 'Polyline', 'polyline', caps({ anchorCount: -1 }), SHAPE_RECIPE, { available: false })
+            item('triangle', 'triangle', 'Triangle', 'triangle', caps({ anchorCount: 3 }), SHAPE_RECIPE),
+            item('arc', 'arc', 'Arc', 'arc', caps({ anchorCount: 2 }), SHAPE_RECIPE),
+            item('curve', 'curve', 'Curve', 'curve', caps({ anchorCount: 2 }), SHAPE_RECIPE),
+            item('doubleCurve', 'doubleCurve', 'Double Curve', 'curve', caps({ anchorCount: 3 }), SHAPE_RECIPE),
+            item('polyline', 'polyline', 'Polyline', 'polyline', caps({ anchorCount: -1 }), SHAPE_RECIPE)
           ]
         }
       ]

@@ -61,6 +61,24 @@ import straightLine from './lines/straightLine'
 import trendAngle from './lines/trendAngle'
 import verticalStraightLine from './lines/verticalStraightLine'
 
+import disjointChannel from './channels/disjointChannel'
+import flatTopBottom from './channels/flatTopBottom'
+import parallelStraightLine from './channels/parallelStraightLine'
+import priceChannelLine from './channels/priceChannelLine'
+import regressionTrend from './channels/regressionTrend'
+
+import arc from './shapes/arc'
+import circle from './shapes/circle'
+import curve from './shapes/curve'
+import doubleCurve from './shapes/doubleCurve'
+import ellipse from './shapes/ellipse'
+import parallelogram from './shapes/parallelogram'
+import path from './shapes/path'
+import polyline from './shapes/polyline'
+import rect from './shapes/rect'
+import rotatedRect from './shapes/rotatedRect'
+import triangle from './shapes/triangle'
+
 /**
  * Drawing-subsystem tool registry — self-registers on module load so
  * `import ... from 'super-chart'` makes every rebuilt tool available to
@@ -109,7 +127,23 @@ const drawingTools = [
   segment,
   straightLine,
   trendAngle,
-  verticalStraightLine
+  verticalStraightLine,
+  disjointChannel,
+  flatTopBottom,
+  parallelStraightLine,
+  priceChannelLine,
+  regressionTrend,
+  arc,
+  circle,
+  curve,
+  doubleCurve,
+  ellipse,
+  parallelogram,
+  path,
+  polyline,
+  rect,
+  rotatedRect,
+  triangle
 ]
 
 drawingTools.forEach(template => {
