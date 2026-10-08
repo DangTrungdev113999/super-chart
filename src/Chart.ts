@@ -26,6 +26,7 @@ import type { ActionType, ActionCallback } from './common/Action'
 import type { DataLoader } from './common/DataLoader'
 import type VisibleRange from './common/VisibleRange'
 import type { Formatter, DecimalFold, LayoutChild, Options, ThousandsSeparator, ZoomAnchor } from './Options'
+import { createDrawingsApi } from './drawings/api'
 import Animation from './common/Animation'
 import { createId } from './common/utils/id'
 import { createDom } from './common/utils/dom'
@@ -54,6 +55,7 @@ import type { YAxis } from './component/YAxis'
 
 import type { IndicatorFilter, Indicator, IndicatorCreate, IndicatorOverride } from './component/Indicator'
 import type { OverlayFilter, Overlay, OverlayCreate, OverlayOverride } from './component/Overlay'
+import type { DrawingsApi } from './drawings/api'
 
 import { getIndicatorClass } from './extension/indicator/index'
 
@@ -97,6 +99,8 @@ export interface Chart extends Store {
   unsubscribeAction: (type: ActionType, callback?: ActionCallback) => void
   getConvertPictureUrl: (includeOverlay?: boolean, type?: 'png' | 'jpeg' | 'bmp', backgroundColor?: string) => string
   resize: () => void
+  /** Drawing subsystem facade — catalog, tools, history, persistence, AI helpers. */
+  readonly drawings: DrawingsApi
 }
 
 export default class ChartImp implements Chart {
@@ -125,13 +129,23 @@ export default class ChartImp implements Chart {
   private _layoutPending = false
 
   private readonly _cacheYAxisWidth = { left: 0, right: 0 }
+  private _drawingsApi: DrawingsApi | null = null
+  private readonly _drawingsOptions: Options['drawings']
 
   constructor (container: HTMLElement, options?: Options) {
     this._initContainer(container)
     this._chartEvent = new Event(this._chartContainer, this)
     this._chartStore = new ChartStore(this, options)
     this._initPanes(options)
+    this._drawingsOptions = options?.drawings
     this._layout()
+  }
+
+  get drawings (): DrawingsApi {
+    // Always-present, lazily created — a chart that never draws pays only
+    // the field, while chart.drawings.* works without init-time config.
+    this._drawingsApi ??= createDrawingsApi(this, this._drawingsOptions)
+    return this._drawingsApi
   }
 
   private _initContainer (container: HTMLElement): void {
@@ -1199,6 +1213,8 @@ export default class ChartImp implements Chart {
   }
 
   destroy (): void {
+    this._drawingsApi?.destroy()
+    this._drawingsApi = null
     this._chartEvent.destroy()
     this._drawPanes.forEach(pane => {
       pane.destroy()

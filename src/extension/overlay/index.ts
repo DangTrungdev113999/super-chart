@@ -42,6 +42,9 @@ import regressionTrend from './regressionTrend'
 import ellipse from './ellipse'
 
 const overlays: Record<string, OverlayInnerConstructor> = {}
+// Source templates retained for metadata reads (totalStep etc.) that
+// validation needs without instantiating an overlay.
+const overlayTemplates: Record<string, OverlayTemplate> = {}
 
 const extensions = [
   fibonacciLine, horizontalRayLine, horizontalSegment, horizontalStraightLine,
@@ -53,10 +56,12 @@ const extensions = [
 
 extensions.forEach((template: OverlayTemplate) => {
   overlays[template.name] = OverlayImp.extend(template)
+  overlayTemplates[template.name] = template
 })
 
 function registerOverlay<E = unknown> (template: OverlayTemplate<E>): void {
   overlays[template.name] = OverlayImp.extend(template)
+  overlayTemplates[template.name] = template
 }
 
 function getOverlayInnerClass (name: string): Nullable<OverlayInnerConstructor> {
@@ -71,4 +76,8 @@ function getSupportedOverlays (): string[] {
   return Object.keys(overlays)
 }
 
-export { registerOverlay, getOverlayClass, getOverlayInnerClass, getSupportedOverlays }
+function getOverlayTemplate (name: string): Nullable<OverlayTemplate> {
+  return overlayTemplates[name] ?? null
+}
+
+export { registerOverlay, getOverlayClass, getOverlayInnerClass, getSupportedOverlays, getOverlayTemplate }

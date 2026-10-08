@@ -18,6 +18,7 @@ import type { Styles } from './common/Styles'
 
 import type { IndicatorCreate } from './component/Indicator'
 import type { PaneOptions } from './pane/types'
+import type { DrawingStore, DrawingScope } from './drawings/persistence'
 
 export type FormatDateType = 'tooltip' | 'crosshair' | 'xAxis'
 
@@ -92,6 +93,21 @@ export interface ZoomAnchor {
   xAxis: ZoomAnchorType
 }
 
+export interface DrawingsOptions {
+  /** Persistence adapter — omit for in-memory-only drawings. */
+  store?: DrawingStore | null
+  /** Set false to disable the built-in floating toolbar (DP-6b). */
+  toolbar?: boolean
+  /** Persistence partition override — defaults to chart symbol. */
+  scope?: () => DrawingScope
+  /** Tool names that render but are never listed/persisted/undone. */
+  isTransient?: (name: string) => boolean
+  /** Persistence write debounce (ms). Default 300. */
+  saveDebounceMs?: number
+  /** Undo/redo stack depth. */
+  maxHistory?: number
+}
+
 export interface Options {
   locale?: string
   timezone?: string
@@ -101,4 +117,6 @@ export interface Options {
   decimalFold?: Partial<DecimalFold>
   zoomAnchor?: ZoomAnchorType | Partial<ZoomAnchor>
   layout?: LayoutChild[]
+  /** Drawing subsystem configuration — see `chart.drawings`. */
+  drawings?: DrawingsOptions
 }

@@ -154,3 +154,36 @@ export type {
   DrawingsEventType,
   DrawingsEventCallback
 } from './manager'
+
+// ─── Tool catalog + icons (DP-6) ─────────────────────────────────────────────
+export {
+  getDrawingCatalog,
+  findCatalogItem,
+  findCatalogItemByOverlay,
+  setCatalogItemAvailable,
+  DRAWING_CHROME
+} from './catalog'
+export type {
+  DrawingToolCapabilities,
+  ToolbarControl,
+  DrawingToolItem,
+  DrawingToolSection,
+  DrawingToolGroup,
+  DrawingChromeItem
+} from './catalog'
+export { getDrawingIcon, listDrawingIconIds } from './icons'
+export type { DrawingIconId } from './icons'
+
+export { createDrawingsApi } from './api'
+export type {
+  DrawingsApi,
+  DrawingsApiOptions,
+  DrawingTimeInput,
+  DrawingPointInput,
+  DrawingCreateSpec,
+  DrawingCreateIfExists,
+  DrawingListFilter,
+  DrawingClearFilter,
+  DrawingsConfigureOptions,
+  SemanticDrawingBase
+} from './api'

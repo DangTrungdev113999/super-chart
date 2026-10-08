@@ -580,79 +580,53 @@ export interface PaneOptions {
 	state?: PaneState;
 	axis?: Partial<AxisCreate>;
 }
-export type FormatDateType = "tooltip" | "crosshair" | "xAxis";
-export interface FormatDateParams {
-	dateTimeFormat: Intl.DateTimeFormat;
-	timestamp: number;
-	template: string;
-	type: FormatDateType;
-}
-export type FormatDate = (params: FormatDateParams) => string;
-export type FormatBigNumber = (value: string | number) => string;
-export type ExtendTextType = "last_price";
-export interface FormatExtendTextParams {
-	type: ExtendTextType;
-	data: KLineData;
-	index: number;
-}
-export type FormatExtendText = (params: FormatExtendTextParams) => string;
-export interface Formatter {
-	formatDate: FormatDate;
-	formatBigNumber: FormatBigNumber;
-	formatExtendText: FormatExtendText;
-}
-export interface Locales {
-	time: string;
-	open: string;
-	high: string;
-	low: string;
-	close: string;
-	volume: string;
-	change: string;
-	turnover: string;
-	second: string;
-	minute: string;
-	hour: string;
-	day: string;
-	week: string;
-	month: string;
-	year: string;
-	[key: string]: string;
-}
-export type LayoutChildType = "candle" | "indicator" | "xAxis";
-export interface LayoutChild {
-	type: LayoutChildType;
-	content?: Array<string | IndicatorCreate>;
-	options?: PaneOptions;
-}
-export interface DecimalFold {
-	threshold: number;
-	format: (value: string | number) => string;
-}
-export interface ThousandsSeparator {
-	sign: string;
-	format: (value: string | number) => string;
-}
-export type ZoomAnchorType = "cursor" | "last_bar";
-export interface ZoomAnchor {
-	main: ZoomAnchorType;
-	xAxis: ZoomAnchorType;
-}
-export interface Options {
-	locale?: string;
-	timezone?: string;
-	styles?: string | DeepPartial<Styles>;
-	formatter?: Partial<Formatter>;
-	thousandsSeparator?: Partial<ThousandsSeparator>;
-	decimalFold?: Partial<DecimalFold>;
-	zoomAnchor?: ZoomAnchorType | Partial<ZoomAnchor>;
-	layout?: LayoutChild[];
-}
 export type YAxisTemplate = AxisTemplate;
 export interface YAxis extends Axis, Required<YAxisTemplate> {
 	isFromZero: () => boolean;
 	isInCandle: () => boolean;
 	convertToNicePixel: (value: number) => number;
+}
+export interface Store {
+	setStyles: (value: string | DeepPartial<Styles>) => void;
+	getStyles: () => Styles;
+	setFormatter: (formatter: Partial<Formatter>) => void;
+	getFormatter: () => Formatter;
+	setLocale: (locale: string) => void;
+	getLocale: () => string;
+	setTimezone: (timezone: string) => void;
+	getTimezone: () => string;
+	setThousandsSeparator: (thousandsSeparator: Partial<ThousandsSeparator>) => void;
+	getThousandsSeparator: () => ThousandsSeparator;
+	setDecimalFold: (decimalFold: Partial<DecimalFold>) => void;
+	getDecimalFold: () => DecimalFold;
+	setSymbol: (symbol: PickPartial<SymbolInfo, "pricePrecision" | "volumePrecision">) => void;
+	getSymbol: () => Nullable<SymbolInfo>;
+	setPeriod: (period: Period) => void;
+	getPeriod: () => Nullable<Period>;
+	getDataList: () => KLineData[];
+	setOffsetRightDistance: (distance: number) => void;
+	getOffsetRightDistance: () => number;
+	setMaxOffsetLeftDistance: (distance: number) => void;
+	setMaxOffsetRightDistance: (distance: number) => void;
+	setLeftMinVisibleBarCount: (barCount: number) => void;
+	setRightMinVisibleBarCount: (barCount: number) => void;
+	setBarSpace: (space: number, options?: {
+		notExecuteAction?: boolean;
+	}) => void;
+	getBarSpace: () => BarSpace;
+	getVisibleRange: () => VisibleRange;
+	setDataLoader: (dataLoader: DataLoader) => void;
+	overrideIndicator: (override: IndicatorCreate) => boolean;
+	removeIndicator: (filter?: IndicatorFilter) => boolean;
+	overrideOverlay: (override: Partial<OverlayCreate>) => boolean;
+	removeOverlay: (filter?: OverlayFilter) => boolean;
+	setZoomEnabled: (enabled: boolean) => void;
+	isZoomEnabled: () => boolean;
+	setZoomAnchor: (behavior: ZoomAnchor) => void;
+	getZoomAnchor: () => ZoomAnchor;
+	setScrollEnabled: (enabled: boolean) => void;
+	isScrollEnabled: () => boolean;
+	resetData: () => void;
 }
 export type OverlayMode = "normal" | "weak_magnet" | "strong_magnet";
 export interface OverlayPerformEventParams {
@@ -970,47 +944,450 @@ export type OverlayFilter<E = unknown> = Partial<Pick<Overlay<E>, "id" | "groupI
 export type OverlayConstructor<E = unknown> = new () => Overlay<E>;
 export declare const OVERLAY_ID_PREFIX = "overlay_";
 export declare const OVERLAY_FIGURE_KEY_PREFIX = "overlay_figure_";
-export interface Store {
-	setStyles: (value: string | DeepPartial<Styles>) => void;
-	getStyles: () => Styles;
-	setFormatter: (formatter: Partial<Formatter>) => void;
-	getFormatter: () => Formatter;
-	setLocale: (locale: string) => void;
-	getLocale: () => string;
-	setTimezone: (timezone: string) => void;
-	getTimezone: () => string;
-	setThousandsSeparator: (thousandsSeparator: Partial<ThousandsSeparator>) => void;
-	getThousandsSeparator: () => ThousandsSeparator;
-	setDecimalFold: (decimalFold: Partial<DecimalFold>) => void;
-	getDecimalFold: () => DecimalFold;
-	setSymbol: (symbol: PickPartial<SymbolInfo, "pricePrecision" | "volumePrecision">) => void;
-	getSymbol: () => Nullable<SymbolInfo>;
-	setPeriod: (period: Period) => void;
-	getPeriod: () => Nullable<Period>;
-	getDataList: () => KLineData[];
-	setOffsetRightDistance: (distance: number) => void;
-	getOffsetRightDistance: () => number;
-	setMaxOffsetLeftDistance: (distance: number) => void;
-	setMaxOffsetRightDistance: (distance: number) => void;
-	setLeftMinVisibleBarCount: (barCount: number) => void;
-	setRightMinVisibleBarCount: (barCount: number) => void;
-	setBarSpace: (space: number, options?: {
-		notExecuteAction?: boolean;
-	}) => void;
-	getBarSpace: () => BarSpace;
-	getVisibleRange: () => VisibleRange;
-	setDataLoader: (dataLoader: DataLoader) => void;
-	overrideIndicator: (override: IndicatorCreate) => boolean;
-	removeIndicator: (filter?: IndicatorFilter) => boolean;
-	overrideOverlay: (override: Partial<OverlayCreate>) => boolean;
-	removeOverlay: (filter?: OverlayFilter) => boolean;
-	setZoomEnabled: (enabled: boolean) => void;
-	isZoomEnabled: () => boolean;
-	setZoomAnchor: (behavior: ZoomAnchor) => void;
-	getZoomAnchor: () => ZoomAnchor;
-	setScrollEnabled: (enabled: boolean) => void;
-	isScrollEnabled: () => boolean;
-	resetData: () => void;
+/**
+ * Serialized drawing v2 — the persistence + shadow-state schema.
+ *
+ * Deliberately serializes DATA-level identity, not view state:
+ * - points carry timestamp+value (+ optional dataIndex hint); restore
+ *   re-derives dataIndex from timestamp so drawings survive data reloads.
+ * - transient sync fields (ghost/synced/suppressSync/syncRemoved/
+ *   skipDrawReplay) are NEVER serialized — a mirrored overlay is owned by
+ *   the peer chart, persisting it would fork the source of truth.
+ */
+export interface SerializedDrawingPoint extends Partial<Point> {
+	/** Per-point interval override (drawings anchored to another timeframe). */
+	interval?: string;
+	/** Per-point bar offset — anchored notes/measure windows. */
+	offset?: number;
+}
+export interface SerializedDrawing<E = unknown> {
+	schemaVersion: 2;
+	id: string;
+	name: string;
+	/** Omit/undefined = the candle pane. */
+	paneId?: string;
+	groupId?: string;
+	points: SerializedDrawingPoint[];
+	styles?: DeepPartial<OverlayStyle>;
+	lock?: boolean;
+	visible?: boolean;
+	mode?: OverlayMode;
+	modeSensitivity?: number;
+	zLevel?: number;
+	extendData?: E;
+	/** Whether creation finished — in-progress drawings are never persisted. */
+	completed: boolean;
+	/** Position-as-percent-of-viewport for anchored notes (survives symbol switch). */
+	positionPercents?: number[];
+	/** Source-authored timestamps — server merges on updatedAt, not write order. */
+	createdAt: number;
+	updatedAt: number;
+}
+/**
+ * Persistence contract — local-first, server-optional.
+ *
+ * The manager talks to ONE DrawingStore. Compose:
+ *   createCompositeStore({ local: idbAdapter, remote: httpAdapter })
+ * for local-first + queued-server behavior; wrap the result in
+ * withBroadcastSync() to fan changes across tabs.
+ *
+ * Hosts implement load/apply; subscribe/flush/setIdentity are optional.
+ */
+export interface DrawingScope {
+	/** Primary partition — usually the symbol (e.g. 'BTCUSDT'). */
+	symbol: string;
+	/** Optional sub-partition when multiple charts share a symbol. */
+	chartId?: string;
+}
+export interface DrawingChangeSet {
+	upsert?: SerializedDrawing[];
+	/** Ids — tombstoned by durable adapters so deletes propagate. */
+	remove?: string[];
+}
+export interface DrawingStoreEvent {
+	type: "upsert" | "remove" | "snapshot";
+	scope: DrawingScope;
+	/** upsert/remove carry changed entries; snapshot carries the full scope state. */
+	drawings: SerializedDrawing[];
+	/** Tombstone ids on remove events. */
+	removedIds?: string[];
+}
+export interface DrawingStoreLoadResult {
+	drawings: SerializedDrawing[];
+	/** Opaque revision for conflict detection (server adapters). */
+	revision?: string | number;
+}
+export interface DrawingStoreApplyMeta {
+	/** True when this change originated from a remote/peer event — adapters may skip re-broadcasting it. */
+	remote?: boolean;
+}
+export interface DrawingStore {
+	load: (scope: DrawingScope) => Promise<DrawingStoreLoadResult>;
+	apply: (scope: DrawingScope, changes: DrawingChangeSet, meta?: DrawingStoreApplyMeta) => Promise<void>;
+	/** External changes (another tab, server push). */
+	subscribe?: (cb: (event: DrawingStoreEvent) => void) => () => void;
+	/** Force pending writes durably (pagehide/beforeunload). */
+	flush?: (scope?: DrawingScope) => Promise<void>;
+	/** Identity switch (login/logout) — server adapters re-key rows. */
+	setIdentity?: (identity: string | null) => void;
+}
+export type FormatDateType = "tooltip" | "crosshair" | "xAxis";
+export interface FormatDateParams {
+	dateTimeFormat: Intl.DateTimeFormat;
+	timestamp: number;
+	template: string;
+	type: FormatDateType;
+}
+export type FormatDate = (params: FormatDateParams) => string;
+export type FormatBigNumber = (value: string | number) => string;
+export type ExtendTextType = "last_price";
+export interface FormatExtendTextParams {
+	type: ExtendTextType;
+	data: KLineData;
+	index: number;
+}
+export type FormatExtendText = (params: FormatExtendTextParams) => string;
+export interface Formatter {
+	formatDate: FormatDate;
+	formatBigNumber: FormatBigNumber;
+	formatExtendText: FormatExtendText;
+}
+export interface Locales {
+	time: string;
+	open: string;
+	high: string;
+	low: string;
+	close: string;
+	volume: string;
+	change: string;
+	turnover: string;
+	second: string;
+	minute: string;
+	hour: string;
+	day: string;
+	week: string;
+	month: string;
+	year: string;
+	[key: string]: string;
+}
+export type LayoutChildType = "candle" | "indicator" | "xAxis";
+export interface LayoutChild {
+	type: LayoutChildType;
+	content?: Array<string | IndicatorCreate>;
+	options?: PaneOptions;
+}
+export interface DecimalFold {
+	threshold: number;
+	format: (value: string | number) => string;
+}
+export interface ThousandsSeparator {
+	sign: string;
+	format: (value: string | number) => string;
+}
+export type ZoomAnchorType = "cursor" | "last_bar";
+export interface ZoomAnchor {
+	main: ZoomAnchorType;
+	xAxis: ZoomAnchorType;
+}
+export interface DrawingsOptions {
+	/** Persistence adapter — omit for in-memory-only drawings. */
+	store?: DrawingStore | null;
+	/** Set false to disable the built-in floating toolbar (DP-6b). */
+	toolbar?: boolean;
+	/** Persistence partition override — defaults to chart symbol. */
+	scope?: () => DrawingScope;
+	/** Tool names that render but are never listed/persisted/undone. */
+	isTransient?: (name: string) => boolean;
+	/** Persistence write debounce (ms). Default 300. */
+	saveDebounceMs?: number;
+	/** Undo/redo stack depth. */
+	maxHistory?: number;
+}
+export interface Options {
+	locale?: string;
+	timezone?: string;
+	styles?: string | DeepPartial<Styles>;
+	formatter?: Partial<Formatter>;
+	thousandsSeparator?: Partial<ThousandsSeparator>;
+	decimalFold?: Partial<DecimalFold>;
+	zoomAnchor?: ZoomAnchorType | Partial<ZoomAnchor>;
+	layout?: LayoutChild[];
+	/** Drawing subsystem configuration — see `chart.drawings`. */
+	drawings?: DrawingsOptions;
+}
+/**
+ * DrawingManager — OBSERVE + shadow state.
+ *
+ * The manager does NOT own the overlay list: the chart store remains the
+ * source of truth for rendering and hit-testing. The manager subscribes
+ * to `onOverlayChange`, keeps a serialized shadow map of every committed
+ * drawing, and turns commit boundaries (drawEnd / editEnd / remove) into
+ * undo commands + debounced persistence writes.
+ *
+ * Non-drawings — sync mirrors (synced), in-flight ghosts (ghost), armed
+ * in-progress tools, and templates flagged `transient` — are tracked for
+ * correctness but never persisted or undone.
+ */
+export type DrawingsEventType = "select" | "deselect" | "toolChange" | "change" | "editStart" | "editEnd";
+export type DrawingsEventCallback = (payload: {
+	overlay?: Overlay;
+	tool?: string | null;
+}) => void;
+export interface DrawingManager {
+	/** Arm a drawing tool — subsequent clicks collect its points. */
+	activate: (name: string, opts?: {
+		continuous?: boolean;
+		extendData?: unknown;
+		points?: OverlayCreate["points"];
+	}) => Nullable<string>;
+	deactivate: () => void;
+	activeTool: () => string | null;
+	/** Programmatic create — already-finished overlays (AI / restore paths). */
+	create: (spec: OverlayCreate) => Nullable<string>;
+	update: (id: string, patch: Partial<Pick<OverlayCreate, "points" | "styles" | "extendData" | "lock" | "visible" | "mode" | "modeSensitivity" | "zLevel">>) => boolean;
+	remove: (id: string) => boolean;
+	list: () => SerializedDrawing[];
+	get: (id: string) => Nullable<Overlay>;
+	select: (id: Nullable<string>) => void;
+	deselect: () => void;
+	undo: () => boolean;
+	redo: () => boolean;
+	canUndo: () => boolean;
+	canRedo: () => boolean;
+	attachStore: (store: DrawingStore | null) => void;
+	flush: () => Promise<void>;
+	/**
+	 * Bulk-apply suppression — wrap restore/sync batch writes so the flood
+	 * of 'create'/'update' events doesn't push undo commands or persist
+	 * entries the caller already owns.
+	 */
+	beginApply: () => void;
+	endApply: () => void;
+	on: (type: DrawingsEventType, cb: DrawingsEventCallback) => () => void;
+	destroy: () => void;
+}
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * Inline SVG icon registry — TradingView-style stroke icons.
+ *
+ * All icons render on a 28×28 viewBox with `stroke="currentColor"` and no
+ * hard-coded fills, so toolbars inherit the host theme color. Paths are
+ * authored in the same geometry language as TV's line-tools-icons set
+ * (thin diagonal strokes for lines, level ticks for fib, loops for waves).
+ *
+ * `getDrawingIcon` resolves an iconId to markup; unknown ids get the
+ * generic 'tool' glyph so a tool is never invisible in a toolbar.
+ */
+export type DrawingIconId = string;
+/**
+ * Drawing-tool catalog — the single registry a host toolbar/settings UI
+ * reads from. Structure mirrors TradingView's `groups → sections → items`
+ * so a host can render the same flyout hierarchy, and every item carries
+ * the metadata the floating toolbar + settings surface need
+ * (`capabilities`, `toolbarRecipe`) so per-tool chrome stays data-driven.
+ */
+export interface DrawingToolCapabilities {
+	/** Anchors the tool collects; 0 = freehand stroke, -1 = unlimited clicks. */
+	anchorCount: number;
+	freehand: boolean;
+	/** Has editable text → text controls appear in the floating toolbar. */
+	hasText: boolean;
+	/** Supports the 45°-align modifier/persistent toggle. */
+	snap45: boolean;
+	/** Can be cloned via Ctrl/Cmd+drag. */
+	cloneable: boolean;
+	/** Multi-line text box vs a single caption. */
+	multiline: boolean;
+}
+/**
+ * Floating-toolbar control recipe — per-tool-family property map. A host
+ * renders controls in this order; each control is a self-describing slot
+ * so no consumer hard-codes button wiring.
+ */
+export type ToolbarControl = {
+	kind: "color";
+	role: "line" | "fill" | "text" | "background";
+} | {
+	kind: "style";
+	role: "line" | "text";
+} | {
+	kind: "width";
+} | {
+	kind: "levels";
+} | {
+	kind: "text";
+} | {
+	kind: "textAlign";
+} | {
+	kind: "geometry";
+	options: Array<"rect" | "rotated" | "ellipse">;
+} | {
+	kind: "lock";
+} | {
+	kind: "visibility";
+} | {
+	kind: "clone";
+} | {
+	kind: "settings";
+} | {
+	kind: "remove";
+} | {
+	kind: "anchor";
+} | {
+	kind: "alert";
+} | {
+	kind: "snap45";
+} | {
+	kind: "more";
+};
+export interface DrawingToolItem {
+	/** Stable catalog id — NOT the kernel overlay name (see `overlayName`). */
+	id: string;
+	/** Kernel template name passed to `chart.createOverlay`; '' for non-tool entries. */
+	overlayName: string;
+	title: string;
+	iconId: DrawingIconId;
+	/** Single-key hotkey hint (host may bind). */
+	hotkey?: string;
+	capabilities: DrawingToolCapabilities;
+	toolbarRecipe: ToolbarControl[];
+	/** False while a tool is planned but not yet shipped — hosts dim it. */
+	available: boolean;
+	/**
+	 * Non-drawing entries (cursor modes, eraser, zoom) — they change chart
+	 * interaction state instead of arming an overlay template.
+	 */
+	nonTool?: boolean;
+}
+export interface DrawingToolSection {
+	id: string;
+	items: DrawingToolItem[];
+}
+export interface DrawingToolGroup {
+	id: string;
+	/** Icon shown on the group's flyout button. */
+	iconId: DrawingIconId;
+	sections: DrawingToolSection[];
+}
+/**
+ * `chart.drawings` — the public facade over the drawing subsystem.
+ *
+ * Wraps the DrawingManager (observe + shadow + history + persistence) with
+ * the catalog registry and a semantic/AI-friendly create surface. Hosts use
+ * `catalog()` to render toolbars; automation uses `addLine`/`addHLine`/
+ * `addZone`/`addFibRetracement` (correct point contracts built in) or the
+ * validating `create()` for arbitrary tools.
+ */
+/** ms timestamp (number) or ISO-8601 string — normalized to ms internally. */
+export type DrawingTimeInput = number | string;
+export interface DrawingPointInput {
+	time?: DrawingTimeInput;
+	dataIndex?: number;
+	value?: number;
+}
+export type DrawingCreateIfExists = "ignore" | "update" | "replace";
+export interface DrawingCreateSpec extends Omit<OverlayCreate, "points" | "name"> {
+	/** Optional here because `create(name, spec)` carries it separately. */
+	name?: string;
+	points?: DrawingPointInput[];
+	/** Behavior when `id` already exists. Default 'update'. */
+	ifExists?: DrawingCreateIfExists;
+}
+export interface DrawingListFilter {
+	name?: string;
+	ids?: string[];
+	paneId?: string;
+	/** Keep drawings with any point timestamp inside [from, to] (ms). */
+	inRange?: {
+		from: DrawingTimeInput;
+		to: DrawingTimeInput;
+	};
+	/** Keep drawings intersecting the current visible bar range. */
+	intersectsVisible?: boolean;
+}
+export interface DrawingClearFilter {
+	ids?: string[];
+	name?: string;
+	/** Locked drawings survive clear() unless explicitly included. */
+	includeLocked?: boolean;
+}
+export interface DrawingsConfigureOptions {
+	/** Swap/attach a persistence store at runtime. `null` detaches. */
+	store?: DrawingStore | null;
+}
+export interface SemanticDrawingBase {
+	id?: string;
+	paneId?: string;
+	styles?: OverlayCreate["styles"];
+	extendData?: unknown;
+	lock?: boolean;
+	visible?: boolean;
+	ifExists?: DrawingCreateIfExists;
+}
+export interface DrawingsApi extends DrawingManager {
+	/** The tool catalog (groups → sections → items) for host toolbars. */
+	catalog: () => DrawingToolGroup[];
+	/**
+	 * Arm a tool by catalog id ('trendLine') or kernel name ('segment').
+	 * Catalog ids resolve through the registry; unknown ids fall through to
+	 * the raw overlay name for extension templates.
+	 */
+	activate: (tool: string, opts?: {
+		continuous?: boolean;
+		extendData?: unknown;
+		points?: OverlayCreate["points"];
+	}) => Nullable<string>;
+	/**
+	 * Validating programmatic create.
+	 * - `create('segment', { points })` / `create({ name, points })` → id
+	 * - `create(spec[])` → ids (invalid entries skipped with a warning)
+	 * Point count must match the template's anchor contract.
+	 */
+	create: {
+		(name: string, spec?: DrawingCreateSpec): Nullable<string>;
+		(spec: DrawingCreateSpec): Nullable<string>;
+		(specs: DrawingCreateSpec[]): Array<Nullable<string>>;
+	};
+	/** Trend line between two points. `name` selects the kernel template. */
+	addLine: (args: {
+		from: DrawingPointInput;
+		to: DrawingPointInput;
+		name?: string;
+	} & SemanticDrawingBase) => Nullable<string>;
+	/** Horizontal line at a value. `time` defaults to mid-visible-range. */
+	addHLine: (args: {
+		value: number;
+		time?: DrawingTimeInput;
+		label?: string;
+	} & SemanticDrawingBase) => Nullable<string>;
+	/** Filled zone (rectangle) between a time range and two price levels. */
+	addZone: (args: {
+		from: DrawingTimeInput;
+		to: DrawingTimeInput;
+		top: number;
+		bottom: number;
+	} & SemanticDrawingBase) => Nullable<string>;
+	/** Fibonacci retracement between two points. */
+	addFibRetracement: (args: {
+		from: DrawingPointInput;
+		to: DrawingPointInput;
+	} & SemanticDrawingBase) => Nullable<string>;
+	list: (filter?: DrawingListFilter) => SerializedDrawing[];
+	/** Bulk remove — returns removed ids. Locked drawings are skipped by default. */
+	clear: (filter?: DrawingClearFilter) => string[];
+	configure: (opts: DrawingsConfigureOptions) => void;
 }
 export type DomPosition = "root" | "main" | "yAxis";
 export interface ConvertFilter {
@@ -1043,6 +1420,8 @@ export interface Chart extends Store {
 	unsubscribeAction: (type: ActionType, callback?: ActionCallback) => void;
 	getConvertPictureUrl: (includeOverlay?: boolean, type?: "png" | "jpeg" | "bmp", backgroundColor?: string) => string;
 	resize: () => void;
+	/** Drawing subsystem facade — catalog, tools, history, persistence, AI helpers. */
+	readonly drawings: DrawingsApi;
 }
 export interface AxisTick {
 	coord: number;
