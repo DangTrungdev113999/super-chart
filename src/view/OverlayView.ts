@@ -34,6 +34,10 @@ import type DrawPane from '../pane/DrawPane'
 import View from './View'
 
 export default class OverlayView<C extends Axis = YAxis> extends View<C> {
+  /** Pointer type of the last event routed to this view — touch vs mouse
+   *  decides anchor hit-target size in figure params. */
+  protected _lastIsTouch = false
+
   constructor (widget: DrawWidget<DrawPane<C>>) {
     super(widget)
     this._initEvent()
@@ -60,12 +64,12 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
       if (progressOverlayInfo !== null) {
         const overlay = progressOverlayInfo.overlay
         let progressOverlayPaneId = progressOverlayInfo.paneId
-        if (overlay.isStart()) {
+        if (overlay.isStart() && this._canDrawPoints()) {
           chartStore.updateProgressOverlayInfo(paneId)
           progressOverlayPaneId = paneId
         }
         const index = overlay.points.length - 1
-        if (overlay.isDrawing() && progressOverlayPaneId === paneId) {
+        if (overlay.isDrawing() && progressOverlayPaneId === paneId && this._canDrawPoints()) {
           overlay.eventMoveForDrawing(this._coordinateToPoint(overlay, event), event)
           overlay.onDrawing?.({ chart, overlay, ...event })
           chartStore.executeAction('onOverlayChange', { type: 'progress', overlay })
@@ -95,12 +99,12 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
       if (progressOverlayInfo !== null) {
         const overlay = progressOverlayInfo.overlay
         let progressOverlayPaneId = progressOverlayInfo.paneId
-        if (overlay.isStart()) {
+        if (overlay.isStart() && this._canDrawPoints()) {
           chartStore.updateProgressOverlayInfo(paneId, true)
           progressOverlayPaneId = paneId
         }
         const index = overlay.points.length - 1
-        if (overlay.isDrawing() && progressOverlayPaneId === paneId) {
+        if (overlay.isDrawing() && progressOverlayPaneId === paneId && this._canDrawPoints()) {
           overlay.eventMoveForDrawing(this._coordinateToPoint(overlay, event), event)
           overlay.onDrawing?.({ chart, overlay, ...event })
           overlay.nextStep()
@@ -138,7 +142,7 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
       if (progressOverlayInfo !== null) {
         const overlay = progressOverlayInfo.overlay
         const progressOverlayPaneId = progressOverlayInfo.paneId
-        if (overlay.isDrawing() && progressOverlayPaneId === paneId) {
+        if (overlay.isDrawing() && progressOverlayPaneId === paneId && this._canDrawPoints()) {
           overlay.forceComplete()
           // TradingView semantics: a force-completed drawing that never
           // collected its minimum points is CANCELLED, not committed —
@@ -175,7 +179,7 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
       const progressOverlayInfo = chartStore.getProgressOverlayInfo()
       if (progressOverlayInfo !== null) {
         const overlay = progressOverlayInfo.overlay
-        if (overlay.isDrawing()) {
+        if (overlay.isDrawing() && this._canDrawPoints()) {
           const index = overlay.points.length - 1
           return this._figureMouseRightClickEvent(
             overlay,
@@ -465,6 +469,16 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
         }
         return false
       }
+      // A hook that removes its own overlay and returns normally leaves no
+      // exception to catch — verify the overlay still exists before arming
+      // the pressed slot, or subsequent moves mutate a dead overlay and its
+      // 'progress' events resurrect it on sync mirrors.
+      if (chartStore.getOverlayById(dragOverlay.id) === null) {
+        if (dragOverlay !== overlay) {
+          chartStore.removeOverlay({ id: dragOverlay.id })
+        }
+        return false
+      }
       chartStore.setPressedOverlayInfo({ paneId, overlay: dragOverlay, figureType, figureIndex, figure })
       // Gesture commit boundary — everything between editStart/editEnd is
       // one undo/persistence unit (drag gestures emit many 'progress').
@@ -594,7 +608,20 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
     return true
   }
 
+  /**
+   * Axis widgets share the draw pane's paneId but convert only half a
+   * point — a y-axis click would commit a value-only point (timestamp
+   * dropped) and an x-axis click would re-appoint the in-progress drawing
+   * to 'x_axis_pane' and wedge it. Every drawing-progress mutation
+   * (re-appoint, point write, nextStep, forceComplete, 'progress' emit)
+   * must be gated on a full conversion.
+   */
+  private _canDrawPoints (): boolean {
+    return this.coordinateToPointValueFlag() && this.coordinateToPointTimestampDataIndexFlag()
+  }
+
   override dispatchEvent (name: EventName, event: MouseTouchEvent): boolean {
+    this._lastIsTouch = event.isTouch === true
     if (this.getWidget().getPane().getChart().getChartStore().isOverlayDrawing()) {
       return this.onEvent(name, event)
     }
@@ -722,7 +749,8 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
       isHovered: hoverInfo.overlay?.id === o.id && hoverInfo.figureType !== 'none',
       hoveredFigureKey: hoverInfo.overlay?.id === o.id && hoverInfo.figureType !== 'none'
         ? hoverInfo.figure?.key
-        : undefined
+        : undefined,
+      isTouch: this._lastIsTouch
     }) ?? []
   }
 

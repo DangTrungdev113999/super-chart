@@ -100,6 +100,6 @@ export default class OverlayYAxisView<C extends Axis = YAxis> extends OverlayVie
     const yAxis = pane.getAxisComponent() as unknown as Nullable<YAxis>
     const xAxis = chart.getXAxisPane().getAxisComponent()
     const bounding = widget.getBounding()
-    return overlay.createYAxisFigures?.({ chart, overlay, coordinates, bounding, xAxis, yAxis }) ?? []
+    return overlay.createYAxisFigures?.({ chart, overlay, coordinates, bounding, xAxis, yAxis, isTouch: this._lastIsTouch }) ?? []
   }
 }

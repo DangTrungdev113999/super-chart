@@ -38,7 +38,10 @@ interface CacheEntry {
   figures: OverlayFigure[]
 }
 
-const cache = new WeakMap<object, CacheEntry>()
+// Per-overlay, per-slot — an overlay wrapping more than one figure callback
+// (createPointFigures + createXAxisFigures + createYAxisFigures) gets an
+// independent entry per slot so the callbacks don't fight over one cache key.
+const cache = new WeakMap<object, Map<string, CacheEntry>>()
 
 function coordsSignature (coordinates: Coordinate[]): string {
   // Quarter-pixel rounding absorbs sub-pixel jitter from axis math without
@@ -58,6 +61,12 @@ export interface FigureCacheOptions<E> {
    * labels, external flags).
    */
   extraKey?: (params: OverlayCreateFiguresCallbackParams<E>) => string
+  /**
+   * Cache slot — REQUIRED when the same overlay wraps more than one figure
+   * callback kind (point/x-axis/y-axis figures). Give each a distinct slot
+   * ('point', 'x', 'y'); defaults to a single shared slot.
+   */
+  slot?: string
 }
 
 /**
@@ -81,13 +90,19 @@ export function withFigureCache<E> (
       `|h${params.hoveredFigureKey ?? ''}` +
       `|k${options?.extraKey?.(params) ?? ''}`
 
-    const entry = cache.get(params.overlay)
+    const slotKey = options?.slot ?? ''
+    let slots = cache.get(params.overlay)
+    const entry = slots?.get(slotKey)
     if (entry !== undefined && entry.signature === signature) {
       return entry.figures
     }
     const result = fn(params)
     const figures = Array.isArray(result) ? result : [result]
-    cache.set(params.overlay, { signature, figures })
+    if (slots === undefined) {
+      slots = new Map()
+      cache.set(params.overlay, slots)
+    }
+    slots.set(slotKey, { signature, figures })
     return figures
   }
 }

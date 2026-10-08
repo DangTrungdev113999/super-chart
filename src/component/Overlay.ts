@@ -149,6 +149,11 @@ export interface OverlayCreateFiguresCallbackParams<E> {
    * a figure of this overlay. Lets templates render per-anchor hover rings.
    */
   hoveredFigureKey?: string
+  /**
+   * True when the last pointer routed to this view was touch-originated —
+   * use it for larger hit targets (~13px anchor half-size vs ~6px mouse).
+   */
+  isTouch?: boolean
 }
 
 export interface OverlayEvent<E> extends Partial<MouseTouchEvent> {
@@ -591,7 +596,11 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
         }
       }
 
-      if (this.currentStep === OVERLAY_DRAW_STEP_FINISHED) {
+      if (this.currentStep === OVERLAY_DRAW_STEP_FINISHED && skipDrawReplay !== true) {
+        // Post-completion adjustment hook — same skipDrawReplay gate as the
+        // replay loop above: clone/restore callers pass already-normalized
+        // points and a template's last-index transform would otherwise
+        // silently rewrite the geometry at clone time.
         this.performEventPressedMove?.({
           currentStep: this.currentStep,
           mode: this.mode,
@@ -703,7 +712,12 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
         dataIndex: this.points[pointIndex].dataIndex
       }
     }
-    this.points[pointIndex].timestamp = point.timestamp
+    // Guarded like dataIndex/value below — a null timestamp conversion
+    // (empty data range, half-converted axis point) must not wipe the
+    // anchor's timestamp, which is what keeps the point moored on scroll.
+    if (isNumber(point.timestamp)) {
+      this.points[pointIndex].timestamp = point.timestamp
+    }
     if (isNumber(point.dataIndex)) {
       this.points[pointIndex].dataIndex = point.dataIndex
     }

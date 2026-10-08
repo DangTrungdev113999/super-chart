@@ -1681,9 +1681,13 @@ export default class StoreImp implements Store {
         }
 
         if (infoOverlay !== null) {
-          infoOverlay.setPrevZLevel(infoOverlay.zLevel)
-          infoOverlay.override({ zLevel: Number.MAX_SAFE_INTEGER })
-          sortFlag = true
+          // In-progress overlays keep their zLevel — a mid-draw hover must
+          // not re-sort the pending drawing to the top of the stack.
+          if (!infoOverlay.isDrawing()) {
+            infoOverlay.setPrevZLevel(infoOverlay.zLevel)
+            infoOverlay.override({ zLevel: Number.MAX_SAFE_INTEGER })
+            sortFlag = true
+          }
           if (processOnMouseEnterEvent(infoOverlay, info.figure)) {
             ignoreUpdateFlag = true
           }
@@ -1813,6 +1817,13 @@ export default class StoreImp implements Store {
         this.executeAction('onOverlayChange', { type: 'remove', overlay: progressInfo.overlay })
       } catch {}
     }
+    // Drop the remaining interaction slots — a pressed/hovered/selected
+    // overlay referencing a destroyed chart must not linger for the next
+    // gesture to pick up.
+    const emptyInfo: EventOverlayInfo = { paneId: '', overlay: null, figureType: 'none', figureIndex: -1, figure: null }
+    this._pressedOverlayInfo = { ...emptyInfo }
+    this._hoverOverlayInfo = { ...emptyInfo }
+    this._clickOverlayInfo = { ...emptyInfo }
     this._clearData()
     this._clearLastPriceMarkExtendTextUpdateTimer()
     this._taskScheduler.clear()
