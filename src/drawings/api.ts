@@ -18,13 +18,15 @@ import type { KLineData } from '../common/Data'
 import { logWarn } from '../common/utils/logger'
 import { isArray, isString, isNumber, isValid } from '../common/utils/typeChecks'
 import type Chart from '../Chart'
-import type { OverlayCreate } from '../component/Overlay'
+import type { Overlay, OverlayCreate } from '../component/Overlay'
 import { getOverlayTemplate } from '../extension/overlay/index'
 
 import { createDrawingManager, type DrawingManager, type DrawingManagerOptions } from './manager'
 import { getDrawingCatalog, findCatalogItem, type DrawingToolGroup } from './catalog'
 import type { DrawingStore } from './persistence'
-import type { SerializedDrawing, SerializedDrawingPoint } from './serialize'
+import { serializeOverlay, serializedToOverlayCreate, type SerializedDrawing, type SerializedDrawingPoint } from './serialize'
+import { attachFloatingToolbar, type FloatingToolbar, type FloatingToolbarHooks } from './ui/floatingToolbar'
+import { bindDrawingKeyboard } from './interaction/keyboard'
 
 /**
  * `chart.drawings` — the public facade over the drawing subsystem.
@@ -168,6 +170,10 @@ function expectedAnchors (name: string): number {
 export type DrawingsApiOptions = Omit<DrawingManagerOptions, 'store'> & {
   /** Persistence adapter — `null` explicitly disables persistence. */
   store?: DrawingStore | null
+  /** Floating toolbar: `false` disables, object supplies hooks (DP-6b). */
+  toolbar?: boolean | FloatingToolbarHooks
+  /** Shared drawing keyboard layer — `false` disables (default on). */
+  keyboard?: boolean
 }
 
 export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): DrawingsApi {
@@ -175,6 +181,68 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
     ...options,
     store: options?.store ?? undefined
   })
+  const toolbarOption = options?.toolbar
+  const toolbar: FloatingToolbar | null = toolbarOption === false
+    ? null
+    : attachFloatingToolbar(chart, manager, typeof toolbarOption === 'object' ? toolbarOption : undefined)
+
+  let selectedId: string | null = null
+  const unbindSelection = [
+    manager.on('select', p => {
+      selectedId = p.overlay?.id ?? null
+    }),
+    manager.on('deselect', () => {
+      selectedId = null
+    })
+  ]
+
+  function selectedOverlay (): Nullable<Overlay> {
+    return selectedId !== null ? chart.getOverlayById(selectedId) : null
+  }
+
+  function cancelInProgress (): boolean {
+    const inProgress = chart.getOverlays().find(o => o.isDrawing())
+    if (inProgress === undefined) {
+      return false
+    }
+    return chart.removeOverlay({ id: inProgress.id })
+  }
+
+  let clipboard: SerializedDrawing | null = null
+  const unbindKeyboard = options?.keyboard === false
+    ? null
+    : bindDrawingKeyboard({
+      onEscape: () => {
+        if (!cancelInProgress()) {
+          manager.deselect()
+        }
+      },
+      onDelete: () => {
+        const selected = selectedOverlay()
+        if (selected !== null && !selected.lock) {
+          manager.remove(selected.id)
+        }
+      },
+      onUndo: () => {
+        manager.undo()
+      },
+      onRedo: () => {
+        manager.redo()
+      },
+      onCopy: () => {
+        const selected = selectedOverlay()
+        if (selected !== null) {
+          clipboard = serializeOverlay(selected)
+        }
+      },
+      onPaste: () => {
+        if (clipboard !== null) {
+          const create = serializedToOverlayCreate(clipboard)
+          delete (create as { id?: string }).id
+          manager.create(create)
+        }
+      }
+    })
 
   function resolveToolName (tool: string): string {
     return findCatalogItem(tool)?.overlayName ?? tool
@@ -388,6 +456,16 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
       if ('store' in opts) {
         manager.attachStore(opts.store ?? null)
       }
+    },
+
+    destroy () {
+      unbindKeyboard?.()
+      unbindSelection.forEach(unsub => {
+        unsub()
+      })
+      toolbar?.destroy()
+      clipboard = null
+      manager.destroy()
     }
   }
 }

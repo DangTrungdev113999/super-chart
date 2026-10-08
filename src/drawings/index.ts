@@ -187,3 +187,12 @@ export type {
   DrawingsConfigureOptions,
   SemanticDrawingBase
 } from './api'
+
+// ─── Floating toolbar + UI (DP-6b) ───────────────────────────────────────────
+export { attachFloatingToolbar } from './ui/floatingToolbar'
+export type {
+  FloatingToolbar,
+  FloatingToolbarHooks,
+  ToolbarSourceAction
+} from './ui/floatingToolbar'
+export { injectDrawingStyles } from './ui/styles'

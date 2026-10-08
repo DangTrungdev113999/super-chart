@@ -19,6 +19,7 @@ import type { Styles } from './common/Styles'
 import type { IndicatorCreate } from './component/Indicator'
 import type { PaneOptions } from './pane/types'
 import type { DrawingStore, DrawingScope } from './drawings/persistence'
+import type { FloatingToolbarHooks } from './drawings/ui/floatingToolbar'
 
 export type FormatDateType = 'tooltip' | 'crosshair' | 'xAxis'
 
@@ -96,8 +97,10 @@ export interface ZoomAnchor {
 export interface DrawingsOptions {
   /** Persistence adapter — omit for in-memory-only drawings. */
   store?: DrawingStore | null
-  /** Set false to disable the built-in floating toolbar (DP-6b). */
-  toolbar?: boolean
+  /** Floating toolbar: `false` disables, object supplies hooks. */
+  toolbar?: boolean | FloatingToolbarHooks
+  /** Shared drawing keyboard layer — `false` disables (default on). */
+  keyboard?: boolean
   /** Persistence partition override — defaults to chart symbol. */
   scope?: () => DrawingScope
   /** Tool names that render but are never listed/persisted/undone. */
