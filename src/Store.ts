@@ -1602,7 +1602,12 @@ export default class StoreImp implements Store {
         }
       }
       if (this._clickOverlayInfo.overlay === overlay) {
-        this.selectOverlay(null)
+        // A throwing onDeselected hook must not abort the removal loop —
+        // same isolation as onRemoved above; otherwise this overlay stays
+        // in _overlays after its 'remove' bookkeeping and strands zombies.
+        try {
+          this.selectOverlay(null)
+        } catch {}
       }
       let index = paneOverlays.findIndex(o => o.id === overlay.id)
       if (index === -1) {

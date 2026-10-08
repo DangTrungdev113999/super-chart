@@ -589,9 +589,23 @@ export default class EventHandlerImp {
    * never synthesize tap/click from an interruption.
    */
   private _touchCancelHandler (touchCancelEvent: TouchEvent): void {
+    if (this._activeTouchId === null) {
+      return
+    }
     let touch = this._touchWithId(touchCancelEvent.changedTouches, this._activeTouchId)
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- ignore
-    touch ??= touchCancelEvent.changedTouches[0] ?? null
+    if (touch === null) {
+      if (touchCancelEvent.touches.length > 0) {
+        // The cancel targets a different, untracked touch while our tracked
+        // gesture is still live — leave the gesture alone entirely.
+        return
+      }
+      // We missed the tracked touch's end — release at whatever changed last
+      // so the gesture still closes (mirrors _touchEndHandler's fallback).
+      touch = touchCancelEvent.changedTouches.length > 0 ? touchCancelEvent.changedTouches[0] : null
+    }
+    if (touch === null) {
+      return
+    }
     this._activeTouchId = null
     this._lastTouchEventTimeStamp = this._eventTimeStamp(touchCancelEvent)
     this._clearLongTapTimeout()
@@ -601,10 +615,7 @@ export default class EventHandlerImp {
       this._unsubscribeRootTouchEvents()
       this._unsubscribeRootTouchEvents = null
     }
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- changedTouches[0] can be undefined at runtime
-    if (touch !== null) {
-      this._processEvent(this._makeCompatEvent(touchCancelEvent, touch), this._handler.touchEndEvent)
-    }
+    this._processEvent(this._makeCompatEvent(touchCancelEvent, touch), this._handler.touchEndEvent)
   }
 
   private _clearLongTapTimeout (): void {

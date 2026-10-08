@@ -397,15 +397,7 @@ export default class Event implements EventHandler {
 
   mouseUpEvent (e: MouseTouchEvent): boolean {
     const { widget } = this._findWidgetByEvent(e)
-    // Released outside every pane/widget — still deliver the mouseup to the
-    // widget the gesture started on, or pressed overlay state (freehand
-    // stroke, figure drag editStart/editEnd pair) dangles forever. A pressed
-    // overlay ALWAYS releases on its owning widget — separators and axis
-    // widgets under the pointer have no overlay view to close the gesture.
-    const pressedOverlay = this._chart.getChartStore().getPressedOverlayInfo().overlay
-    const target = pressedOverlay !== null && this._mouseDownWidget !== null
-      ? this._mouseDownWidget
-      : widget ?? this._mouseDownWidget
+    const target = this._releaseTarget(widget)
     let consumed = false
     if (target !== null) {
       const event = this._makeWidgetEvent(e, target)
@@ -616,20 +608,20 @@ export default class Event implements EventHandler {
 
   touchEndEvent (e: MouseTouchEvent): boolean {
     const { widget } = this._findWidgetByEvent(e)
-    // Same fallback as mouseUpEvent — touchend off-chart must still close
-    // the gesture on the widget it started on; a pressed overlay always
-    // releases on its owning widget (separators/axes have no overlay view).
-    const pressedOverlay = this._chart.getChartStore().getPressedOverlayInfo().overlay
-    const target = pressedOverlay !== null && this._mouseDownWidget !== null
-      ? this._mouseDownWidget
-      : widget ?? this._mouseDownWidget
+    // Same release routing as mouseUpEvent — touchend off-chart must still
+    // close the gesture on a widget that can see the pressed overlay.
+    const target = this._releaseTarget(widget)
     let consumed = false
     if (target !== null) {
       const event = this._makeWidgetEvent(e, target)
       const name = target.getName()
       switch (name) {
         case WidgetNameConstants.MAIN: {
-          target.dispatchEvent('mouseUpEvent', event)
+          // Repaint when the release is consumed — the freehand tail point /
+          // gesture commit written here must invalidate like the mouse path.
+          if (target.dispatchEvent('mouseUpEvent', event)) {
+            this._chart.updatePane(UpdateLevel.Overlay)
+          }
           if (this._startScrollCoordinate !== null) {
             const time = new Date().getTime() - this._flingStartTime
             const distance = event.x - this._startScrollCoordinate.x
@@ -876,6 +868,28 @@ export default class Event implements EventHandler {
       this._chart.updatePane(UpdateLevel.Overlay)
     }
     return consumed
+  }
+
+  /**
+   * The widget a pointer release should be delivered to. A pressed overlay
+   * always releases on a widget that can see overlay views — a gesture that
+   * began on a separator (which hosts none) would strand the pressed slot, so
+   * route to the pressed pane's main widget instead. Without a pressed
+   * overlay the release goes to the widget under the pointer, falling back
+   * to where the gesture started so off-chart releases still close gestures.
+   */
+  private _releaseTarget (widget: Nullable<Widget>): Nullable<Widget> {
+    const pressedInfo = this._chart.getChartStore().getPressedOverlayInfo()
+    if (pressedInfo.overlay !== null) {
+      if (
+        this._mouseDownWidget !== null &&
+        this._mouseDownWidget.getName() !== WidgetNameConstants.SEPARATOR
+      ) {
+        return this._mouseDownWidget
+      }
+      return this._chart.getDrawPaneById(pressedInfo.paneId)?.getMainWidget() ?? this._mouseDownWidget ?? widget
+    }
+    return widget ?? this._mouseDownWidget
   }
 
   private _findWidgetByEvent (event: MouseTouchEvent): EventTriggerWidgetInfo {
