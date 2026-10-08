@@ -41,8 +41,25 @@ import gannFan from './fibgeo/gannFan'
 
 import dateAndPriceRange from './measure/dateAndPriceRange'
 import dateRange from './measure/dateRange'
+import longPosition from './measure/longPosition'
 import measure from './measure/measure'
 import priceRange from './measure/priceRange'
+import shortPosition from './measure/shortPosition'
+
+import insidePitchfork from './pitchforks/insidePitchfork'
+import modifiedSchiffPitchfork from './pitchforks/modifiedSchiffPitchfork'
+import pitchfork from './pitchforks/pitchfork'
+import schiffPitchfork from './pitchforks/schiffPitchfork'
+
+import horizontalRayLine from './lines/horizontalRayLine'
+import horizontalSegment from './lines/horizontalSegment'
+import horizontalStraightLine from './lines/horizontalStraightLine'
+import infoLine from './lines/infoLine'
+import rayLine from './lines/rayLine'
+import segment from './lines/segment'
+import straightLine from './lines/straightLine'
+import trendAngle from './lines/trendAngle'
+import verticalStraightLine from './lines/verticalStraightLine'
 
 /**
  * Drawing-subsystem tool registry — self-registers on module load so
@@ -76,8 +93,23 @@ const drawingTools = [
   gannFan,
   dateAndPriceRange,
   dateRange,
+  longPosition,
   measure,
-  priceRange
+  priceRange,
+  shortPosition,
+  insidePitchfork,
+  modifiedSchiffPitchfork,
+  pitchfork,
+  schiffPitchfork,
+  horizontalRayLine,
+  horizontalSegment,
+  horizontalStraightLine,
+  infoLine,
+  rayLine,
+  segment,
+  straightLine,
+  trendAngle,
+  verticalStraightLine
 ]
 
 drawingTools.forEach(template => {

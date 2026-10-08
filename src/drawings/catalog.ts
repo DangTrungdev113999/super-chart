@@ -168,9 +168,9 @@ function buildCatalog (): DrawingToolGroup[] {
           items: [
             item('trendLine', 'segment', 'Trend Line', 'trendLine', caps({ anchorCount: 2 }), LINE_RECIPE, { hotkey: 'T' }),
             item('ray', 'rayLine', 'Ray', 'ray', caps({ anchorCount: 2 }), LINE_RECIPE),
-            item('infoLine', 'infoLine', 'Info Line', 'trendLine', caps({ anchorCount: 2 }), LINE_RECIPE, { available: false }),
+            item('infoLine', 'infoLine', 'Info Line', 'trendLine', caps({ anchorCount: 2 }), LINE_RECIPE),
             item('extendedLine', 'straightLine', 'Extended Line', 'extendedLine', caps({ anchorCount: 2 }), LINE_RECIPE),
-            item('trendAngle', 'trendAngle', 'Trend Angle', 'trendLine', caps({ anchorCount: 2 }), LINE_RECIPE, { available: false }),
+            item('trendAngle', 'trendAngle', 'Trend Angle', 'trendLine', caps({ anchorCount: 2 }), LINE_RECIPE),
             item('horizontalLine', 'horizontalStraightLine', 'Horizontal Line', 'horizontalLine', caps({ anchorCount: 1 }), LINE_RECIPE, { hotkey: 'H' }),
             item('horizontalRay', 'horizontalRayLine', 'Horizontal Ray', 'horizontalRay', caps({ anchorCount: 1 }), LINE_RECIPE),
             item('horizontalSegment', 'horizontalSegment', 'Horizontal Segment', 'horizontalLine', caps({ anchorCount: 2 }), LINE_RECIPE),
@@ -194,10 +194,10 @@ function buildCatalog (): DrawingToolGroup[] {
         {
           id: 'pitchforks',
           items: [
-            item('pitchfork', 'pitchfork', 'Pitchfork', 'pitchfork', caps({ anchorCount: 3 }), LINE_RECIPE, { available: false }),
-            item('schiffPitchfork', 'schiffPitchfork', 'Schiff Pitchfork', 'pitchfork', caps({ anchorCount: 3 }), LINE_RECIPE, { available: false }),
-            item('modifiedSchiffPitchfork', 'modifiedSchiffPitchfork', 'Modified Schiff', 'pitchfork', caps({ anchorCount: 3 }), LINE_RECIPE, { available: false }),
-            item('insidePitchfork', 'insidePitchfork', 'Inside Pitchfork', 'pitchfork', caps({ anchorCount: 3 }), LINE_RECIPE, { available: false })
+            item('pitchfork', 'pitchfork', 'Pitchfork', 'pitchfork', caps({ anchorCount: 3 }), LINE_RECIPE),
+            item('schiffPitchfork', 'schiffPitchfork', 'Schiff Pitchfork', 'pitchfork', caps({ anchorCount: 3 }), LINE_RECIPE),
+            item('modifiedSchiffPitchfork', 'modifiedSchiffPitchfork', 'Modified Schiff', 'pitchfork', caps({ anchorCount: 3 }), LINE_RECIPE),
+            item('insidePitchfork', 'insidePitchfork', 'Inside Pitchfork', 'pitchfork', caps({ anchorCount: 3 }), LINE_RECIPE)
           ]
         }
       ]
