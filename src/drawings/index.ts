@@ -12,6 +12,13 @@
  * limitations under the License.
  */
 
+import { registerFigure } from '../extension/figure/index'
+import richTextFigure from './figures/richText'
+
+// The 'richText' figure registers at barrel import — tools referencing it
+// always resolve after `import 'super-chart'`.
+registerFigure(richTextFigure)
+
 // ─── Shared drawing state ────────────────────────────────────────────────────
 export type { DrawingCommonState, DrawingExtendData } from './types'
 export { getCommonState, isVisibleOnInterval } from './types'
@@ -75,3 +82,28 @@ export type {
   TextEditorLayout
 } from './editor/textEditor'
 export { getEditorLetterSpacing, normalizedDevicePixelRatio } from './editor/letterSpacing'
+export { openOverlayTextEditor } from './editor/overlayTextEditor'
+export type { OverlayTextEditorOptions } from './editor/overlayTextEditor'
+
+// ─── Text box layout + richText figure ───────────────────────────────────────
+export {
+  computeTextBoxLayout,
+  textBoxFont,
+  textBoxDataEqual,
+  CHART_FONT_FAMILY
+} from './text/textBox'
+export type {
+  TextBoxData,
+  TextBoxLayout,
+  TextBoxLinesInfo,
+  TextBoxHorzAlign,
+  TextBoxVertAlign
+} from './text/textBox'
+export { createCachedWordWrap } from './text/wordWrapCached'
+export type { WordWrapFn } from './text/wordWrapCached'
+export { getRichTextLayout, drawRichText, checkCoordinateOnRichText } from './figures/richText'
+export type { RichTextAttrs, RichTextStyle } from './figures/richText'
+
+// ─── Tool templates ──────────────────────────────────────────────────────────
+export { default as textNoteTool } from './tools/text'
+export type { TextToolExtendData, TextToolStyle } from './tools/text'

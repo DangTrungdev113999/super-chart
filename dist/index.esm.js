@@ -29185,6 +29185,718 @@ function createChartSync(options) {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+function getMinTextMetrics(metrics) {
+    return {
+        width: metrics.width,
+        actualBoundingBoxAscent: metrics.actualBoundingBoxAscent,
+        actualBoundingBoxDescent: metrics.actualBoundingBoxDescent,
+        fontBoundingBoxAscent: metrics.fontBoundingBoxAscent,
+        fontBoundingBoxDescent: metrics.fontBoundingBoxDescent
+    };
+}
+/** Bounded FIFO text-metrics cache — TV uses capacity 150 per font. */
+var CircularMetricsCache = /** @class */ (function () {
+    function CircularMetricsCache(_capacity) {
+        this._capacity = _capacity;
+        this._map = new Map();
+    }
+    CircularMetricsCache.prototype.get = function (key) {
+        return this._map.get(key);
+    };
+    CircularMetricsCache.prototype.set = function (key, value) {
+        if (this._map.has(key)) {
+            this._map.delete(key);
+        }
+        else if (this._map.size >= this._capacity) {
+            var oldest = this._map.keys().next();
+            if (oldest.done !== true) {
+                this._map.delete(oldest.value);
+            }
+        }
+        this._map.set(key, value);
+    };
+    CircularMetricsCache.prototype.clear = function () {
+        this._map.clear();
+    };
+    return CircularMetricsCache;
+}());
+function createTextWidthCache(capacity) {
+    if (capacity === void 0) { capacity = 150; }
+    return new TextWidthCacheImp(capacity);
+}
+var TextWidthCacheImp = /** @class */ (function () {
+    function TextWidthCacheImp(_capacity) {
+        if (_capacity === void 0) { _capacity = 150; }
+        this._capacity = _capacity;
+        this._perFont = new Map();
+    }
+    TextWidthCacheImp.prototype.measureText = function (context, text, options) {
+        var cacheKey = text;
+        if ((options === null || options === void 0 ? void 0 : options.mono) === true) {
+            cacheKey = text.replace(/\d/g, '0');
+        }
+        return this.getMetrics(context, cacheKey).width;
+    };
+    TextWidthCacheImp.prototype.yMidCorrection = function (context, text) {
+        var metrics = this.getMetrics(context, text);
+        return metrics.actualBoundingBoxAscent !== undefined && metrics.actualBoundingBoxDescent !== undefined
+            ? (metrics.actualBoundingBoxAscent - metrics.actualBoundingBoxDescent) / 2
+            : 0;
+    };
+    TextWidthCacheImp.prototype.getMetrics = function (context, text) {
+        var font = context.font;
+        var cache = this._perFont.get(font);
+        if (cache === undefined) {
+            cache = new CircularMetricsCache(this._capacity);
+            this._perFont.set(font, cache);
+            // Bound the font map too — fonts are finite in practice.
+            if (this._perFont.size > 32) {
+                var oldest = this._perFont.keys().next();
+                if (oldest.done !== true) {
+                    this._perFont.delete(oldest.value);
+                }
+            }
+        }
+        var cached = cache.get(text);
+        if (cached !== undefined) {
+            return cached;
+        }
+        var previousBaseline = context.textBaseline;
+        context.textBaseline = 'middle';
+        var metrics = getMinTextMetrics(context.measureText(text));
+        context.textBaseline = previousBaseline;
+        // Do not cache zero-width nonempty text (font still loading).
+        if (!(metrics.width === 0 && text.length > 0)) {
+            cache.set(text, metrics);
+        }
+        return metrics;
+    };
+    TextWidthCacheImp.prototype.reset = function () {
+        this._perFont.clear();
+    };
+    return TextWidthCacheImp;
+}());
+var measurementContext = null;
+var measurementCanvas = null;
+function getMeasurementContext() {
+    if (measurementContext === null) {
+        measurementCanvas = document.createElement('canvas');
+        measurementCanvas.width = 0;
+        measurementCanvas.height = 0;
+        // Safari/macOS returns wrong metrics for detached canvases — TV attaches
+        // a display:none canvas to the document there.
+        if (isMac() && typeof document.body !== 'undefined') {
+            measurementCanvas.style.display = 'none';
+            document.body.append(measurementCanvas);
+        }
+        measurementContext = measurementCanvas.getContext('2d');
+        measurementContext.textBaseline = 'alphabetic';
+        measurementContext.textAlign = 'center';
+    }
+    return measurementContext;
+}
+/**
+ * Measure text against the shared measurement context.
+ * Pass a TextWidthCache to cache by (font, text).
+ */
+function measureText(text, font, widthCache) {
+    var context = getMeasurementContext();
+    if (context.font !== font) {
+        context.font = font;
+    }
+    return widthCache !== undefined
+        ? widthCache.getMetrics(context, text)
+        : getMinTextMetrics(context.measureText(text));
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+function splitWordsAndSpaces(text) {
+    var tokens = [];
+    do {
+        var match = /\s+/.exec(text);
+        if (match === null) {
+            tokens.push({ word: text, spaces: '' });
+            break;
+        }
+        tokens.push({ word: text.slice(0, match.index), spaces: match[0] });
+        text = text.slice(match.index + match[0].length);
+    } while (text.length > 0);
+    return tokens;
+}
+function upperbound(items, value, predicate, start, end) {
+    var left = start;
+    var right = end;
+    while (left < right) {
+        var mid = (left + right) >>> 1;
+        if (predicate(value, items[mid])) {
+            right = mid;
+        }
+        else {
+            left = mid + 1;
+        }
+    }
+    return left;
+}
+/**
+ * Find the longest fitting prefix by binary search. Keeps at least one code
+ * unit so the loop progresses even if a single character exceeds maxWidth.
+ */
+function splitIntoFittingChunks(text, font, metricsCache, maxWidth) {
+    var chunks = [];
+    var characterIndices = [];
+    for (var index = 0; index < text.length; ++index) {
+        characterIndices.push(index);
+    }
+    var _loop_1 = function () {
+        var sourceText = text;
+        var prefixLength = Math.max(1, upperbound(characterIndices, maxWidth, function (widthLimit, characterIndex) {
+            return measureText(sourceText.slice(0, characterIndex + 1), font, metricsCache).width > widthLimit;
+        }, 0, sourceText.length));
+        chunks.push(sourceText.slice(0, prefixLength));
+        text = sourceText.slice(prefixLength);
+    };
+    while (text.length > 0) {
+        _loop_1();
+    }
+    return chunks;
+}
+function wordWrap(text, font, metricsCache, skipHiddenLines, wrapWidth) {
+    var e_1, _a;
+    if (skipHiddenLines === void 0) { skipHiddenLines = true; }
+    if (typeof wrapWidth === 'string') {
+        wrapWidth = parseInt(wrapWidth);
+    }
+    // Preserve explicit line breaks.
+    var sourceLines = text.split(/\r\n|\r|\n|$/).map(function (lineText) { return ({
+        text: lineText,
+        hidden: false,
+        wrappedLinePart: false,
+        wrappedLineEnd: false
+    }); });
+    if (typeof wrapWidth !== 'number' || !isFinite(wrapWidth) || wrapWidth <= 0) {
+        return sourceLines;
+    }
+    if (measureText('x', font, metricsCache).width > wrapWidth) {
+        return sourceLines;
+    }
+    var wrappedLines = [];
+    try {
+        for (var sourceLines_1 = __values(sourceLines), sourceLines_1_1 = sourceLines_1.next(); !sourceLines_1_1.done; sourceLines_1_1 = sourceLines_1.next()) {
+            var sourceLine = sourceLines_1_1.value;
+            if (measureText(sourceLine.text, font, metricsCache).width <= wrapWidth) {
+                wrappedLines.push(sourceLine);
+                continue;
+            }
+            var tokens = splitWordsAndSpaces(sourceLine.text);
+            var isWrappedLine = true;
+            var pendingText = '';
+            var tokenIndex = 0;
+            while (tokenIndex < tokens.length) {
+                var token = tokens[tokenIndex];
+                var candidateText = "".concat(pendingText).concat(token.word);
+                var candidateWidth = measureText(candidateText, font, metricsCache).width;
+                if (candidateWidth > wrapWidth) {
+                    if (pendingText !== '') {
+                        wrappedLines.push({
+                            text: pendingText,
+                            hidden: false,
+                            wrappedLinePart: isWrappedLine,
+                            wrappedLineEnd: false
+                        });
+                        pendingText = '';
+                    }
+                    else if (candidateText.length === 1) {
+                        wrappedLines.push({
+                            text: candidateText,
+                            hidden: false,
+                            wrappedLinePart: isWrappedLine,
+                            wrappedLineEnd: true
+                        });
+                        token.word = '';
+                    }
+                    else {
+                        var wordChunks = splitIntoFittingChunks(candidateText, font, metricsCache, wrapWidth);
+                        for (var chunkIndex = 0; chunkIndex < wordChunks.length - 1; chunkIndex += 1) {
+                            wrappedLines.push({
+                                text: wordChunks[chunkIndex],
+                                hidden: false,
+                                wrappedLinePart: isWrappedLine,
+                                wrappedLineEnd: false
+                            });
+                        }
+                        token.word = wordChunks[wordChunks.length - 1];
+                    }
+                    continue; // Retry the same token with the remaining word/pending text.
+                }
+                candidateText = "".concat(pendingText).concat(token.word).concat(token.spaces);
+                candidateWidth = measureText(candidateText, font, metricsCache).width;
+                if (candidateWidth < wrapWidth) {
+                    pendingText = candidateText;
+                    tokenIndex += 1;
+                    continue;
+                }
+                var chunks = splitIntoFittingChunks(candidateText, font, metricsCache, wrapWidth);
+                for (var chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+                    var chunkText = chunks[chunkIndex];
+                    var line = {
+                        text: chunkText,
+                        hidden: chunkIndex > 0,
+                        wrappedLinePart: isWrappedLine,
+                        wrappedLineEnd: tokenIndex === tokens.length - 1 && chunkIndex === chunks.length - 1
+                    };
+                    if (!(line.hidden && skipHiddenLines)) {
+                        wrappedLines.push(line);
+                    }
+                }
+                pendingText = '';
+                tokenIndex += 1;
+            }
+            if (pendingText !== '') {
+                wrappedLines.push({
+                    text: pendingText,
+                    wrappedLinePart: isWrappedLine,
+                    hidden: false,
+                    wrappedLineEnd: true
+                });
+            }
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (sourceLines_1_1 && !sourceLines_1_1.done && (_a = sourceLines_1.return)) _a.call(sourceLines_1);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    return wrappedLines;
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * Text-box layout engine — ported from TradingView's TextRenderer
+ * (_getBox / _getBoxSize / _getInternalData / getLinesInfo), minus the
+ * decorator system (TV forbids decorators together with wordWrapWidth, and
+ * none of our tools use them).
+ *
+ * This is the SINGLE source of geometry for both the canvas figure and the
+ * DOM text editor — the editor's layout() callback consumes this output so
+ * caret, selection and the invisible textarea always agree with painted
+ * pixels (the #1 defect of ad hoc editors is re-measuring in the DOM).
+ */
+var CHART_FONT_FAMILY = "'Trebuchet MS', Roboto, Ubuntu, sans-serif";
+function fontSizeOf(data) {
+    var _a;
+    return Math.ceil((_a = data.fontSize) !== null && _a !== void 0 ? _a : 12);
+}
+function lineSpacingOf(data) {
+    var _a;
+    return (_a = data.lineSpacing) !== null && _a !== void 0 ? _a : 0;
+}
+function getVerticalPadding(data) {
+    var _a, _b;
+    return (_b = (_a = data.boxPaddingVert) !== null && _a !== void 0 ? _a : data.boxPadding) !== null && _b !== void 0 ? _b : fontSizeOf(data) / 3;
+}
+function getHorizontalPadding(data) {
+    var _a, _b;
+    return (_b = (_a = data.boxPaddingHorz) !== null && _a !== void 0 ? _a : data.boxPadding) !== null && _b !== void 0 ? _b : fontSizeOf(data) / 3;
+}
+function getLeftPadding(data) {
+    var _a;
+    return (_a = data.boxPaddingLeft) !== null && _a !== void 0 ? _a : getHorizontalPadding(data);
+}
+function getRightPadding(data) {
+    var _a;
+    return (_a = data.boxPaddingRight) !== null && _a !== void 0 ? _a : getHorizontalPadding(data);
+}
+function textBoxFont(data) {
+    var _a;
+    var size = fontSizeOf(data);
+    return "".concat(data.bold === true ? 'bold ' : '').concat(data.italic === true ? 'italic ' : '').concat(size, "px ").concat((_a = data.fontFamily) !== null && _a !== void 0 ? _a : CHART_FONT_FAMILY);
+}
+function computeLinesInfo(data, font, widthCache) {
+    var e_1, _a;
+    var wrapped = wordWrap(data.text, font, widthCache, false, data.wordWrapWidth);
+    var visible = wrapped.filter(function (line) { return !line.hidden; });
+    if (data.maxHeight !== undefined) {
+        var maxVisibleLines = Math.floor((data.maxHeight + lineSpacingOf(data)) / (fontSizeOf(data) + lineSpacingOf(data)));
+        if (visible.length > maxVisibleLines) {
+            visible = visible.slice(0, maxVisibleLines);
+        }
+    }
+    var linesMaxWidth = 0;
+    if (data.wordWrapWidth !== undefined) {
+        // TV: when wrapping is enabled the wrap width IS the max line width.
+        linesMaxWidth = data.wordWrapWidth;
+    }
+    else {
+        try {
+            for (var visible_1 = __values(visible), visible_1_1 = visible_1.next(); !visible_1_1.done; visible_1_1 = visible_1.next()) {
+                var line = visible_1_1.value;
+                linesMaxWidth = Math.max(linesMaxWidth, measureText(line.text, font, widthCache).width);
+            }
+        }
+        catch (e_1_1) { e_1 = { error: e_1_1 }; }
+        finally {
+            try {
+                if (visible_1_1 && !visible_1_1.done && (_a = visible_1.return)) _a.call(visible_1);
+            }
+            finally { if (e_1) throw e_1.error; }
+        }
+    }
+    return { linesIncludingHidden: wrapped, lines: visible, linesMaxWidth: linesMaxWidth };
+}
+function rotatePointAroundOrigin(point, origin, angle) {
+    if (angle === 0) {
+        return { x: point.x, y: point.y };
+    }
+    var cos = Math.cos(angle);
+    var sin = Math.sin(angle);
+    var dx = point.x - origin.x;
+    var dy = point.y - origin.y;
+    return {
+        x: dx * cos - dy * sin + origin.x,
+        y: dx * sin + dy * cos + origin.y
+    };
+}
+/**
+ * Compute the full text-box layout for `data` anchored at `anchor`
+ * (media/CSS-px coordinates). Deterministic and context-free: the same
+ * input always produces the same geometry for renderer, hit test, caret
+ * and selection.
+ */
+function computeTextBoxLayout(data, anchor, widthCache) {
+    var _a, _b, _c, _d, _e, _f, _g, _h;
+    var font = textBoxFont(data);
+    var fontSize = fontSizeOf(data);
+    var spacing = lineSpacingOf(data);
+    var linesInfo = computeLinesInfo(data, font, widthCache);
+    // ── _getBoxSize ──────────────────────────────────────────────────────────
+    var leftPadding = getLeftPadding(data);
+    var rightPadding = getRightPadding(data);
+    var verticalPadding = getVerticalPadding(data);
+    var textBoxWidth = Math.round(linesInfo.linesMaxWidth + leftPadding + rightPadding);
+    if (textBoxWidth % 2 !== 0) {
+        textBoxWidth += 1; // TV keeps the auto width even so anchors stay centered.
+    }
+    var textBoxHeight = fontSize * linesInfo.lines.length +
+        spacing * Math.max(0, linesInfo.lines.length - 1) +
+        2 * verticalPadding;
+    var boxWidth = (_a = data.boxWidth) !== null && _a !== void 0 ? _a : textBoxWidth;
+    var boxHeight = (_b = data.boxHeight) !== null && _b !== void 0 ? _b : textBoxHeight;
+    // ── _getBox ──────────────────────────────────────────────────────────────
+    var boxLeft = anchor.x;
+    var boxTop = anchor.y;
+    var vertAlign = (_c = data.vertAlign) !== null && _c !== void 0 ? _c : 'top';
+    var horzAlign = (_d = data.horzAlign) !== null && _d !== void 0 ? _d : 'left';
+    var offsetX = (_e = data.offsetX) !== null && _e !== void 0 ? _e : 0;
+    var offsetY = (_f = data.offsetY) !== null && _f !== void 0 ? _f : 0;
+    switch (vertAlign) {
+        case 'bottom':
+            boxTop -= boxHeight + offsetY;
+            break;
+        case 'middle':
+            boxTop -= boxHeight / 2;
+            break;
+        default:
+            boxTop += offsetY;
+    }
+    switch (horzAlign) {
+        case 'center':
+            boxLeft -= boxWidth / 2;
+            break;
+        case 'right':
+            boxLeft -= boxWidth + offsetX;
+            break;
+        default:
+            boxLeft += offsetX;
+    }
+    // ── _getInternalData ─────────────────────────────────────────────────────
+    var horzTextAlign = (_g = data.horzTextAlign) !== null && _g !== void 0 ? _g : horzAlign;
+    var rtl = data.rtl === true;
+    var textHorizStart = 0;
+    var textAlign = 'start';
+    switch (horzTextAlign) {
+        case 'center': {
+            textAlign = 'center';
+            var availableTextWidth = boxWidth - leftPadding - rightPadding;
+            textHorizStart = leftPadding + availableTextWidth / 2;
+            break;
+        }
+        case 'right': {
+            textAlign = 'end';
+            textHorizStart = boxWidth - rightPadding;
+            if (rtl) {
+                textHorizStart = leftPadding;
+                textAlign = 'start';
+            }
+            break;
+        }
+        default: {
+            textAlign = 'start';
+            textHorizStart = leftPadding;
+            if (rtl) {
+                textHorizStart = boxWidth - rightPadding;
+                textAlign = 'end';
+            }
+        }
+    }
+    // TV paints each line with textBaseline 'middle'; the anchor sits at
+    // textTop + fontSize/2 (+ 0.05*fontSize baseline adjustment at draw time).
+    var textVertStart = verticalPadding + fontSize / 2;
+    var textLeft = boxLeft + leftPadding;
+    var textRight = boxLeft + boxWidth - rightPadding;
+    var textTop = boxTop + verticalPadding;
+    var textBottom = boxTop + boxHeight - verticalPadding;
+    // ── rotation geometry ────────────────────────────────────────────────────
+    var rotationPoint = {
+        x: horzAlign === 'center' ? boxLeft + boxWidth / 2 : (horzAlign === 'right' ? boxLeft + boxWidth : boxLeft),
+        y: vertAlign === 'middle' ? boxTop + boxHeight / 2 : (vertAlign === 'bottom' ? boxTop + boxHeight : boxTop)
+    };
+    var angle = (_h = data.angle) !== null && _h !== void 0 ? _h : 0;
+    var textCenter = rotatePointAroundOrigin({ x: (textLeft + textRight) / 2, y: (textTop + textBottom) / 2 }, rotationPoint, angle);
+    var polygonPoints = [
+        { x: boxLeft, y: boxTop },
+        { x: boxLeft + boxWidth, y: boxTop },
+        { x: boxLeft + boxWidth, y: boxTop + boxHeight },
+        { x: boxLeft, y: boxTop + boxHeight }
+    ].map(function (p) { return rotatePointAroundOrigin(p, rotationPoint, angle); });
+    return {
+        font: font,
+        fontSize: fontSize,
+        lineSpacing: spacing,
+        boxLeft: boxLeft,
+        boxTop: boxTop,
+        boxWidth: boxWidth,
+        boxHeight: boxHeight,
+        textBoxWidth: textBoxWidth,
+        textBoxHeight: textBoxHeight,
+        textLeft: textLeft,
+        textTop: textTop,
+        textRight: textRight,
+        textBottom: textBottom,
+        textHorizStart: textHorizStart,
+        textVertStart: textVertStart,
+        textAlign: textAlign,
+        textBaseline: 'middle',
+        linesInfo: linesInfo,
+        rotationPoint: rotationPoint,
+        centerTextRotation: { x: textCenter.x, y: textCenter.y, angle: angle },
+        polygonPoints: polygonPoints
+    };
+}
+/**
+ * Whether the layout output (given the same anchor) can differ — used by
+ * figure-cache invalidation. Mirrors TV's geometry-affecting field list.
+ */
+function textBoxDataEqual(a, b) {
+    return a.text === b.text &&
+        a.fontSize === b.fontSize &&
+        a.bold === b.bold &&
+        a.italic === b.italic &&
+        a.fontFamily === b.fontFamily &&
+        a.wordWrapWidth === b.wordWrapWidth &&
+        a.maxHeight === b.maxHeight &&
+        a.horzAlign === b.horzAlign &&
+        a.vertAlign === b.vertAlign &&
+        a.horzTextAlign === b.horzTextAlign &&
+        a.offsetX === b.offsetX &&
+        a.offsetY === b.offsetY &&
+        a.angle === b.angle &&
+        a.boxPadding === b.boxPadding &&
+        a.boxPaddingVert === b.boxPaddingVert &&
+        a.boxPaddingHorz === b.boxPaddingHorz &&
+        a.boxPaddingLeft === b.boxPaddingLeft &&
+        a.boxPaddingRight === b.boxPaddingRight &&
+        a.boxWidth === b.boxWidth &&
+        a.boxHeight === b.boxHeight &&
+        a.lineSpacing === b.lineSpacing &&
+        a.rtl === b.rtl;
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var widthCache = createTextWidthCache();
+/** Layout is pure — memoize per attrs object (figure instances persist). */
+var layoutCache = new WeakMap();
+function getRichTextLayout(attrs) {
+    var layout = layoutCache.get(attrs);
+    if (layout === undefined) {
+        layout = computeTextBoxLayout(attrs, { x: attrs.x, y: attrs.y }, widthCache);
+        layoutCache.set(attrs, layout);
+    }
+    return layout;
+}
+function pointInPolygon(point, polygon) {
+    var inside = false;
+    for (var i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        if ((polygon[i].y > point.y) !== (polygon[j].y > point.y) &&
+            (point.x < (polygon[j].x - polygon[i].x) * (point.y - polygon[i].y) / (polygon[j].y - polygon[i].y) + polygon[i].x)) {
+            inside = !inside;
+        }
+    }
+    return inside;
+}
+function checkCoordinateOnRichText(coordinate, attrs) {
+    var layout = getRichTextLayout(attrs);
+    return layout.polygonPoints.length > 0 && pointInPolygon(coordinate, layout.polygonPoints);
+}
+function drawRichText(ctx, attrs, styles) {
+    var e_1, _a;
+    var _b, _c, _d, _e, _f;
+    var layout = getRichTextLayout(attrs);
+    var _g = styles.color, color = _g === void 0 ? 'currentColor' : _g, backgroundColor = styles.backgroundColor, borderColor = styles.borderColor, backgroundRoundRect = styles.backgroundRoundRect, boxShadow = styles.boxShadow, outlineBorder = styles.outlineBorder;
+    var borderWidth = (_b = styles.borderWidth) !== null && _b !== void 0 ? _b : Math.max(layout.fontSize / 12, 1);
+    ctx.save();
+    var angle = (_c = attrs.angle) !== null && _c !== void 0 ? _c : 0;
+    if (angle !== 0) {
+        ctx.translate(layout.rotationPoint.x, layout.rotationPoint.y);
+        ctx.rotate(angle);
+        ctx.translate(-layout.rotationPoint.x, -layout.rotationPoint.y);
+    }
+    var boxLeft = Math.round(layout.boxLeft);
+    var boxTop = Math.round(layout.boxTop);
+    var boxWidth = Math.round(layout.boxWidth);
+    var boxHeight = Math.round(layout.boxHeight);
+    // ── background + border (TV draw order: shadow → bg → border) ───────────
+    var hasBg = backgroundColor !== undefined && (!isString(backgroundColor) || !isTransparent(backgroundColor));
+    var hasBorder = borderColor !== undefined && borderWidth > 0 && (!isString(borderColor) || !isTransparent(borderColor));
+    if (hasBg || hasBorder) {
+        var shadowStateSaved = false;
+        if (boxShadow !== undefined) {
+            ctx.save();
+            ctx.shadowColor = boxShadow.color;
+            ctx.shadowBlur = boxShadow.blur;
+            ctx.shadowOffsetX = (_d = boxShadow.offsetX) !== null && _d !== void 0 ? _d : 0;
+            ctx.shadowOffsetY = (_e = boxShadow.offsetY) !== null && _e !== void 0 ? _e : 0;
+            shadowStateSaved = true;
+        }
+        // eslint-disable-next-line @typescript-eslint/unbound-method, @typescript-eslint/no-unnecessary-condition -- rect fallback for old canvas impls
+        var rr = (_f = ctx.roundRect) !== null && _f !== void 0 ? _f : ctx.rect;
+        if (hasBg) {
+            ctx.fillStyle = backgroundColor;
+            ctx.beginPath();
+            if (backgroundRoundRect !== undefined && backgroundRoundRect > 0) {
+                rr.call(ctx, boxLeft, boxTop, boxWidth, boxHeight, backgroundRoundRect);
+            }
+            else {
+                ctx.rect(boxLeft, boxTop, boxWidth, boxHeight);
+            }
+            ctx.closePath();
+            ctx.fill();
+            if (shadowStateSaved) {
+                ctx.restore();
+                shadowStateSaved = false;
+            }
+        }
+        if (hasBorder) {
+            var half = borderWidth / 2;
+            ctx.strokeStyle = borderColor;
+            ctx.lineWidth = borderWidth;
+            ctx.beginPath();
+            if (backgroundRoundRect !== undefined && backgroundRoundRect > 0) {
+                rr.call(ctx, boxLeft - half, boxTop - half, boxWidth + borderWidth, boxHeight + borderWidth, backgroundRoundRect + borderWidth);
+            }
+            else {
+                ctx.rect(boxLeft - half, boxTop - half, boxWidth + borderWidth, boxHeight + borderWidth);
+            }
+            ctx.closePath();
+            ctx.stroke();
+            if (shadowStateSaved) {
+                ctx.restore();
+            }
+        }
+    }
+    // ── text lines ───────────────────────────────────────────────────────────
+    ctx.fillStyle = color;
+    ctx.font = layout.font;
+    ctx.textAlign = layout.textAlign;
+    ctx.textBaseline = layout.textBaseline;
+    var lineStartX = layout.boxLeft + layout.textHorizStart;
+    // TV applies a 0.05*fontSize baseline adjustment to the middle baseline.
+    var lineY = layout.boxTop + layout.textVertStart + 0.05 * layout.fontSize;
+    var lineAdvance = layout.fontSize + layout.lineSpacing;
+    try {
+        for (var _h = __values(layout.linesInfo.lines), _j = _h.next(); !_j.done; _j = _h.next()) {
+            var line = _j.value;
+            ctx.fillText(line.text, lineStartX, lineY);
+            lineY += lineAdvance;
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (_j && !_j.done && (_a = _h.return)) _a.call(_h);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    // ── outline border (drawn last, outside everything) ─────────────────────
+    if (outlineBorder !== undefined && outlineBorder.width > 0) {
+        var ow = Math.round(outlineBorder.width);
+        var existing = hasBorder ? Math.round(borderWidth) : 0;
+        var path = new Path2D();
+        path.rect(boxLeft - existing - ow, boxTop - existing - ow, boxWidth + 2 * (existing + ow), boxHeight + 2 * (existing + ow));
+        path.rect(boxLeft - existing, boxTop - existing, boxWidth + 2 * existing, boxHeight + 2 * existing);
+        ctx.fillStyle = outlineBorder.color;
+        ctx.fill(path, 'evenodd');
+    }
+    ctx.restore();
+}
+var richText = {
+    name: 'richText',
+    checkEventOn: function (coordinate, attrs) { return checkCoordinateOnRichText(coordinate, attrs); },
+    draw: function (ctx, attrs, styles) {
+        drawRichText(ctx, attrs, styles);
+    }
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 function getCommonState(overlay) {
     var _a;
     var ed = overlay.extendData;
@@ -29713,317 +30425,6 @@ function getPaneDomLayer(chart, paneId) {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-function getMinTextMetrics(metrics) {
-    return {
-        width: metrics.width,
-        actualBoundingBoxAscent: metrics.actualBoundingBoxAscent,
-        actualBoundingBoxDescent: metrics.actualBoundingBoxDescent,
-        fontBoundingBoxAscent: metrics.fontBoundingBoxAscent,
-        fontBoundingBoxDescent: metrics.fontBoundingBoxDescent
-    };
-}
-/** Bounded FIFO text-metrics cache — TV uses capacity 150 per font. */
-var CircularMetricsCache = /** @class */ (function () {
-    function CircularMetricsCache(_capacity) {
-        this._capacity = _capacity;
-        this._map = new Map();
-    }
-    CircularMetricsCache.prototype.get = function (key) {
-        return this._map.get(key);
-    };
-    CircularMetricsCache.prototype.set = function (key, value) {
-        if (this._map.has(key)) {
-            this._map.delete(key);
-        }
-        else if (this._map.size >= this._capacity) {
-            var oldest = this._map.keys().next();
-            if (oldest.done !== true) {
-                this._map.delete(oldest.value);
-            }
-        }
-        this._map.set(key, value);
-    };
-    CircularMetricsCache.prototype.clear = function () {
-        this._map.clear();
-    };
-    return CircularMetricsCache;
-}());
-function createTextWidthCache(capacity) {
-    if (capacity === void 0) { capacity = 150; }
-    return new TextWidthCacheImp(capacity);
-}
-var TextWidthCacheImp = /** @class */ (function () {
-    function TextWidthCacheImp(_capacity) {
-        if (_capacity === void 0) { _capacity = 150; }
-        this._capacity = _capacity;
-        this._perFont = new Map();
-    }
-    TextWidthCacheImp.prototype.measureText = function (context, text, options) {
-        var cacheKey = text;
-        if ((options === null || options === void 0 ? void 0 : options.mono) === true) {
-            cacheKey = text.replace(/\d/g, '0');
-        }
-        return this.getMetrics(context, cacheKey).width;
-    };
-    TextWidthCacheImp.prototype.yMidCorrection = function (context, text) {
-        var metrics = this.getMetrics(context, text);
-        return metrics.actualBoundingBoxAscent !== undefined && metrics.actualBoundingBoxDescent !== undefined
-            ? (metrics.actualBoundingBoxAscent - metrics.actualBoundingBoxDescent) / 2
-            : 0;
-    };
-    TextWidthCacheImp.prototype.getMetrics = function (context, text) {
-        var font = context.font;
-        var cache = this._perFont.get(font);
-        if (cache === undefined) {
-            cache = new CircularMetricsCache(this._capacity);
-            this._perFont.set(font, cache);
-            // Bound the font map too — fonts are finite in practice.
-            if (this._perFont.size > 32) {
-                var oldest = this._perFont.keys().next();
-                if (oldest.done !== true) {
-                    this._perFont.delete(oldest.value);
-                }
-            }
-        }
-        var cached = cache.get(text);
-        if (cached !== undefined) {
-            return cached;
-        }
-        var previousBaseline = context.textBaseline;
-        context.textBaseline = 'middle';
-        var metrics = getMinTextMetrics(context.measureText(text));
-        context.textBaseline = previousBaseline;
-        // Do not cache zero-width nonempty text (font still loading).
-        if (!(metrics.width === 0 && text.length > 0)) {
-            cache.set(text, metrics);
-        }
-        return metrics;
-    };
-    TextWidthCacheImp.prototype.reset = function () {
-        this._perFont.clear();
-    };
-    return TextWidthCacheImp;
-}());
-var measurementContext = null;
-var measurementCanvas = null;
-function getMeasurementContext() {
-    if (measurementContext === null) {
-        measurementCanvas = document.createElement('canvas');
-        measurementCanvas.width = 0;
-        measurementCanvas.height = 0;
-        // Safari/macOS returns wrong metrics for detached canvases — TV attaches
-        // a display:none canvas to the document there.
-        if (isMac() && typeof document.body !== 'undefined') {
-            measurementCanvas.style.display = 'none';
-            document.body.append(measurementCanvas);
-        }
-        measurementContext = measurementCanvas.getContext('2d');
-        measurementContext.textBaseline = 'alphabetic';
-        measurementContext.textAlign = 'center';
-    }
-    return measurementContext;
-}
-/**
- * Measure text against the shared measurement context.
- * Pass a TextWidthCache to cache by (font, text).
- */
-function measureText(text, font, widthCache) {
-    var context = getMeasurementContext();
-    if (context.font !== font) {
-        context.font = font;
-    }
-    return widthCache !== undefined
-        ? widthCache.getMetrics(context, text)
-        : getMinTextMetrics(context.measureText(text));
-}
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-function splitWordsAndSpaces(text) {
-    var tokens = [];
-    do {
-        var match = /\s+/.exec(text);
-        if (match === null) {
-            tokens.push({ word: text, spaces: '' });
-            break;
-        }
-        tokens.push({ word: text.slice(0, match.index), spaces: match[0] });
-        text = text.slice(match.index + match[0].length);
-    } while (text.length > 0);
-    return tokens;
-}
-function upperbound(items, value, predicate, start, end) {
-    var left = start;
-    var right = end;
-    while (left < right) {
-        var mid = (left + right) >>> 1;
-        if (predicate(value, items[mid])) {
-            right = mid;
-        }
-        else {
-            left = mid + 1;
-        }
-    }
-    return left;
-}
-/**
- * Find the longest fitting prefix by binary search. Keeps at least one code
- * unit so the loop progresses even if a single character exceeds maxWidth.
- */
-function splitIntoFittingChunks(text, font, metricsCache, maxWidth) {
-    var chunks = [];
-    var characterIndices = [];
-    for (var index = 0; index < text.length; ++index) {
-        characterIndices.push(index);
-    }
-    var _loop_1 = function () {
-        var sourceText = text;
-        var prefixLength = Math.max(1, upperbound(characterIndices, maxWidth, function (widthLimit, characterIndex) {
-            return measureText(sourceText.slice(0, characterIndex + 1), font, metricsCache).width > widthLimit;
-        }, 0, sourceText.length));
-        chunks.push(sourceText.slice(0, prefixLength));
-        text = sourceText.slice(prefixLength);
-    };
-    while (text.length > 0) {
-        _loop_1();
-    }
-    return chunks;
-}
-function wordWrap(text, font, metricsCache, skipHiddenLines, wrapWidth) {
-    var e_1, _a;
-    if (skipHiddenLines === void 0) { skipHiddenLines = true; }
-    if (typeof wrapWidth === 'string') {
-        wrapWidth = parseInt(wrapWidth);
-    }
-    // Preserve explicit line breaks.
-    var sourceLines = text.split(/\r\n|\r|\n|$/).map(function (lineText) { return ({
-        text: lineText,
-        hidden: false,
-        wrappedLinePart: false,
-        wrappedLineEnd: false
-    }); });
-    if (typeof wrapWidth !== 'number' || !isFinite(wrapWidth) || wrapWidth <= 0) {
-        return sourceLines;
-    }
-    if (measureText('x', font, metricsCache).width > wrapWidth) {
-        return sourceLines;
-    }
-    var wrappedLines = [];
-    try {
-        for (var sourceLines_1 = __values(sourceLines), sourceLines_1_1 = sourceLines_1.next(); !sourceLines_1_1.done; sourceLines_1_1 = sourceLines_1.next()) {
-            var sourceLine = sourceLines_1_1.value;
-            if (measureText(sourceLine.text, font, metricsCache).width <= wrapWidth) {
-                wrappedLines.push(sourceLine);
-                continue;
-            }
-            var tokens = splitWordsAndSpaces(sourceLine.text);
-            var isWrappedLine = true;
-            var pendingText = '';
-            var tokenIndex = 0;
-            while (tokenIndex < tokens.length) {
-                var token = tokens[tokenIndex];
-                var candidateText = "".concat(pendingText).concat(token.word);
-                var candidateWidth = measureText(candidateText, font, metricsCache).width;
-                if (candidateWidth > wrapWidth) {
-                    if (pendingText !== '') {
-                        wrappedLines.push({
-                            text: pendingText,
-                            hidden: false,
-                            wrappedLinePart: isWrappedLine,
-                            wrappedLineEnd: false
-                        });
-                        pendingText = '';
-                    }
-                    else if (candidateText.length === 1) {
-                        wrappedLines.push({
-                            text: candidateText,
-                            hidden: false,
-                            wrappedLinePart: isWrappedLine,
-                            wrappedLineEnd: true
-                        });
-                        token.word = '';
-                    }
-                    else {
-                        var wordChunks = splitIntoFittingChunks(candidateText, font, metricsCache, wrapWidth);
-                        for (var chunkIndex = 0; chunkIndex < wordChunks.length - 1; chunkIndex += 1) {
-                            wrappedLines.push({
-                                text: wordChunks[chunkIndex],
-                                hidden: false,
-                                wrappedLinePart: isWrappedLine,
-                                wrappedLineEnd: false
-                            });
-                        }
-                        token.word = wordChunks[wordChunks.length - 1];
-                    }
-                    continue; // Retry the same token with the remaining word/pending text.
-                }
-                candidateText = "".concat(pendingText).concat(token.word).concat(token.spaces);
-                candidateWidth = measureText(candidateText, font, metricsCache).width;
-                if (candidateWidth < wrapWidth) {
-                    pendingText = candidateText;
-                    tokenIndex += 1;
-                    continue;
-                }
-                var chunks = splitIntoFittingChunks(candidateText, font, metricsCache, wrapWidth);
-                for (var chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
-                    var chunkText = chunks[chunkIndex];
-                    var line = {
-                        text: chunkText,
-                        hidden: chunkIndex > 0,
-                        wrappedLinePart: isWrappedLine,
-                        wrappedLineEnd: tokenIndex === tokens.length - 1 && chunkIndex === chunks.length - 1
-                    };
-                    if (!(line.hidden && skipHiddenLines)) {
-                        wrappedLines.push(line);
-                    }
-                }
-                pendingText = '';
-                tokenIndex += 1;
-            }
-            if (pendingText !== '') {
-                wrappedLines.push({
-                    text: pendingText,
-                    wrappedLinePart: isWrappedLine,
-                    hidden: false,
-                    wrappedLineEnd: true
-                });
-            }
-        }
-    }
-    catch (e_1_1) { e_1 = { error: e_1_1 }; }
-    finally {
-        try {
-            if (sourceLines_1_1 && !sourceLines_1_1.done && (_a = sourceLines_1.return)) _a.call(sourceLines_1);
-        }
-        finally { if (e_1) throw e_1.error; }
-    }
-    return wrappedLines;
-}
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 function caretOrigin(textAlign, textWidth, rtl) {
     switch (textAlign) {
         case 'center': return textWidth / 2;
@@ -30523,6 +30924,255 @@ var TextEditorSessionImp = /** @class */ (function () {
 }());
 
 /**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+function openOverlayTextEditor(options) {
+    var _a, _b;
+    var chart = options.chart, overlay = options.overlay;
+    var paneId = (_a = options.paneId) !== null && _a !== void 0 ? _a : overlay.paneId;
+    var anchor = (_b = options.anchor) !== null && _b !== void 0 ? _b : (function () {
+        var _a, _b, _c;
+        var coordinate = chart.convertToPixel((_a = overlay.points[0]) !== null && _a !== void 0 ? _a : {}, { paneId: paneId });
+        return { x: (_b = coordinate.x) !== null && _b !== void 0 ? _b : 0, y: (_c = coordinate.y) !== null && _c !== void 0 ? _c : 0 };
+    });
+    return createTextEditorSession({
+        chart: chart,
+        paneId: paneId,
+        value: options.data().text,
+        maxLength: options.maxLength,
+        forbidLineBreaks: options.forbidLineBreaks,
+        wordWrapEnabled: options.wordWrapEnabled,
+        selectionColor: options.selectionColor,
+        caretColor: options.caretColor,
+        layout: function (value) {
+            var box = computeTextBoxLayout(__assign(__assign({}, options.data()), { text: value }), anchor());
+            return {
+                info: {
+                    font: box.font,
+                    fontSize: box.fontSize,
+                    textLeft: box.textLeft,
+                    textTop: box.textTop,
+                    textRight: box.textRight,
+                    textBottom: box.textBottom,
+                    textAlign: box.textAlign,
+                    lineSpacing: box.lineSpacing,
+                    centerRotation: box.centerTextRotation,
+                    rtl: options.data().rtl
+                },
+                lines: box.linesInfo.linesIncludingHidden
+            };
+        },
+        onClose: function (_reason, finalValue) {
+            if (finalValue.trim().length === 0) {
+                if (options.onEmpty !== undefined) {
+                    options.onEmpty();
+                }
+                else {
+                    chart.removeOverlay({ id: overlay.id, paneId: paneId });
+                }
+            }
+            else {
+                options.onCommit(finalValue);
+            }
+        }
+    });
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * wordWrap with an LRU memo on top — ported from TradingView's
+ * wordWrapCached. Cache key is (font, skipHiddenLines, wrapWidth, text);
+ * the metrics cache identity is intentionally NOT part of the key (TV
+ * parity — widths for a given font are cache-independent).
+ *
+ * The underlying wordWrap mutates nothing, so cached WrappedLine arrays
+ * are safe to share — callers must not mutate the returned lines.
+ */
+var MAX_ENTRIES = 200;
+function createCachedWordWrap() {
+    var cache = new Map();
+    return function (text, font, metricsCache, skipHiddenLines, wrapWidth) {
+        if (skipHiddenLines === void 0) { skipHiddenLines = true; }
+        var key = "".concat(font, "|").concat(skipHiddenLines ? 's' : 'h', "|").concat(wrapWidth !== null && wrapWidth !== void 0 ? wrapWidth : -1, "|").concat(text);
+        var cached = cache.get(key);
+        if (cached !== undefined) {
+            // Refresh recency for LRU eviction.
+            cache.delete(key);
+            cache.set(key, cached);
+            return cached;
+        }
+        var lines = wordWrap(text, font, metricsCache, skipHiddenLines, wrapWidth);
+        if (cache.size >= MAX_ENTRIES) {
+            var oldest = cache.keys().next();
+            if (oldest.done !== true) {
+                cache.delete(oldest.value);
+            }
+        }
+        cache.set(key, lines);
+        return lines;
+    };
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+function getBoxData(overlay) {
+    var _a, _b, _c, _d, _e, _f, _g, _h;
+    // extendData may be absent at runtime when the overlay was created
+    // without a payload — treat as empty rather than crash the figure path.
+    var extendData = (_a = overlay.extendData) !== null && _a !== void 0 ? _a : {};
+    var styles = ((_d = (_c = (_b = overlay.styles) === null || _b === void 0 ? void 0 : _b.textNote) !== null && _c !== void 0 ? _c : overlay.styles) !== null && _d !== void 0 ? _d : {});
+    return {
+        text: (_e = extendData.text) !== null && _e !== void 0 ? _e : '',
+        fontSize: (_f = styles.fontSize) !== null && _f !== void 0 ? _f : 12,
+        bold: styles.bold,
+        italic: styles.italic,
+        fontFamily: styles.fontFamily,
+        wordWrapWidth: extendData.wordWrapWidth,
+        maxHeight: extendData.maxHeight,
+        horzAlign: (_g = extendData.horzAlign) !== null && _g !== void 0 ? _g : 'left',
+        vertAlign: (_h = extendData.vertAlign) !== null && _h !== void 0 ? _h : 'top',
+        horzTextAlign: extendData.horzTextAlign,
+        angle: extendData.angle,
+        boxWidth: extendData.boxWidth,
+        boxHeight: extendData.boxHeight,
+        boxPadding: styles.boxPadding,
+        boxPaddingVert: styles.boxPaddingVert,
+        boxPaddingHorz: styles.boxPaddingHorz,
+        lineSpacing: styles.lineSpacing,
+        rtl: extendData.rtl
+    };
+}
+function getFigureStyle(overlay) {
+    var _a, _b, _c;
+    var styles = ((_c = (_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a.textNote) !== null && _b !== void 0 ? _b : overlay.styles) !== null && _c !== void 0 ? _c : {});
+    return {
+        color: styles.color,
+        backgroundColor: styles.backgroundColor,
+        borderColor: styles.borderColor,
+        borderWidth: styles.borderWidth,
+        backgroundRoundRect: styles.backgroundRoundRect,
+        boxShadow: styles.boxShadow,
+        outlineBorder: styles.outlineBorder
+    };
+}
+function openEditor(chart, overlay) {
+    // Mirror/ghost/locked overlays never open an editor — editing happens on
+    // the owning chart and propagates through the sync layer.
+    if (overlay.ghost || overlay.synced || overlay.lock) {
+        return;
+    }
+    var wordWrapEnabled = getBoxData(overlay).wordWrapWidth !== undefined;
+    openOverlayTextEditor({
+        chart: chart,
+        overlay: overlay,
+        data: function () { return getBoxData(overlay); },
+        wordWrapEnabled: wordWrapEnabled,
+        forbidLineBreaks: !wordWrapEnabled,
+        onCommit: function (value) {
+            chart.overrideOverlay({
+                id: overlay.id,
+                paneId: overlay.paneId,
+                extendData: __assign(__assign({}, overlay.extendData), { text: value })
+            });
+        }
+    });
+}
+var textNote = {
+    name: 'text',
+    totalStep: 2,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    createPointFigures: function (_a) {
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        if (coordinates.length === 0) {
+            return [];
+        }
+        var data = getBoxData(overlay);
+        var attrs = __assign({ x: coordinates[0].x, y: coordinates[0].y }, data);
+        var figures = [
+            {
+                key: 'textBox',
+                type: 'richText',
+                attrs: attrs,
+                styles: getFigureStyle(overlay)
+            }
+        ];
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_'
+        })), false));
+        return figures;
+    },
+    onDrawEnd: function (_a) {
+        var overlay = _a.overlay, chart = _a.chart;
+        // Placing a text tool drops straight into editing (TV parity) — but
+        // only for locally drawn, completed overlays.
+        if (!overlay.isDrawing()) {
+            openEditor(chart, overlay);
+        }
+    },
+    onDoubleClick: function (_a) {
+        var overlay = _a.overlay, chart = _a.chart;
+        openEditor(chart, overlay);
+    }
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+// The 'richText' figure registers at barrel import — tools referencing it
+// always resolve after `import 'super-chart'`.
+registerFigure(richText);
+
+/**
  *       ___           ___                   ___           ___           ___           ___           ___           ___           ___
  *      /\__\         /\__\      ___        /\__\         /\  \         /\  \         /\__\         /\  \         /\  \         /\  \
  *     /:/  /        /:/  /     /\  \      /::|  |       /::\  \       /::\  \       /:/  /        /::\  \       /::\  \        \:\  \
@@ -30640,4 +31290,4 @@ var utils = {
     checkCoordinateOnText: checkCoordinateOnText
 };
 
-export { ANCHOR_HALF_MOUSE, ANCHOR_HALF_TOUCH, ANCHOR_KEY_PREFIX, ANCHOR_MID_KEY, KCX_PERIOD, KTR_STEP_PERCENT, OVERLAY_FIGURE_KEY_PREFIX, OVERLAY_ID_PREFIX, SYNC_GROUP_COLORS, bindDrawingKeyboard, checkOverlayFigureEvent, computeResizeCursor, createAnchorFigures, createChartSync, createSelectionOutlineFigures, createTextEditorSession, createTextWidthCache, dispose, getCaretPosition, getCommonState, getDrawingInteractionState, getEditorLetterSpacing, getFigureClass, getMinTextMetrics, getOverlayClass, getPaneDomLayer, getSelectionRects, getSupportedFigures, getSupportedIndicators, getSupportedLocales, getSupportedOverlays, init, isAlign45Enabled, isSnap45Active, isVisibleOnInterval, measureText, normalizedDevicePixelRatio, registerFigure, registerIndicator, registerLocale, registerOverlay, registerStyles, registerXAxis, registerYAxis, setAlign45Enabled, snap45Coordinate, utils, version, withFigureCache, withPerfPipeline, withViewportCull, wordWrap };
+export { ANCHOR_HALF_MOUSE, ANCHOR_HALF_TOUCH, ANCHOR_KEY_PREFIX, ANCHOR_MID_KEY, CHART_FONT_FAMILY, KCX_PERIOD, KTR_STEP_PERCENT, OVERLAY_FIGURE_KEY_PREFIX, OVERLAY_ID_PREFIX, SYNC_GROUP_COLORS, bindDrawingKeyboard, checkCoordinateOnRichText, checkOverlayFigureEvent, computeResizeCursor, computeTextBoxLayout, createAnchorFigures, createCachedWordWrap, createChartSync, createSelectionOutlineFigures, createTextEditorSession, createTextWidthCache, dispose, drawRichText, getCaretPosition, getCommonState, getDrawingInteractionState, getEditorLetterSpacing, getFigureClass, getMinTextMetrics, getOverlayClass, getPaneDomLayer, getRichTextLayout, getSelectionRects, getSupportedFigures, getSupportedIndicators, getSupportedLocales, getSupportedOverlays, init, isAlign45Enabled, isSnap45Active, isVisibleOnInterval, measureText, normalizedDevicePixelRatio, openOverlayTextEditor, registerFigure, registerIndicator, registerLocale, registerOverlay, registerStyles, registerXAxis, registerYAxis, setAlign45Enabled, snap45Coordinate, textBoxDataEqual, textBoxFont, textNote as textNoteTool, utils, version, withFigureCache, withPerfPipeline, withViewportCull, wordWrap };

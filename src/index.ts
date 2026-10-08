@@ -291,7 +291,17 @@ export {
   getSelectionRects,
   createTextEditorSession,
   getEditorLetterSpacing,
-  normalizedDevicePixelRatio
+  normalizedDevicePixelRatio,
+  openOverlayTextEditor,
+  computeTextBoxLayout,
+  textBoxFont,
+  textBoxDataEqual,
+  CHART_FONT_FAMILY,
+  createCachedWordWrap,
+  getRichTextLayout,
+  drawRichText,
+  checkCoordinateOnRichText,
+  textNoteTool
 } from './drawings'
 
 export type {
@@ -318,5 +328,16 @@ export type {
   TextEditorSessionOptions,
   TextEditorCloseReason,
   TextEditorInfo,
-  TextEditorLayout
+  TextEditorLayout,
+  OverlayTextEditorOptions,
+  TextBoxData,
+  TextBoxLayout,
+  TextBoxLinesInfo,
+  TextBoxHorzAlign,
+  TextBoxVertAlign,
+  WordWrapFn,
+  RichTextAttrs,
+  RichTextStyle,
+  TextToolExtendData,
+  TextToolStyle
 } from './drawings'

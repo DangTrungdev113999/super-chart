@@ -1978,6 +1978,205 @@ export declare function normalizedDevicePixelRatio(dpr: number): number;
  */
 export declare function getEditorLetterSpacing(font: string, fontSize: number, dpr: number): number | undefined;
 /**
+ * Text-box layout engine — ported from TradingView's TextRenderer
+ * (_getBox / _getBoxSize / _getInternalData / getLinesInfo), minus the
+ * decorator system (TV forbids decorators together with wordWrapWidth, and
+ * none of our tools use them).
+ *
+ * This is the SINGLE source of geometry for both the canvas figure and the
+ * DOM text editor — the editor's layout() callback consumes this output so
+ * caret, selection and the invisible textarea always agree with painted
+ * pixels (the #1 defect of ad hoc editors is re-measuring in the DOM).
+ */
+export declare const CHART_FONT_FAMILY = "'Trebuchet MS', Roboto, Ubuntu, sans-serif";
+export type TextBoxHorzAlign = "left" | "center" | "right";
+export type TextBoxVertAlign = "top" | "middle" | "bottom";
+export interface TextBoxData {
+	text: string;
+	fontSize?: number;
+	bold?: boolean;
+	italic?: boolean;
+	fontFamily?: string;
+	/** Wrap width in px — presence enables word wrapping inside the box. */
+	wordWrapWidth?: number;
+	/** Limit the number of visible wrapped lines by pixel height. */
+	maxHeight?: number;
+	/** Box anchor alignment (where the anchor point sits on the box). */
+	horzAlign?: TextBoxHorzAlign;
+	vertAlign?: TextBoxVertAlign;
+	/** Text alignment inside the box (defaults to horzAlign). */
+	horzTextAlign?: TextBoxHorzAlign;
+	offsetX?: number;
+	offsetY?: number;
+	/** Rotation around the alignment-dependent rotation point, radians. */
+	angle?: number;
+	/** Inner padding; defaults to fontSize / 3 per TradingView. */
+	boxPadding?: number;
+	boxPaddingVert?: number;
+	boxPaddingHorz?: number;
+	boxPaddingLeft?: number;
+	boxPaddingRight?: number;
+	/** Explicit box size overrides (auto-measured otherwise). */
+	boxWidth?: number;
+	boxHeight?: number;
+	/** Extra pixels between lines (lineHeight = fontSize + lineSpacing). */
+	lineSpacing?: number;
+	/** Right-to-left text direction. */
+	rtl?: boolean;
+}
+export interface TextBoxLinesInfo {
+	/** All wrapped lines including hidden continuation segments. */
+	linesIncludingHidden: WrappedLine[];
+	/** Visible lines only (hidden + maxHeight-truncated removed). */
+	lines: WrappedLine[];
+	linesMaxWidth: number;
+}
+export interface TextBoxLayout {
+	/** `${bold}${italic}${fontSize}px ${family}` canvas font string. */
+	font: string;
+	fontSize: number;
+	lineSpacing: number;
+	/** Outer box (includes padding) in media (CSS px) coordinates. */
+	boxLeft: number;
+	boxTop: number;
+	boxWidth: number;
+	boxHeight: number;
+	/** Auto-measured box size before explicit overrides. */
+	textBoxWidth: number;
+	textBoxHeight: number;
+	/** Inner text area inside padding. */
+	textLeft: number;
+	textTop: number;
+	textRight: number;
+	textBottom: number;
+	/** fillText anchor relative to (boxLeft, boxTop). */
+	textHorizStart: number;
+	textVertStart: number;
+	/** Canvas textAlign value ('start' | 'center' | 'end'). */
+	textAlign: CanvasTextAlign;
+	textBaseline: CanvasTextBaseline;
+	linesInfo: TextBoxLinesInfo;
+	/** Rotation pivot — follows horz/vert box alignment (TV parity). */
+	rotationPoint: Coordinate;
+	/** Text center rotated around rotationPoint — editor rotation anchor. */
+	centerTextRotation: {
+		x: number;
+		y: number;
+		angle: number;
+	};
+	/** Rotated box corners for hit testing. */
+	polygonPoints: Coordinate[];
+}
+export declare function textBoxFont(data: TextBoxData): string;
+/**
+ * Compute the full text-box layout for `data` anchored at `anchor`
+ * (media/CSS-px coordinates). Deterministic and context-free: the same
+ * input always produces the same geometry for renderer, hit test, caret
+ * and selection.
+ */
+export declare function computeTextBoxLayout(data: TextBoxData, anchor: Coordinate, widthCache?: TextWidthCache): TextBoxLayout;
+/**
+ * Whether the layout output (given the same anchor) can differ — used by
+ * figure-cache invalidation. Mirrors TV's geometry-affecting field list.
+ */
+export declare function textBoxDataEqual(a: TextBoxData, b: TextBoxData): boolean;
+/**
+ * Bridge between an overlay's text payload and the in-place editor. The
+ * editor's layout() re-runs computeTextBoxLayout for the live value with
+ * the SAME data the figure paints from — the invisible textarea therefore
+ * always lands exactly over the rendered text.
+ */
+export interface OverlayTextEditorOptions {
+	chart: Chart;
+	overlay: Overlay;
+	/**
+	 * Text + box geometry for the CURRENT overlay value. Called on every
+	 * keystroke — read fresh extendData/styles each time.
+	 */
+	data: () => TextBoxData;
+	/**
+	 * Pane-local anchor point. Defaults to convertToPixel(points[0]).
+	 */
+	anchor?: () => Coordinate;
+	paneId?: string;
+	wordWrapEnabled?: boolean;
+	forbidLineBreaks?: boolean;
+	maxLength?: number;
+	selectionColor?: string;
+	caretColor?: string;
+	/** Commit a non-empty final value (e.g. override extendData.text). */
+	onCommit: (value: string) => void;
+	/** Final value trimmed empty — default removes the overlay. */
+	onEmpty?: () => void;
+}
+export declare function openOverlayTextEditor(options: OverlayTextEditorOptions): TextEditorSession;
+export type WordWrapFn = (text: string, font: string, metricsCache?: TextWidthCache, skipHiddenLines?: boolean, wrapWidth?: number) => WrappedLine[];
+export declare function createCachedWordWrap(): WordWrapFn;
+/**
+ * 'richText' figure — TradingView TextRenderer parity: a padded (optionally
+ * word-wrapped, rotated, bordered, shadowed) text box. Unlike the built-in
+ * 'text' figure it shares geometry with the DOM text editor through
+ * computeTextBoxLayout(), so what the canvas paints is exactly what the
+ * editor positions its textarea/caret/selection over.
+ */
+export interface RichTextStyle {
+	color?: string;
+	backgroundColor?: string;
+	borderColor?: string;
+	borderWidth?: number;
+	/** Rounded-corner radius for background + border. */
+	backgroundRoundRect?: number;
+	boxShadow?: {
+		color: string;
+		blur: number;
+		offsetX?: number;
+		offsetY?: number;
+	};
+	/** Extra outline outside the border (TV outlineBorder). */
+	outlineBorder?: {
+		width: number;
+		color: string;
+	};
+}
+export interface RichTextAttrs extends TextBoxData {
+	x: number;
+	y: number;
+}
+export declare function getRichTextLayout(attrs: RichTextAttrs): TextBoxLayout;
+export declare function checkCoordinateOnRichText(coordinate: Coordinate, attrs: RichTextAttrs): boolean;
+export declare function drawRichText(ctx: CanvasRenderingContext2D, attrs: RichTextAttrs, styles: RichTextStyle): void;
+/**
+ * 'text' — the TradingView Text tool: click to place, type immediately
+ * (the editor opens on drawEnd), double-click to re-edit. Escape and blur
+ * both COMMIT the text; empty text removes the overlay. The box auto-grows
+ * with content unless extendData.wordWrapWidth fixes it.
+ */
+export interface TextToolExtendData {
+	text?: string;
+	/** Fixed wrap width (px) — presence enables word wrapping. */
+	wordWrapWidth?: number;
+	/** Box anchor alignment. */
+	horzAlign?: "left" | "center" | "right";
+	vertAlign?: "top" | "middle" | "bottom";
+	horzTextAlign?: "left" | "center" | "right";
+	angle?: number;
+	boxWidth?: number;
+	boxHeight?: number;
+	maxHeight?: number;
+	rtl?: boolean;
+}
+export interface TextToolStyle extends RichTextStyle {
+	fontSize?: number;
+	bold?: boolean;
+	italic?: boolean;
+	fontFamily?: string;
+	boxPadding?: number;
+	boxPaddingVert?: number;
+	boxPaddingHorz?: number;
+	lineSpacing?: number;
+}
+declare const textNote: OverlayTemplate<TextToolExtendData>;
+/**
  * Chart version
  * @return {string}
  */
@@ -2026,6 +2225,7 @@ export {
 	CaretPosition$1 as CaretPosition,
 	LineStyle$1 as RegressionTrendLineStyle,
 	VisibilityRange as RegressionVisibilityRange,
+	textNote as textNoteTool,
 };
 
 export as namespace superChart;
