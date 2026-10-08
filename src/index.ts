@@ -94,7 +94,7 @@ import type { ArcAttrs } from './extension/figure/arc'
 import type {
   RegressionTrendExtendData,
   RegressionSource,
-  LineStyle as RegressionTrendLineStyle,
+  RegressionTrendLineStyle,
   VisibilityRange as RegressionVisibilityRange
 } from './extension/overlay/regressionTrend'
 import type {

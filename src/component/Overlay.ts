@@ -366,6 +366,23 @@ export interface Overlay<E = unknown> extends OverlayEventCollection<E> {
   freehandMinDistance?: number
 
   /**
+   * Template-level opt-out of the drawings figure cache. The drawing tools
+   * registry wraps every rebuilt template's create*Figures callbacks with a
+   * per-overlay/per-slot cache — set to `false` only when a callback depends
+   * on state outside the cache signature AND cannot express it via
+   * `figureCacheDataRev`/`extraKey`. Default: cached.
+   */
+  figuresCacheable?: boolean
+
+  /**
+   * Include `chart.getDataList()` revision (length + last close) in this
+   * template's figure-cache signature. REQUIRED when createPointFigures/
+   * createXAxisFigures/createYAxisFigures read bar data or project onto
+   * future bar indices (measure stats, regression, ghost feeds, cycles).
+   */
+  figureCacheDataRev?: boolean
+
+  /**
    * Figure-cache revision — bumped by override() whenever styles/extendData
    * change and by invalidateFigures(). The drawings subsystem's figure cache
    * keys on this; templates MUST NOT write it.

@@ -48,7 +48,7 @@ import { buildXAxisPill, buildYAxisPill, formatDate } from '../lineCommon'
 export type {
   RegressionTrendExtendData,
   RegressionSource,
-  LineStyle,
+  RegressionTrendLineStyle,
   VisibilityRange
 } from './types'
 

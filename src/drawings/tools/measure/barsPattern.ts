@@ -180,6 +180,7 @@ function readStoredPattern (extendData: unknown): MiniBar[] | null {
 const barsPattern: OverlayTemplate<BarsPatternExtendData> = {
   name: 'barsPattern',
   totalStep: 3,
+  figureCacheDataRev: true,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

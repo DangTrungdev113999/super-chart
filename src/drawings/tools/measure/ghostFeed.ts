@@ -69,6 +69,7 @@ function pointBarIndex (point: Partial<Point>, store: StoreIndexAccess): number 
 const ghostFeed: OverlayTemplate<GhostFeedExtendData> = {
   name: 'ghostFeed',
   totalStep: 3,
+  figureCacheDataRev: true,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

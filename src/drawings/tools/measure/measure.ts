@@ -50,6 +50,7 @@ const measure: OverlayTemplate<MeasureExtendData> = {
   // Unlimited-step freehand: the stroke collects points for the whole
   // press-drag gesture; only the first/last points are ever read.
   totalStep: Number.MAX_SAFE_INTEGER,
+  figureCacheDataRev: true,
   freehand: true,
   freehandMinDistance: 4,
   transient: true,

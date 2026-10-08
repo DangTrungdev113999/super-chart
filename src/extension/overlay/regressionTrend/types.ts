@@ -8,7 +8,7 @@
 export type RegressionSource =
   | 'close' | 'open' | 'high' | 'low' | 'hl2' | 'hlc3' | 'ohlc4'
 
-export type LineStyle = 'solid' | 'dashed' | 'dotted'
+export type RegressionTrendLineStyle = 'solid' | 'dashed' | 'dotted'
 
 export interface VisibilityRange {
   enabled: boolean
@@ -31,15 +31,15 @@ export interface RegressionTrendExtendData {
   // ─── Tab 2 — Định dạng (Style) ────────────────────────
   baseVisible?: boolean // #6  default true
   baseColor?: string // #7  default '#F44336'
-  baseStyle?: LineStyle // #8  default 'dashed'
+  baseStyle?: RegressionTrendLineStyle // #8  default 'dashed'
 
   upperVisible?: boolean // #9  default true
   upperColor?: string // #10 default '#2962FF'
-  upperStyle?: LineStyle // #11 default 'solid'
+  upperStyle?: RegressionTrendLineStyle // #11 default 'solid'
 
   lowerVisible?: boolean // #12 default true
   lowerColor?: string // #13 default '#2962FF'
-  lowerStyle?: LineStyle // #14 default 'solid'
+  lowerStyle?: RegressionTrendLineStyle // #14 default 'solid'
 
   extendLines?: boolean // #15 default false (right edge only)
   pearsonR?: boolean // #16 default true

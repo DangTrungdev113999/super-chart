@@ -45,6 +45,7 @@ const ARROW_SIZE = 6
 const dateAndPriceRange: OverlayTemplate<DateAndPriceRangeExtendData> = {
   name: 'dateAndPriceRange',
   totalStep: 3,
+  figureCacheDataRev: true,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

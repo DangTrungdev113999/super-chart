@@ -26,6 +26,7 @@ import { buildPositionFigures, buildPositionYAxisFigures } from './positionCommo
 const shortPosition: OverlayTemplate<PositionToolExtendData> = {
   name: 'shortPosition',
   totalStep: 2,
+  figureCacheDataRev: true,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

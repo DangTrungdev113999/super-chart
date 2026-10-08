@@ -14,6 +14,13 @@
 
 import { registerOverlay } from '../../extension/overlay/index'
 
+import type {
+  OverlayCreateFiguresCallback,
+  OverlayTemplate
+} from '../../component/Overlay'
+
+import { withFigureCache } from '../interaction/perf'
+
 import textNote from './text'
 
 import anchoredNote from './annotations/anchoredNote'
@@ -123,6 +130,33 @@ import highlighter from './marks/highlighter'
  * same-name rebuilt templates replace their kernel predecessors.
  */
 
+/**
+ * Decorates a template's figure callbacks with the shared per-overlay/
+ * per-slot cache (coordinates + figuresRev + selection/hover + lock +
+ * bounding + currentStep + isTouch signature; `figureCacheDataRev` adds
+ * chart.getDataList() revision for data-reading tools). Templates may opt
+ * out entirely via `figuresCacheable: false`.
+ */
+function withDrawingsFigureCache<E> (
+  template: OverlayTemplate<E>
+): OverlayTemplate<E> {
+  if (template.figuresCacheable === false) {
+    return template
+  }
+  const cacheOpts = { includeDataRev: template.figureCacheDataRev === true }
+  const wrap = (
+    fn: OverlayCreateFiguresCallback<E> | null | undefined,
+    slot: string
+  ): OverlayCreateFiguresCallback<E> | null =>
+    (fn == null ? null : withFigureCache(fn, { ...cacheOpts, slot }))
+  return {
+    ...template,
+    createPointFigures: wrap(template.createPointFigures, 'point'),
+    createXAxisFigures: wrap(template.createXAxisFigures, 'x'),
+    createYAxisFigures: wrap(template.createYAxisFigures, 'y')
+  }
+}
+
 const drawingTools = [
   textNote,
   anchoredNote,
@@ -217,5 +251,5 @@ const drawingTools = [
 ]
 
 drawingTools.forEach(template => {
-  registerOverlay(template)
+  registerOverlay(withDrawingsFigureCache(template))
 })

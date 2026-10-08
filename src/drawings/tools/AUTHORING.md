@@ -54,6 +54,24 @@ Return `OverlayFigure[]`. Each figure:
 - `key` MUST be set — the figure cache + hover + drag identity all key on it.
 - `bounds` optional pixel rect → viewport culling.
 
+## Figure cache — automatic at registration
+
+`tools/index.ts` wraps every registered template's `createPointFigures`/
+`createXAxisFigures`/`createYAxisFigures` in `withFigureCache` — figure
+callbacks run ONLY when the signature changes (coordinates rounded to
+¼px, `overlay.figuresRev`, selected/hovered/lock, bounding, currentStep,
+isTouch, hoveredFigureKey). Rules that follow:
+
+- The returned figure array is SHARED until the signature changes —
+  build fresh arrays, never mutate a previous result.
+- Anything your callback reads that is NOT in the signature MUST be
+  declared: read `chart.getDataList()` or project future bar indices →
+  set `figureCacheDataRev: true` on the template (adds dataList
+  length + last close to the key).
+- Truly exotic external deps → `figuresCacheable: false` opts out.
+- In-place `extendData` mutations inside perform* callbacks →
+  `overlay.invalidateFigures()` (bumps figuresRev → cache invalidates).
+
 ## Anchors — ALWAYS via the factory
 
 ```ts

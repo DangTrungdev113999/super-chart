@@ -44,6 +44,7 @@ const ARROW_SIZE = 6
 const dateRange: OverlayTemplate<DateRangeExtendData> = {
   name: 'dateRange',
   totalStep: 3,
+  figureCacheDataRev: true,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

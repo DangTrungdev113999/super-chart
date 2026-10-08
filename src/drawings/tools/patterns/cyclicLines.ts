@@ -42,6 +42,7 @@ const MAX_CYCLE_LINES = 512
 const cyclicLines: OverlayTemplate<PatternExtendData> = {
   name: 'cyclicLines',
   totalStep: 3,
+  figureCacheDataRev: true,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

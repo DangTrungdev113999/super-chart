@@ -14,6 +14,7 @@
 
 import type Bounding from '../../common/Bounding'
 import type Coordinate from '../../common/Coordinate'
+import type { KLineData } from '../../common/Data'
 import type {
   OverlayFigure,
   OverlayFigureBounds,
@@ -57,8 +58,8 @@ export interface FigureCacheOptions<E> {
   /**
    * Extra signature material — MANDATORY for anything the template reads
    * that is NOT covered by coordinates/figuresRev/selection/lock/bounding/
-   * currentStep (e.g. textual values that change sub-pixel, time-derived
-   * labels, external flags).
+   * currentStep/isTouch (e.g. textual values that change sub-pixel,
+   * time-derived labels, external flags).
    */
   extraKey?: (params: OverlayCreateFiguresCallbackParams<E>) => string
   /**
@@ -67,6 +68,12 @@ export interface FigureCacheOptions<E> {
    * ('point', 'x', 'y'); defaults to a single shared slot.
    */
   slot?: string
+  /**
+   * Include a data revision in the signature — REQUIRED for templates whose
+   * figure callbacks read `chart.getDataList()` (measure stats, regression,
+   * forward bar projections). Keys on list length + last close.
+   */
+  includeDataRev?: boolean
 }
 
 /**
@@ -80,6 +87,12 @@ export function withFigureCache<E> (
   options?: FigureCacheOptions<E>
 ): OverlayCreateFiguresCallback<E> {
   return (params) => {
+    let dataRev = ''
+    if (options?.includeDataRev === true) {
+      const list = params.chart.getDataList()
+      const last = list[list.length - 1] as KLineData | undefined
+      dataRev = `|d${list.length}:${last !== undefined ? last.close : ''}`
+    }
     const signature =
       coordsSignature(params.coordinates) +
       `|r${params.overlay.figuresRev}` +
@@ -87,7 +100,9 @@ export function withFigureCache<E> (
       `|l${params.overlay.lock ? 1 : 0}` +
       `|b${params.bounding.width}x${params.bounding.height}` +
       `|c${params.overlay.currentStep}` +
+      `|t${params.isTouch === true ? 1 : 0}` +
       `|h${params.hoveredFigureKey ?? ''}` +
+      dataRev +
       `|k${options?.extraKey?.(params) ?? ''}`
 
     const slotKey = options?.slot ?? ''

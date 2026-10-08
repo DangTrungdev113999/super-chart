@@ -7,7 +7,7 @@
  */
 
 import type { EventOverlayInfo } from '../../../Store'
-import type { LineStyle, RegressionTrendExtendData } from './types'
+import type { RegressionTrendLineStyle, RegressionTrendExtendData } from './types'
 
 // ═══════════════════════════════════════
 // Defaults (BRD §4.3 + TAD §3)
@@ -66,10 +66,10 @@ export const BODY_DRAG_KEYS = new Set<string>([
 ])
 
 // ═══════════════════════════════════════
-// Dash map (pixel pattern per LineStyle)
+// Dash map (pixel pattern per RegressionTrendLineStyle)
 // ═══════════════════════════════════════
 
-export const DASH: Record<LineStyle, number[]> = {
+export const DASH: Record<RegressionTrendLineStyle, number[]> = {
   solid: [],
   dashed: [6, 4],
   dotted: [2, 2]
