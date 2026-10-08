@@ -613,7 +613,11 @@ var OverlayImp = /** @class */ (function () {
                     });
                 }
             }
-            if (this.currentStep === OVERLAY_DRAW_STEP_FINISHED) {
+            if (this.currentStep === OVERLAY_DRAW_STEP_FINISHED && skipDrawReplay !== true) {
+                // Post-completion adjustment hook — same skipDrawReplay gate as the
+                // replay loop above: clone/restore callers pass already-normalized
+                // points and a template's last-index transform would otherwise
+                // silently rewrite the geometry at clone time.
                 (_a = this.performEventPressedMove) === null || _a === void 0 ? void 0 : _a.call(this, {
                     currentStep: this.currentStep,
                     mode: this.mode,
@@ -713,7 +717,12 @@ var OverlayImp = /** @class */ (function () {
         else if (moveDirection === 'vert') {
             point = __assign(__assign({}, point), { timestamp: this.points[pointIndex].timestamp, dataIndex: this.points[pointIndex].dataIndex });
         }
-        this.points[pointIndex].timestamp = point.timestamp;
+        // Guarded like dataIndex/value below — a null timestamp conversion
+        // (empty data range, half-converted axis point) must not wipe the
+        // anchor's timestamp, which is what keeps the point moored on scroll.
+        if (isNumber(point.timestamp)) {
+            this.points[pointIndex].timestamp = point.timestamp;
+        }
         if (isNumber(point.dataIndex)) {
             this.points[pointIndex].dataIndex = point.dataIndex;
         }
@@ -4002,7 +4011,7 @@ var simpleAnnotation = {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var simpleTag = {
+var simpleTag$1 = {
     name: 'simpleTag',
     totalStep: 2,
     styles: {
@@ -5255,8 +5264,8 @@ var rect$1 = {
 var DEFAULT_BORDER_COLOR = '#FF9800';
 var DEFAULT_BORDER_WIDTH = 1;
 var DEFAULT_FILL_COLOR = '#FF9800';
-var DEFAULT_FILL_OPACITY = 20;
-var MIN_RADIUS_PX = 5;
+var DEFAULT_FILL_OPACITY$3 = 20;
+var MIN_RADIUS_PX$1 = 5;
 
 /**
  * Circle overlay — TradingView-style with 2 control points
@@ -5301,12 +5310,12 @@ var circle$1 = {
         var _l = __read(coordinates, 2), center = _l[0], edge = _l[1];
         var ext = overlay.extendData;
         // Radius: Euclidean distance, min 5px
-        var radius = Math.max(Math.hypot(edge.x - center.x, edge.y - center.y), MIN_RADIUS_PX);
+        var radius = Math.max(Math.hypot(edge.x - center.x, edge.y - center.y), MIN_RADIUS_PX$1);
         // Styles
         var borderColor = (_b = ext.borderColor) !== null && _b !== void 0 ? _b : DEFAULT_BORDER_COLOR;
         var borderWidth = (_c = ext.borderWidth) !== null && _c !== void 0 ? _c : DEFAULT_BORDER_WIDTH;
         var fillColor = (_d = ext.fillColor) !== null && _d !== void 0 ? _d : DEFAULT_FILL_COLOR;
-        var fillOpacity = (_e = ext.fillOpacity) !== null && _e !== void 0 ? _e : DEFAULT_FILL_OPACITY;
+        var fillOpacity = (_e = ext.fillOpacity) !== null && _e !== void 0 ? _e : DEFAULT_FILL_OPACITY$3;
         var fillEnabled = ext.fillEnabled !== false;
         var fillRgba = fillEnabled
             ? hexToRgba(fillColor, fillOpacity / 100)
@@ -5435,7 +5444,7 @@ var circle$1 = {
         if (!isSelected && !isHovered)
             return [];
         var _f = __read(coordinates, 2), center = _f[0], edge = _f[1];
-        var radius = Math.max(Math.hypot(edge.x - center.x, edge.y - center.y), MIN_RADIUS_PX);
+        var radius = Math.max(Math.hypot(edge.x - center.x, edge.y - center.y), MIN_RADIUS_PX$1);
         var leftX = center.x - radius;
         var rightX = center.x + radius;
         var stripWidth = rightX - leftX;
@@ -5478,7 +5487,7 @@ var circle$1 = {
             return [];
         var precision = (_e = (_d = chart.getSymbol()) === null || _d === void 0 ? void 0 : _d.pricePrecision) !== null && _e !== void 0 ? _e : 2;
         var _h = __read(coordinates, 2), center = _h[0], edge = _h[1];
-        var radius = Math.max(Math.hypot(edge.x - center.x, edge.y - center.y), MIN_RADIUS_PX);
+        var radius = Math.max(Math.hypot(edge.x - center.x, edge.y - center.y), MIN_RADIUS_PX$1);
         var topY = center.y - radius;
         var bottomY = center.y + radius;
         var stripHeight = bottomY - topY;
@@ -5570,7 +5579,7 @@ function calculateStats$1(entryPrice, targetPrice, stopPrice, currentPrice, ext)
 // ═══════════════════════════════════════
 // Label text formatting
 // ═══════════════════════════════════════
-function fmtNum$1(value, precision) {
+function fmtNum$2(value, precision) {
     return formatPrecision$1(value, precision);
 }
 function fmtPct$1(value) {
@@ -5581,17 +5590,17 @@ function fmtRatio$1(value) {
 }
 function formatTpLabel$1(stats, compact, precision) {
     if (compact) {
-        return "".concat(fmtNum$1(stats.tpDiff, precision), " (").concat(fmtPct$1(stats.tpPct), "%) ").concat(fmtNum$1(stats.amountTarget, precision));
+        return "".concat(fmtNum$2(stats.tpDiff, precision), " (").concat(fmtPct$1(stats.tpPct), "%) ").concat(fmtNum$2(stats.amountTarget, precision));
     }
-    return "M\u1EE5c ti\u00EAu: ".concat(fmtNum$1(stats.tpDiff, precision), " (").concat(fmtPct$1(stats.tpPct), "%) ").concat(stats.tpTicks, ", S\u1ED1 ti\u1EC1n: ").concat(fmtNum$1(stats.amountTarget, precision));
+    return "M\u1EE5c ti\u00EAu: ".concat(fmtNum$2(stats.tpDiff, precision), " (").concat(fmtPct$1(stats.tpPct), "%) ").concat(stats.tpTicks, ", S\u1ED1 ti\u1EC1n: ").concat(fmtNum$2(stats.amountTarget, precision));
 }
 function formatEntryLabel$1(stats, compact, precision, isClosed) {
     if (isClosed === void 0) { isClosed = false; }
     var prefix = isClosed ? '\u0110\u00F3ng' : 'M\u1EDF';
     if (compact) {
-        return "".concat(fmtNum$1(stats.openPL, precision), " - ").concat(stats.qty);
+        return "".concat(fmtNum$2(stats.openPL, precision), " - ").concat(stats.qty);
     }
-    return "".concat(prefix, " L\u1EE3i nhu\u1EADn & Thua l\u1ED7: ").concat(fmtNum$1(stats.openPL, precision), ", S.Lg: ").concat(stats.qty);
+    return "".concat(prefix, " L\u1EE3i nhu\u1EADn & Thua l\u1ED7: ").concat(fmtNum$2(stats.openPL, precision), ", S.Lg: ").concat(stats.qty);
 }
 function formatEntryLabelLine2$1(stats, compact) {
     if (compact)
@@ -5600,9 +5609,9 @@ function formatEntryLabelLine2$1(stats, compact) {
 }
 function formatSlLabel$1(stats, compact, precision) {
     if (compact) {
-        return "".concat(fmtNum$1(stats.slDiff, precision), " (").concat(fmtPct$1(stats.slPct), "%) ").concat(fmtNum$1(stats.amountStop, precision));
+        return "".concat(fmtNum$2(stats.slDiff, precision), " (").concat(fmtPct$1(stats.slPct), "%) ").concat(fmtNum$2(stats.amountStop, precision));
     }
-    return "D\u1EEBng: ".concat(fmtNum$1(stats.slDiff, precision), " (").concat(fmtPct$1(stats.slPct), "%) ").concat(stats.slTicks, ", S\u1ED1 ti\u1EC1n: ").concat(fmtNum$1(stats.amountStop, precision));
+    return "D\u1EEBng: ".concat(fmtNum$2(stats.slDiff, precision), " (").concat(fmtPct$1(stats.slPct), "%) ").concat(stats.slTicks, ", S\u1ED1 ti\u1EC1n: ").concat(fmtNum$2(stats.amountStop, precision));
 }
 
 /**
@@ -6364,7 +6373,7 @@ function calculateStats(entryPrice, targetPrice, stopPrice, currentPrice, ext) {
 // ═══════════════════════════════════════
 // Label text formatting
 // ═══════════════════════════════════════
-function fmtNum(value, precision) {
+function fmtNum$1(value, precision) {
     return formatPrecision$1(value, precision);
 }
 function fmtPct(value) {
@@ -6375,17 +6384,17 @@ function fmtRatio(value) {
 }
 function formatTpLabel(stats, compact, precision) {
     if (compact) {
-        return "".concat(fmtNum(stats.tpDiff, precision), " (").concat(fmtPct(stats.tpPct), "%) ").concat(fmtNum(stats.amountTarget, precision));
+        return "".concat(fmtNum$1(stats.tpDiff, precision), " (").concat(fmtPct(stats.tpPct), "%) ").concat(fmtNum$1(stats.amountTarget, precision));
     }
-    return "M\u1EE5c ti\u00EAu: ".concat(fmtNum(stats.tpDiff, precision), " (").concat(fmtPct(stats.tpPct), "%) ").concat(stats.tpTicks, ", S\u1ED1 ti\u1EC1n: ").concat(fmtNum(stats.amountTarget, precision));
+    return "M\u1EE5c ti\u00EAu: ".concat(fmtNum$1(stats.tpDiff, precision), " (").concat(fmtPct(stats.tpPct), "%) ").concat(stats.tpTicks, ", S\u1ED1 ti\u1EC1n: ").concat(fmtNum$1(stats.amountTarget, precision));
 }
 function formatEntryLabel(stats, compact, precision, isClosed) {
     if (isClosed === void 0) { isClosed = false; }
     var prefix = isClosed ? '\u0110\u00F3ng' : 'M\u1EDF';
     if (compact) {
-        return "".concat(fmtNum(stats.openPL, precision), " - ").concat(stats.qty);
+        return "".concat(fmtNum$1(stats.openPL, precision), " - ").concat(stats.qty);
     }
-    return "".concat(prefix, " L\u1EE3i nhu\u1EADn & Thua l\u1ED7: ").concat(fmtNum(stats.openPL, precision), ", S.Lg: ").concat(stats.qty);
+    return "".concat(prefix, " L\u1EE3i nhu\u1EADn & Thua l\u1ED7: ").concat(fmtNum$1(stats.openPL, precision), ", S.Lg: ").concat(stats.qty);
 }
 function formatEntryLabelLine2(stats, compact) {
     if (compact)
@@ -6394,9 +6403,9 @@ function formatEntryLabelLine2(stats, compact) {
 }
 function formatSlLabel(stats, compact, precision) {
     if (compact) {
-        return "".concat(fmtNum(stats.slDiff, precision), " (").concat(fmtPct(stats.slPct), "%) ").concat(fmtNum(stats.amountStop, precision));
+        return "".concat(fmtNum$1(stats.slDiff, precision), " (").concat(fmtPct(stats.slPct), "%) ").concat(fmtNum$1(stats.amountStop, precision));
     }
-    return "D\u1EEBng: ".concat(fmtNum(stats.slDiff, precision), " (").concat(fmtPct(stats.slPct), "%) ").concat(stats.slTicks, ", S\u1ED1 ti\u1EC1n: ").concat(fmtNum(stats.amountStop, precision));
+    return "D\u1EEBng: ".concat(fmtNum$1(stats.slDiff, precision), " (").concat(fmtPct(stats.slPct), "%) ").concat(stats.slTicks, ", S\u1ED1 ti\u1EC1n: ").concat(fmtNum$1(stats.amountStop, precision));
 }
 
 /**
@@ -7123,7 +7132,7 @@ function buildCurveHitbox(c1, cp, c2, halfWidth, samples) {
  * If the input already looks like rgba(), it is returned unchanged.
  * If alpha is 1 the original hex is returned (canvas accepts it directly).
  */
-function alpha(hex, a) {
+function alpha$1(hex, a) {
     var clamp = Math.max(0, Math.min(1, a));
     if (hex.startsWith('rgba') || hex.startsWith('rgb('))
         return hex;
@@ -7267,7 +7276,7 @@ var forecast = {
         var figures = [];
         // ─── 1. Bezier curve (visual, no events) ───
         var cp = computeBezierControlPoint(c1, c2);
-        var lineColorAlpha = alpha(ext.lineColor, ext.lineOpacity);
+        var lineColorAlpha = alpha$1(ext.lineColor, ext.lineOpacity);
         figures.push({
             key: 'fc_curve',
             type: 'path',
@@ -7310,8 +7319,8 @@ var forecast = {
             attrs: { x: p1PillX, y: p1PillY, width: p1PillW, height: p1PillH },
             styles: {
                 style: 'stroke_fill',
-                color: alpha(ext.sourceBgColor, ext.sourceBgOpacity),
-                borderColor: alpha(ext.sourceBorderColor, ext.sourceBorderOpacity),
+                color: alpha$1(ext.sourceBgColor, ext.sourceBgOpacity),
+                borderColor: alpha$1(ext.sourceBorderColor, ext.sourceBorderOpacity),
                 borderSize: 1,
                 borderRadius: PILL_BORDER_RADIUS
             },
@@ -7331,7 +7340,7 @@ var forecast = {
                 baseline: 'middle'
             },
             styles: {
-                color: alpha(ext.sourceTextColor, ext.sourceTextOpacity),
+                color: alpha$1(ext.sourceTextColor, ext.sourceTextOpacity),
                 size: PILL_FONT_SIZE,
                 backgroundColor: 'transparent'
             },
@@ -7348,7 +7357,7 @@ var forecast = {
                 baseline: 'middle'
             },
             styles: {
-                color: alpha(ext.sourceTextColor, ext.sourceTextOpacity),
+                color: alpha$1(ext.sourceTextColor, ext.sourceTextOpacity),
                 size: PILL_FONT_SIZE,
                 backgroundColor: 'transparent'
             },
@@ -7387,8 +7396,8 @@ var forecast = {
             attrs: { x: p2PillX, y: p2PillY, width: p2PillW, height: p2PillH },
             styles: {
                 style: 'stroke_fill',
-                color: alpha(ext.targetBgColor, ext.targetBgOpacity),
-                borderColor: alpha(ext.targetBorderColor, ext.targetBorderOpacity),
+                color: alpha$1(ext.targetBgColor, ext.targetBgOpacity),
+                borderColor: alpha$1(ext.targetBorderColor, ext.targetBorderOpacity),
                 borderSize: 1,
                 borderRadius: PILL_BORDER_RADIUS
             },
@@ -7407,7 +7416,7 @@ var forecast = {
                 baseline: 'middle'
             },
             styles: {
-                color: alpha(ext.targetTextColor, ext.targetTextOpacity),
+                color: alpha$1(ext.targetTextColor, ext.targetTextOpacity),
                 size: PILL_FONT_SIZE,
                 backgroundColor: 'transparent'
             },
@@ -7424,7 +7433,7 @@ var forecast = {
                 baseline: 'middle'
             },
             styles: {
-                color: alpha(ext.targetTextColor, ext.targetTextOpacity),
+                color: alpha$1(ext.targetTextColor, ext.targetTextOpacity),
                 size: PILL_FONT_SIZE,
                 backgroundColor: 'transparent'
             },
@@ -7454,7 +7463,7 @@ var forecast = {
                 attrs: { x: badgeX, y: badgeY, width: badgeW, height: badgeH },
                 styles: {
                     style: 'fill',
-                    color: alpha(badgeBgHex, badgeBgOpacity),
+                    color: alpha$1(badgeBgHex, badgeBgOpacity),
                     borderRadius: PILL_BORDER_RADIUS
                 },
                 ignoreEvent: false,
@@ -7471,7 +7480,7 @@ var forecast = {
                     baseline: 'middle'
                 },
                 styles: {
-                    color: alpha(badgeTextHex, badgeTextOpacity),
+                    color: alpha$1(badgeTextHex, badgeTextOpacity),
                     size: BADGE_FONT_SIZE,
                     backgroundColor: 'transparent'
                 },
@@ -7617,7 +7626,7 @@ var forecast = {
                 attrs: { x: stripLeftX, y: 0, width: stripWidthX, height: bounding.height },
                 styles: {
                     style: 'fill',
-                    color: alpha(AXIS_STRIP_COLOR, AXIS_STRIP_OPACITY)
+                    color: alpha$1(AXIS_STRIP_COLOR, AXIS_STRIP_OPACITY)
                 },
                 ignoreEvent: true
             });
@@ -7634,8 +7643,8 @@ var forecast = {
                     baseline: 'top'
                 },
                 styles: {
-                    color: alpha(ext.sourceTextColor, ext.sourceTextOpacity),
-                    backgroundColor: alpha(ext.sourceBgColor, ext.sourceBgOpacity),
+                    color: alpha$1(ext.sourceTextColor, ext.sourceTextOpacity),
+                    backgroundColor: alpha$1(ext.sourceBgColor, ext.sourceBgOpacity),
                     paddingLeft: XAXIS_PILL_PADDING_H,
                     paddingRight: XAXIS_PILL_PADDING_H,
                     paddingTop: XAXIS_PILL_PADDING_V,
@@ -7658,8 +7667,8 @@ var forecast = {
                     baseline: 'top'
                 },
                 styles: {
-                    color: alpha(ext.targetTextColor, ext.targetTextOpacity),
-                    backgroundColor: alpha(ext.targetBgColor, ext.targetBgOpacity),
+                    color: alpha$1(ext.targetTextColor, ext.targetTextOpacity),
+                    backgroundColor: alpha$1(ext.targetBgColor, ext.targetBgOpacity),
                     paddingLeft: XAXIS_PILL_PADDING_H,
                     paddingRight: XAXIS_PILL_PADDING_H,
                     paddingTop: XAXIS_PILL_PADDING_V,
@@ -7705,7 +7714,7 @@ var forecast = {
                 attrs: { x: 0, y: stripTopY, width: bounding.width, height: stripHeightY },
                 styles: {
                     style: 'fill',
-                    color: alpha(AXIS_STRIP_COLOR, AXIS_STRIP_OPACITY)
+                    color: alpha$1(AXIS_STRIP_COLOR, AXIS_STRIP_OPACITY)
                 },
                 ignoreEvent: true
             });
@@ -7722,8 +7731,8 @@ var forecast = {
                     baseline: 'middle'
                 },
                 styles: {
-                    color: alpha(ext.sourceTextColor, ext.sourceTextOpacity),
-                    backgroundColor: alpha(ext.sourceBgColor, ext.sourceBgOpacity),
+                    color: alpha$1(ext.sourceTextColor, ext.sourceTextOpacity),
+                    backgroundColor: alpha$1(ext.sourceBgColor, ext.sourceBgOpacity),
                     paddingLeft: 4,
                     paddingRight: 4,
                     paddingTop: 2,
@@ -7746,8 +7755,8 @@ var forecast = {
                     baseline: 'middle'
                 },
                 styles: {
-                    color: alpha(ext.targetTextColor, ext.targetTextOpacity),
-                    backgroundColor: alpha(ext.targetBgColor, ext.targetBgOpacity),
+                    color: alpha$1(ext.targetTextColor, ext.targetTextOpacity),
+                    backgroundColor: alpha$1(ext.targetBgColor, ext.targetBgOpacity),
                     paddingLeft: 4,
                     paddingRight: 4,
                     paddingTop: 2,
@@ -8981,7 +8990,7 @@ var extensions$2 = [
     fibonacciLine, horizontalRayLine, horizontalSegment, horizontalStraightLine,
     parallelStraightLine, priceChannelLine, priceLine, rayLine, segment,
     straightLine, verticalRayLine, verticalSegment, verticalStraightLine,
-    simpleAnnotation, simpleTag, vpfr, rect$1, circle$1, longPosition, shortPosition,
+    simpleAnnotation, simpleTag$1, vpfr, rect$1, circle$1, longPosition, shortPosition,
     forecast, regressionTrend, ellipse
 ];
 extensions$2.forEach(function (template) {
@@ -9864,21 +9873,21 @@ function buildCatalog() {
                     id: 'fibonacci',
                     items: [
                         item('fibRetracement', 'fibonacciLine', 'Fib Retracement', 'fibRetracement', caps({ anchorCount: 2 }), FIB_RECIPE, { hotkey: 'F' }),
-                        item('fibTimeZone', 'fibTimeZone', 'Fib Time Zone', 'fibTimeZone', caps({ anchorCount: 2 }), FIB_RECIPE, { available: false }),
-                        item('fibChannel', 'fibChannel', 'Fib Channel', 'parallelChannel', caps({ anchorCount: 3 }), FIB_RECIPE, { available: false }),
-                        item('fibCircles', 'fibCircles', 'Fib Circles', 'circle', caps({ anchorCount: 2 }), FIB_RECIPE, { available: false }),
-                        item('fibSpeedFan', 'fibSpeedFan', 'Fib Speed Resistance Fan', 'trendLine', caps({ anchorCount: 2 }), FIB_RECIPE, { available: false }),
-                        item('fibSpeedArcs', 'fibSpeedArcs', 'Fib Speed Resistance Arcs', 'arc', caps({ anchorCount: 2 }), FIB_RECIPE, { available: false }),
-                        item('fibSpiral', 'fibSpiral', 'Fib Spiral', 'arc', caps({ anchorCount: 2 }), FIB_RECIPE, { available: false }),
-                        item('fibWedge', 'fibWedge', 'Fib Wedge', 'triangle', caps({ anchorCount: 3 }), FIB_RECIPE, { available: false }),
-                        item('fibExtension', 'fibExtension', 'Trend-Based Fib Extension', 'fibRetracement', caps({ anchorCount: 3 }), FIB_RECIPE, { available: false }),
-                        item('fibTimeExtension', 'fibTimeExtension', 'Trend-Based Fib Time', 'fibTimeZone', caps({ anchorCount: 3 }), FIB_RECIPE, { available: false })
+                        item('fibTimeZone', 'fibTimeZone', 'Fib Time Zone', 'fibTimeZone', caps({ anchorCount: 2 }), FIB_RECIPE),
+                        item('fibChannel', 'fibChannel', 'Fib Channel', 'parallelChannel', caps({ anchorCount: 3 }), FIB_RECIPE),
+                        item('fibCircles', 'fibCircles', 'Fib Circles', 'circle', caps({ anchorCount: 2 }), FIB_RECIPE),
+                        item('fibSpeedFan', 'fibSpeedFan', 'Fib Speed Resistance Fan', 'trendLine', caps({ anchorCount: 2 }), FIB_RECIPE),
+                        item('fibSpeedArcs', 'fibSpeedArcs', 'Fib Speed Resistance Arcs', 'arc', caps({ anchorCount: 2 }), FIB_RECIPE),
+                        item('fibSpiral', 'fibSpiral', 'Fib Spiral', 'arc', caps({ anchorCount: 2 }), FIB_RECIPE),
+                        item('fibWedge', 'fibWedge', 'Fib Wedge', 'triangle', caps({ anchorCount: 3 }), FIB_RECIPE),
+                        item('fibExtension', 'fibExtension', 'Trend-Based Fib Extension', 'fibRetracement', caps({ anchorCount: 3 }), FIB_RECIPE),
+                        item('fibTimeExtension', 'fibTimeExtension', 'Trend-Based Fib Time', 'fibTimeZone', caps({ anchorCount: 3 }), FIB_RECIPE)
                     ]
                 },
                 {
                     id: 'gann',
                     items: [
-                        item('gannFan', 'gannFan', 'Gann Fan', 'trendLine', caps({ anchorCount: 2 }), FIB_RECIPE, { available: false }),
+                        item('gannFan', 'gannFan', 'Gann Fan', 'trendLine', caps({ anchorCount: 2 }), FIB_RECIPE),
                         item('gannBox', 'gannBox', 'Gann Box', 'rect', caps({ anchorCount: 2 }), FIB_RECIPE, { available: false }),
                         item('gannSquare', 'gannSquare', 'Gann Square', 'rect', caps({ anchorCount: 2 }), FIB_RECIPE, { available: false }),
                         item('gannFixed', 'gannFixed', 'Gann Square Fixed', 'rect', caps({ anchorCount: 2 }), FIB_RECIPE, { available: false }),
@@ -9938,10 +9947,10 @@ function buildCatalog() {
                 {
                     id: 'measurers',
                     items: [
-                        item('measure', 'measure', 'Measure', 'measure', caps({ anchorCount: 2, snap45: false }), MEASURE_RECIPE, { available: false }),
-                        item('dateRange', 'dateRange', 'Date Range', 'dateRange', caps({ anchorCount: 2 }), MEASURE_RECIPE, { available: false }),
-                        item('priceRange', 'priceRange', 'Price Range', 'priceRange', caps({ anchorCount: 2 }), MEASURE_RECIPE, { available: false }),
-                        item('dateAndPriceRange', 'dateAndPriceRange', 'Date and Price Range', 'dateRange', caps({ anchorCount: 2 }), MEASURE_RECIPE, { available: false }),
+                        item('measure', 'measure', 'Measure', 'measure', caps({ anchorCount: 2, snap45: false }), MEASURE_RECIPE),
+                        item('dateRange', 'dateRange', 'Date Range', 'dateRange', caps({ anchorCount: 2 }), MEASURE_RECIPE),
+                        item('priceRange', 'priceRange', 'Price Range', 'priceRange', caps({ anchorCount: 2 }), MEASURE_RECIPE),
+                        item('dateAndPriceRange', 'dateAndPriceRange', 'Date and Price Range', 'dateRange', caps({ anchorCount: 2 }), MEASURE_RECIPE),
                         item('longPosition', 'longPosition', 'Long Position', 'longPosition', caps({ anchorCount: 1 }), MEASURE_RECIPE),
                         item('shortPosition', 'shortPosition', 'Short Position', 'shortPosition', caps({ anchorCount: 1 }), MEASURE_RECIPE)
                     ]
@@ -9995,21 +10004,21 @@ function buildCatalog() {
                     id: 'text-notes',
                     items: [
                         item('text', 'text', 'Text', 'text', caps({ anchorCount: 1, hasText: true, multiline: true, snap45: false }), TEXT_RECIPE, { hotkey: 'X' }),
-                        item('anchoredText', 'anchoredText', 'Anchored Text', 'anchoredText', caps({ anchorCount: 1, hasText: true, multiline: true, snap45: false }), TEXT_RECIPE, { available: false }),
+                        item('anchoredText', 'anchoredText', 'Anchored Text', 'anchoredText', caps({ anchorCount: 1, hasText: true, multiline: true, snap45: false }), TEXT_RECIPE),
                         item('note', 'simpleTag', 'Note', 'note', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE),
-                        item('anchoredNote', 'anchoredNote', 'Anchored Note', 'note', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE, { available: false }),
-                        item('signpost', 'signpost', 'Signpost', 'flag', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE, { available: false }),
-                        item('comment', 'comment', 'Comment', 'comment', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE, { available: false })
+                        item('anchoredNote', 'anchoredNote', 'Anchored Note', 'note', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE),
+                        item('signpost', 'signpost', 'Signpost', 'flag', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE),
+                        item('comment', 'comment', 'Comment', 'comment', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE)
                     ]
                 },
                 {
                     id: 'content',
                     items: [
-                        item('callout', 'callout', 'Callout', 'callout', caps({ anchorCount: 2, hasText: true, multiline: true, snap45: false }), TEXT_RECIPE, { available: false }),
-                        item('priceLabel', 'priceLabel', 'Price Label', 'priceLabel', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE, { available: false }),
+                        item('callout', 'callout', 'Callout', 'callout', caps({ anchorCount: 2, hasText: true, multiline: true, snap45: false }), TEXT_RECIPE),
+                        item('priceLabel', 'priceLabel', 'Price Label', 'priceLabel', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE),
                         item('priceNote', 'simpleAnnotation', 'Price Note', 'priceLabel', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE),
-                        item('flag', 'flagMark', 'Flag Mark', 'flag', caps({ anchorCount: 1, snap45: false }), TEXT_RECIPE, { available: false }),
-                        item('table', 'table', 'Table', 'note', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE, { available: false })
+                        item('flag', 'flagMark', 'Flag Mark', 'flag', caps({ anchorCount: 1, snap45: false }), TEXT_RECIPE),
+                        item('table', 'table', 'Table', 'note', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE)
                     ]
                 }
             ]
@@ -10054,16 +10063,17 @@ function findCatalogItem(id) {
     }
     return null;
 }
-/** Find a catalog item by kernel overlay name — reverse lookup for `list()`. */
-function findCatalogItemByOverlay(overlayName) {
+/** Find a catalog item by keyboard hotkey — TradingView bare-letter shortcuts. */
+function findCatalogItemByHotkey(key) {
     var e_3, _a, e_4, _b;
+    var needle = key.toLowerCase();
     try {
         for (var _c = __values(getDrawingCatalog()), _d = _c.next(); !_d.done; _d = _c.next()) {
             var group = _d.value;
             try {
                 for (var _e = (e_4 = void 0, __values(group.sections)), _f = _e.next(); !_f.done; _f = _e.next()) {
                     var section = _f.value;
-                    var found = section.items.find(function (i) { return i.overlayName === overlayName; });
+                    var found = section.items.find(function (i) { var _a, _b; return ((_a = i.hotkey) === null || _a === void 0 ? void 0 : _a.toLowerCase()) === needle && i.available && !((_b = i.nonTool) !== null && _b !== void 0 ? _b : false); });
                     if (found != null)
                         return found;
                 }
@@ -10083,6 +10093,38 @@ function findCatalogItemByOverlay(overlayName) {
             if (_d && !_d.done && (_a = _c.return)) _a.call(_c);
         }
         finally { if (e_3) throw e_3.error; }
+    }
+    return null;
+}
+/** Find a catalog item by kernel overlay name — reverse lookup for `list()`. */
+function findCatalogItemByOverlay(overlayName) {
+    var e_5, _a, e_6, _b;
+    try {
+        for (var _c = __values(getDrawingCatalog()), _d = _c.next(); !_d.done; _d = _c.next()) {
+            var group = _d.value;
+            try {
+                for (var _e = (e_6 = void 0, __values(group.sections)), _f = _e.next(); !_f.done; _f = _e.next()) {
+                    var section = _f.value;
+                    var found = section.items.find(function (i) { return i.overlayName === overlayName; });
+                    if (found != null)
+                        return found;
+                }
+            }
+            catch (e_6_1) { e_6 = { error: e_6_1 }; }
+            finally {
+                try {
+                    if (_f && !_f.done && (_b = _e.return)) _b.call(_e);
+                }
+                finally { if (e_6) throw e_6.error; }
+            }
+        }
+    }
+    catch (e_5_1) { e_5 = { error: e_5_1 }; }
+    finally {
+        try {
+            if (_d && !_d.done && (_a = _c.return)) _a.call(_c);
+        }
+        finally { if (e_5) throw e_5.error; }
     }
     return null;
 }
@@ -11952,6 +11994,12 @@ function bindDrawingKeyboard(handlers, options) {
             e.preventDefault();
             handlers.onDelete();
         }
+        else if (e.key.length === 1 && handlers.onHotkey !== undefined) {
+            // Tool hotkeys (T/H/V/F/X…) — TradingView activates tools on bare
+            // letters; editable targets were already filtered above so typing is
+            // never intercepted.
+            handlers.onHotkey(e.key.toLowerCase());
+        }
     };
     target.addEventListener('keydown', onKeyDown);
     return function () {
@@ -12070,6 +12118,14 @@ function createDrawingsApi(chart, options) {
                     var create = serializedToOverlayCreate(clipboard);
                     delete create.id;
                     manager.create(create);
+                }
+            },
+            onHotkey: function (key) {
+                // TradingView bare-letter tool shortcuts — only activate tools the
+                // catalog marks available (unimplemented entries stay inert).
+                var item = findCatalogItemByHotkey(key);
+                if (item !== null) {
+                    manager.activate(item.overlayName);
                 }
             }
         });
@@ -12498,7 +12554,7 @@ function round(value, precision) {
  * @param value
  * @return {number|number}
  */
-function getPrecision(value) {
+function getPrecision$1(value) {
     var str = value.toString();
     var eIndex = str.indexOf('e');
     if (eIndex > 0) {
@@ -16462,7 +16518,7 @@ function lineStyleToDash(style) {
         default: return [];
     }
 }
-function formatVolume(vol) {
+function formatVolume$1(vol) {
     if (vol >= 1e9)
         return "".concat((vol / 1e9).toFixed(2), "B");
     if (vol >= 1e6)
@@ -16595,7 +16651,7 @@ function drawVPVR(ctx, profile, settings, bounding, yAxis) {
                 var rowTopY = yAxis.convertToPixel(row.high);
                 var rowBottomY = yAxis.convertToPixel(row.low);
                 var midY = (rowTopY + rowBottomY) / 2;
-                var text = formatVolume(row.totalVol);
+                var text = formatVolume$1(row.totalVol);
                 var relativeWidth = row.totalVol / profile.maxRowVolume;
                 var barWidth = relativeWidth * maxWidth;
                 if (settings.placement === 'right') {
@@ -20694,7 +20750,7 @@ var styles = {
 function registerStyles(name, ss) {
     styles[name] = ss;
 }
-function getStyles(name) {
+function getStyles$1(name) {
     var _a;
     return (_a = styles[name]) !== null && _a !== void 0 ? _a : null;
 }
@@ -20966,7 +21022,7 @@ var StoreImp = /** @class */ (function () {
         var _a, _b, _c, _d, _e, _f;
         var styles = null;
         if (isString(value)) {
-            styles = getStyles(value);
+            styles = getStyles$1(value);
         }
         else {
             styles = value;
@@ -22061,7 +22117,13 @@ var StoreImp = /** @class */ (function () {
                 };
             }
             if (_this._clickOverlayInfo.overlay === overlay) {
-                _this.selectOverlay(null);
+                // A throwing onDeselected hook must not abort the removal loop —
+                // same isolation as onRemoved above; otherwise this overlay stays
+                // in _overlays after its 'remove' bookkeeping and strands zombies.
+                try {
+                    _this.selectOverlay(null);
+                }
+                catch (_e) { }
             }
             var index = paneOverlays.findIndex(function (o) { return o.id === overlay.id; });
             if (index === -1) {
@@ -22069,8 +22131,8 @@ var StoreImp = /** @class */ (function () {
                     // overlay.paneId may have drifted from the map key (host-side field
                     // mutation) — fall back to an identity scan so the splice never misses
                     // while 'remove' still emits.
-                    for (var _e = __values(_this._overlays), _f = _e.next(); !_f.done; _f = _e.next()) {
-                        var item = _f.value;
+                    for (var _f = __values(_this._overlays), _g = _f.next(); !_g.done; _g = _f.next()) {
+                        var item = _g.value;
                         var list = item[1];
                         var i = list.indexOf(overlay);
                         if (i > -1) {
@@ -22089,7 +22151,7 @@ var StoreImp = /** @class */ (function () {
                 catch (e_1_1) { e_1 = { error: e_1_1 }; }
                 finally {
                     try {
-                        if (_f && !_f.done && (_a = _e.return)) _a.call(_e);
+                        if (_g && !_g.done && (_a = _f.return)) _a.call(_f);
                     }
                     finally { if (e_1) throw e_1.error; }
                 }
@@ -22136,9 +22198,13 @@ var StoreImp = /** @class */ (function () {
                     }
                 }
                 if (infoOverlay !== null) {
-                    infoOverlay.setPrevZLevel(infoOverlay.zLevel);
-                    infoOverlay.override({ zLevel: Number.MAX_SAFE_INTEGER });
-                    sortFlag = true;
+                    // In-progress overlays keep their zLevel — a mid-draw hover must
+                    // not re-sort the pending drawing to the top of the stack.
+                    if (!infoOverlay.isDrawing()) {
+                        infoOverlay.setPrevZLevel(infoOverlay.zLevel);
+                        infoOverlay.override({ zLevel: Number.MAX_SAFE_INTEGER });
+                        sortFlag = true;
+                    }
                     if (processOnMouseEnterEvent(infoOverlay, info.figure)) {
                         ignoreUpdateFlag = true;
                     }
@@ -22256,6 +22322,13 @@ var StoreImp = /** @class */ (function () {
             }
             catch (_a) { }
         }
+        // Drop the remaining interaction slots — a pressed/hovered/selected
+        // overlay referencing a destroyed chart must not linger for the next
+        // gesture to pick up.
+        var emptyInfo = { paneId: '', overlay: null, figureType: 'none', figureIndex: -1, figure: null };
+        this._pressedOverlayInfo = __assign({}, emptyInfo);
+        this._hoverOverlayInfo = __assign({}, emptyInfo);
+        this._clickOverlayInfo = __assign({}, emptyInfo);
         this._clearData();
         this._clearLastPriceMarkExtendTextUpdateTimer();
         this._taskScheduler.clear();
@@ -24499,6 +24572,9 @@ var OverlayView = /** @class */ (function (_super) {
     __extends(OverlayView, _super);
     function OverlayView(widget) {
         var _this = _super.call(this, widget) || this;
+        /** Pointer type of the last event routed to this view — touch vs mouse
+         *  decides anchor hit-target size in figure params. */
+        _this._lastIsTouch = false;
         _this._initEvent();
         return _this;
     }
@@ -24525,12 +24601,12 @@ var OverlayView = /** @class */ (function (_super) {
             if (progressOverlayInfo !== null) {
                 var overlay = progressOverlayInfo.overlay;
                 var progressOverlayPaneId = progressOverlayInfo.paneId;
-                if (overlay.isStart()) {
+                if (overlay.isStart() && _this._canDrawPoints()) {
                     chartStore.updateProgressOverlayInfo(paneId);
                     progressOverlayPaneId = paneId;
                 }
                 var index = overlay.points.length - 1;
-                if (overlay.isDrawing() && progressOverlayPaneId === paneId) {
+                if (overlay.isDrawing() && progressOverlayPaneId === paneId && _this._canDrawPoints()) {
                     overlay.eventMoveForDrawing(_this._coordinateToPoint(overlay, event), event);
                     (_a = overlay.onDrawing) === null || _a === void 0 ? void 0 : _a.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
                     chartStore.executeAction('onOverlayChange', { type: 'progress', overlay: overlay });
@@ -24552,12 +24628,12 @@ var OverlayView = /** @class */ (function (_super) {
             if (progressOverlayInfo !== null) {
                 var overlay = progressOverlayInfo.overlay;
                 var progressOverlayPaneId = progressOverlayInfo.paneId;
-                if (overlay.isStart()) {
+                if (overlay.isStart() && _this._canDrawPoints()) {
                     chartStore.updateProgressOverlayInfo(paneId, true);
                     progressOverlayPaneId = paneId;
                 }
                 var index = overlay.points.length - 1;
-                if (overlay.isDrawing() && progressOverlayPaneId === paneId) {
+                if (overlay.isDrawing() && progressOverlayPaneId === paneId && _this._canDrawPoints()) {
                     overlay.eventMoveForDrawing(_this._coordinateToPoint(overlay, event), event);
                     (_a = overlay.onDrawing) === null || _a === void 0 ? void 0 : _a.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
                     overlay.nextStep();
@@ -24587,7 +24663,7 @@ var OverlayView = /** @class */ (function (_super) {
             if (progressOverlayInfo !== null) {
                 var overlay = progressOverlayInfo.overlay;
                 var progressOverlayPaneId = progressOverlayInfo.paneId;
-                if (overlay.isDrawing() && progressOverlayPaneId === paneId) {
+                if (overlay.isDrawing() && progressOverlayPaneId === paneId && _this._canDrawPoints()) {
                     overlay.forceComplete();
                     // TradingView semantics: a force-completed drawing that never
                     // collected its minimum points is CANCELLED, not committed —
@@ -24619,7 +24695,7 @@ var OverlayView = /** @class */ (function (_super) {
             var progressOverlayInfo = chartStore.getProgressOverlayInfo();
             if (progressOverlayInfo !== null) {
                 var overlay = progressOverlayInfo.overlay;
-                if (overlay.isDrawing()) {
+                if (overlay.isDrawing() && _this._canDrawPoints()) {
                     var index = overlay.points.length - 1;
                     return _this._figureMouseRightClickEvent(overlay, 'point', index, {
                         key: "".concat(OVERLAY_FIGURE_KEY_PREFIX, "point_").concat(index),
@@ -24902,6 +24978,16 @@ var OverlayView = /** @class */ (function (_super) {
                 }
                 return false;
             }
+            // A hook that removes its own overlay and returns normally leaves no
+            // exception to catch — verify the overlay still exists before arming
+            // the pressed slot, or subsequent moves mutate a dead overlay and its
+            // 'progress' events resurrect it on sync mirrors.
+            if (chartStore.getOverlayById(dragOverlay.id) === null) {
+                if (dragOverlay !== overlay) {
+                    chartStore.removeOverlay({ id: dragOverlay.id });
+                }
+                return false;
+            }
             chartStore.setPressedOverlayInfo({ paneId: paneId, overlay: dragOverlay, figureType: figureType, figureIndex: figureIndex, figure: figure });
             // Gesture commit boundary — everything between editStart/editEnd is
             // one undo/persistence unit (drag gestures emit many 'progress').
@@ -25036,7 +25122,19 @@ var OverlayView = /** @class */ (function (_super) {
     OverlayView.prototype.coordinateToPointTimestampDataIndexFlag = function () {
         return true;
     };
+    /**
+     * Axis widgets share the draw pane's paneId but convert only half a
+     * point — a y-axis click would commit a value-only point (timestamp
+     * dropped) and an x-axis click would re-appoint the in-progress drawing
+     * to 'x_axis_pane' and wedge it. Every drawing-progress mutation
+     * (re-appoint, point write, nextStep, forceComplete, 'progress' emit)
+     * must be gated on a full conversion.
+     */
+    OverlayView.prototype._canDrawPoints = function () {
+        return this.coordinateToPointValueFlag() && this.coordinateToPointTimestampDataIndexFlag();
+    };
     OverlayView.prototype.dispatchEvent = function (name, event) {
+        this._lastIsTouch = event.isTouch === true;
         if (this.getWidget().getPane().getChart().getChartStore().isOverlayDrawing()) {
             return this.onEvent(name, event);
         }
@@ -25148,7 +25246,8 @@ var OverlayView = /** @class */ (function (_super) {
             isHovered: ((_c = hoverInfo.overlay) === null || _c === void 0 ? void 0 : _c.id) === o.id && hoverInfo.figureType !== 'none',
             hoveredFigureKey: ((_d = hoverInfo.overlay) === null || _d === void 0 ? void 0 : _d.id) === o.id && hoverInfo.figureType !== 'none'
                 ? (_e = hoverInfo.figure) === null || _e === void 0 ? void 0 : _e.key
-                : undefined
+                : undefined,
+            isTouch: this._lastIsTouch
         })) !== null && _f !== void 0 ? _f : [];
     };
     OverlayView.prototype.drawDefaultFigures = function (ctx, overlay, coordinates) {
@@ -26936,7 +27035,7 @@ var OverlayYAxisView = /** @class */ (function (_super) {
         var yAxis = pane.getAxisComponent();
         var xAxis = chart.getXAxisPane().getAxisComponent();
         var bounding = widget.getBounding();
-        return (_b = (_a = overlay.createYAxisFigures) === null || _a === void 0 ? void 0 : _a.call(overlay, { chart: chart, overlay: overlay, coordinates: coordinates, bounding: bounding, xAxis: xAxis, yAxis: yAxis })) !== null && _b !== void 0 ? _b : [];
+        return (_b = (_a = overlay.createYAxisFigures) === null || _a === void 0 ? void 0 : _a.call(overlay, { chart: chart, overlay: overlay, coordinates: coordinates, bounding: bounding, xAxis: xAxis, yAxis: yAxis, isTouch: this._lastIsTouch })) !== null && _b !== void 0 ? _b : [];
     };
     return OverlayYAxisView;
 }(OverlayView));
@@ -27483,7 +27582,7 @@ var YAxisImp = /** @class */ (function (_super) {
         var ticks = [];
         if (displayRange >= 0) {
             var interval = nice(displayRange / TICK_COUNT);
-            var precision_1 = getPrecision(interval);
+            var precision_1 = getPrecision$1(interval);
             var first = round(Math.ceil(displayFrom / interval) * interval, precision_1);
             var last = round(Math.floor(displayTo / interval) * interval, precision_1);
             var n = 0;
@@ -28190,7 +28289,7 @@ var OverlayXAxisView = /** @class */ (function (_super) {
         var yAxis = pane.getAxisComponent();
         var xAxis = chart.getXAxisPane().getAxisComponent();
         var bounding = widget.getBounding();
-        return (_b = (_a = o.createXAxisFigures) === null || _a === void 0 ? void 0 : _a.call(o, { chart: chart, overlay: o, coordinates: coordinates, bounding: bounding, xAxis: xAxis, yAxis: yAxis })) !== null && _b !== void 0 ? _b : [];
+        return (_b = (_a = o.createXAxisFigures) === null || _a === void 0 ? void 0 : _a.call(o, { chart: chart, overlay: o, coordinates: coordinates, bounding: bounding, xAxis: xAxis, yAxis: yAxis, isTouch: this._lastIsTouch })) !== null && _b !== void 0 ? _b : [];
     };
     return OverlayXAxisView;
 }(OverlayYAxisView));
@@ -29220,10 +29319,23 @@ var EventHandlerImp = /** @class */ (function () {
      * never synthesize tap/click from an interruption.
      */
     EventHandlerImp.prototype._touchCancelHandler = function (touchCancelEvent) {
-        var _a;
+        if (this._activeTouchId === null) {
+            return;
+        }
         var touch = this._touchWithId(touchCancelEvent.changedTouches, this._activeTouchId);
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- ignore
-        touch !== null && touch !== void 0 ? touch : (touch = (_a = touchCancelEvent.changedTouches[0]) !== null && _a !== void 0 ? _a : null);
+        if (touch === null) {
+            if (touchCancelEvent.touches.length > 0) {
+                // The cancel targets a different, untracked touch while our tracked
+                // gesture is still live — leave the gesture alone entirely.
+                return;
+            }
+            // We missed the tracked touch's end — release at whatever changed last
+            // so the gesture still closes (mirrors _touchEndHandler's fallback).
+            touch = touchCancelEvent.changedTouches.length > 0 ? touchCancelEvent.changedTouches[0] : null;
+        }
+        if (touch === null) {
+            return;
+        }
         this._activeTouchId = null;
         this._lastTouchEventTimeStamp = this._eventTimeStamp(touchCancelEvent);
         this._clearLongTapTimeout();
@@ -29233,10 +29345,7 @@ var EventHandlerImp = /** @class */ (function () {
             this._unsubscribeRootTouchEvents();
             this._unsubscribeRootTouchEvents = null;
         }
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- changedTouches[0] can be undefined at runtime
-        if (touch !== null) {
-            this._processEvent(this._makeCompatEvent(touchCancelEvent, touch), this._handler.touchEndEvent);
-        }
+        this._processEvent(this._makeCompatEvent(touchCancelEvent, touch), this._handler.touchEndEvent);
     };
     EventHandlerImp.prototype._clearLongTapTimeout = function () {
         if (this._longTapTimeoutId === null) {
@@ -29947,15 +30056,7 @@ var Event = /** @class */ (function () {
     };
     Event.prototype.mouseUpEvent = function (e) {
         var widget = this._findWidgetByEvent(e).widget;
-        // Released outside every pane/widget — still deliver the mouseup to the
-        // widget the gesture started on, or pressed overlay state (freehand
-        // stroke, figure drag editStart/editEnd pair) dangles forever. A pressed
-        // overlay ALWAYS releases on its owning widget — separators and axis
-        // widgets under the pointer have no overlay view to close the gesture.
-        var pressedOverlay = this._chart.getChartStore().getPressedOverlayInfo().overlay;
-        var target = pressedOverlay !== null && this._mouseDownWidget !== null
-            ? this._mouseDownWidget
-            : widget !== null && widget !== void 0 ? widget : this._mouseDownWidget;
+        var target = this._releaseTarget(widget);
         var consumed = false;
         if (target !== null) {
             var event_4 = this._makeWidgetEvent(e, target);
@@ -30162,20 +30263,20 @@ var Event = /** @class */ (function () {
     Event.prototype.touchEndEvent = function (e) {
         var _this = this;
         var widget = this._findWidgetByEvent(e).widget;
-        // Same fallback as mouseUpEvent — touchend off-chart must still close
-        // the gesture on the widget it started on; a pressed overlay always
-        // releases on its owning widget (separators/axes have no overlay view).
-        var pressedOverlay = this._chart.getChartStore().getPressedOverlayInfo().overlay;
-        var target = pressedOverlay !== null && this._mouseDownWidget !== null
-            ? this._mouseDownWidget
-            : widget !== null && widget !== void 0 ? widget : this._mouseDownWidget;
+        // Same release routing as mouseUpEvent — touchend off-chart must still
+        // close the gesture on a widget that can see the pressed overlay.
+        var target = this._releaseTarget(widget);
         var consumed = false;
         if (target !== null) {
             var event_10 = this._makeWidgetEvent(e, target);
             var name_9 = target.getName();
             switch (name_9) {
                 case WidgetNameConstants.MAIN: {
-                    target.dispatchEvent('mouseUpEvent', event_10);
+                    // Repaint when the release is consumed — the freehand tail point /
+                    // gesture commit written here must invalidate like the mouse path.
+                    if (target.dispatchEvent('mouseUpEvent', event_10)) {
+                        this._chart.updatePane(1 /* UpdateLevel.Overlay */);
+                    }
                     if (this._startScrollCoordinate !== null) {
                         var time = new Date().getTime() - this._flingStartTime;
                         var distance = event_10.x - this._startScrollCoordinate.x;
@@ -30420,6 +30521,26 @@ var Event = /** @class */ (function () {
             this._chart.updatePane(1 /* UpdateLevel.Overlay */);
         }
         return consumed;
+    };
+    /**
+     * The widget a pointer release should be delivered to. A pressed overlay
+     * always releases on a widget that can see overlay views — a gesture that
+     * began on a separator (which hosts none) would strand the pressed slot, so
+     * route to the pressed pane's main widget instead. Without a pressed
+     * overlay the release goes to the widget under the pointer, falling back
+     * to where the gesture started so off-chart releases still close gestures.
+     */
+    Event.prototype._releaseTarget = function (widget) {
+        var _a, _b, _c;
+        var pressedInfo = this._chart.getChartStore().getPressedOverlayInfo();
+        if (pressedInfo.overlay !== null) {
+            if (this._mouseDownWidget !== null &&
+                this._mouseDownWidget.getName() !== WidgetNameConstants.SEPARATOR) {
+                return this._mouseDownWidget;
+            }
+            return (_c = (_b = (_a = this._chart.getDrawPaneById(pressedInfo.paneId)) === null || _a === void 0 ? void 0 : _a.getMainWidget()) !== null && _b !== void 0 ? _b : this._mouseDownWidget) !== null && _c !== void 0 ? _c : widget;
+        }
+        return widget !== null && widget !== void 0 ? widget : this._mouseDownWidget;
     };
     Event.prototype._findWidgetByEvent = function (event) {
         var e_5, _a, e_6, _b;
@@ -33341,29 +33462,6 @@ var richText = {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-function getCommonState(overlay) {
-    var _a;
-    var ed = overlay.extendData;
-    return (_a = ed === null || ed === void 0 ? void 0 : ed.common) !== null && _a !== void 0 ? _a : {};
-}
-function isVisibleOnInterval(overlay, interval) {
-    var visibleIntervals = getCommonState(overlay).visibleIntervals;
-    return visibleIntervals === undefined || visibleIntervals.length === 0 || visibleIntervals.includes(interval);
-}
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 var ANCHOR_KEY_PREFIX = 'anchor_';
 var ANCHOR_MID_KEY = 'anchor_mid';
 /**
@@ -33511,98 +33609,6 @@ function computeResizeCursor(from, to) {
         case 2: return 'ns-resize';
         default: return 'nesw-resize';
     }
-}
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-var cache = new WeakMap();
-function coordsSignature(coordinates) {
-    var e_1, _a;
-    // Quarter-pixel rounding absorbs sub-pixel jitter from axis math without
-    // masking real moves.
-    var sig = '';
-    try {
-        for (var coordinates_1 = __values(coordinates), coordinates_1_1 = coordinates_1.next(); !coordinates_1_1.done; coordinates_1_1 = coordinates_1.next()) {
-            var c = coordinates_1_1.value;
-            sig += "".concat(Math.round(c.x * 4), ",").concat(Math.round(c.y * 4), ";");
-        }
-    }
-    catch (e_1_1) { e_1 = { error: e_1_1 }; }
-    finally {
-        try {
-            if (coordinates_1_1 && !coordinates_1_1.done && (_a = coordinates_1.return)) _a.call(coordinates_1);
-        }
-        finally { if (e_1) throw e_1.error; }
-    }
-    return sig;
-}
-/**
- * CONTRACT: the returned array is SHARED — the view and every subsequent
- * createFigures call see the same instance until the signature changes.
- * Templates must treat it as read-only (never push/splice/mutate figure
- * attrs on the result).
- */
-function withFigureCache(fn, options) {
-    return function (params) {
-        var _a, _b, _c;
-        var signature = coordsSignature(params.coordinates) +
-            "|r".concat(params.overlay.figuresRev) +
-            "|s".concat(params.isSelected === true ? 1 : 0, "h").concat(params.isHovered === true ? 1 : 0) +
-            "|l".concat(params.overlay.lock ? 1 : 0) +
-            "|b".concat(params.bounding.width, "x").concat(params.bounding.height) +
-            "|c".concat(params.overlay.currentStep) +
-            "|h".concat((_a = params.hoveredFigureKey) !== null && _a !== void 0 ? _a : '') +
-            "|k".concat((_c = (_b = options === null || options === void 0 ? void 0 : options.extraKey) === null || _b === void 0 ? void 0 : _b.call(options, params)) !== null && _c !== void 0 ? _c : '');
-        var entry = cache.get(params.overlay);
-        if (entry !== undefined && entry.signature === signature) {
-            return entry.figures;
-        }
-        var result = fn(params);
-        var figures = Array.isArray(result) ? result : [result];
-        cache.set(params.overlay, { signature: signature, figures: figures });
-        return figures;
-    };
-}
-function boundsOutside(bounds, bounding, margin) {
-    return (bounds.x + bounds.width < -margin ||
-        bounds.x > bounding.width + margin ||
-        bounds.y + bounds.height < -margin ||
-        bounds.y > bounding.height + margin);
-}
-/**
- * Drop figures that declare `bounds` fully outside the viewport. Figures
- * without bounds are always kept (opt-in per figure).
- */
-function withViewportCull(fn, options) {
-    var _a;
-    var margin = (_a = options === null || options === void 0 ? void 0 : options.margin) !== null && _a !== void 0 ? _a : 24;
-    return function (params) {
-        var result = fn(params);
-        var figures = Array.isArray(result) ? result : [result];
-        var bounding = params.bounding;
-        return figures.filter(function (figure) {
-            var bounds = figure.bounds;
-            return bounds === undefined || !boundsOutside(bounds, bounding, margin);
-        });
-    };
-}
-/**
- * Convenience: cache → cull. The composition order matters — cull is inner
- * so off-screen figures never enter the cache output.
- */
-function withPerfPipeline(fn, options) {
-    return withFigureCache(withViewportCull(fn, options), options);
 }
 
 /**
@@ -34194,54 +34200,7 @@ function openOverlayTextEditor(options) {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/**
- * wordWrap with an LRU memo on top — ported from TradingView's
- * wordWrapCached. Cache key is (font, skipHiddenLines, wrapWidth, text);
- * the metrics cache identity is intentionally NOT part of the key (TV
- * parity — widths for a given font are cache-independent).
- *
- * The underlying wordWrap mutates nothing, so cached WrappedLine arrays
- * are safe to share — callers must not mutate the returned lines.
- */
-var MAX_ENTRIES = 200;
-function createCachedWordWrap() {
-    var cache = new Map();
-    return function (text, font, metricsCache, skipHiddenLines, wrapWidth) {
-        if (skipHiddenLines === void 0) { skipHiddenLines = true; }
-        var key = "".concat(font, "|").concat(skipHiddenLines ? 's' : 'h', "|").concat(wrapWidth !== null && wrapWidth !== void 0 ? wrapWidth : -1, "|").concat(text);
-        var cached = cache.get(key);
-        if (cached !== undefined) {
-            // Refresh recency for LRU eviction.
-            cache.delete(key);
-            cache.set(key, cached);
-            return cached;
-        }
-        var lines = wordWrap(text, font, metricsCache, skipHiddenLines, wrapWidth);
-        if (cache.size >= MAX_ENTRIES) {
-            var oldest = cache.keys().next();
-            if (oldest.done !== true) {
-                cache.delete(oldest.value);
-            }
-        }
-        cache.set(key, lines);
-        return lines;
-    };
-}
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-function getBoxData(overlay) {
+function getBoxData$8(overlay) {
     var _a, _b, _c, _d, _e, _f, _g, _h;
     // extendData may be absent at runtime when the overlay was created
     // without a payload — treat as empty rather than crash the figure path.
@@ -34281,17 +34240,17 @@ function getFigureStyle(overlay) {
         outlineBorder: styles.outlineBorder
     };
 }
-function openEditor(chart, overlay) {
+function openEditor$8(chart, overlay) {
     // Mirror/ghost/locked overlays never open an editor — editing happens on
     // the owning chart and propagates through the sync layer.
     if (overlay.ghost || overlay.synced || overlay.lock) {
         return;
     }
-    var wordWrapEnabled = getBoxData(overlay).wordWrapWidth !== undefined;
+    var wordWrapEnabled = getBoxData$8(overlay).wordWrapWidth !== undefined;
     openOverlayTextEditor({
         chart: chart,
         overlay: overlay,
-        data: function () { return getBoxData(overlay); },
+        data: function () { return getBoxData$8(overlay); },
         wordWrapEnabled: wordWrapEnabled,
         forbidLineBreaks: !wordWrapEnabled,
         onCommit: function (value) {
@@ -34314,7 +34273,7 @@ var textNote = {
         if (coordinates.length === 0) {
             return [];
         }
-        var data = getBoxData(overlay);
+        var data = getBoxData$8(overlay);
         var attrs = __assign({ x: coordinates[0].x, y: coordinates[0].y }, data);
         var figures = [
             {
@@ -34339,14 +34298,3881 @@ var textNote = {
         // Placing a text tool drops straight into editing (TV parity) — but
         // only for locally drawn, completed overlays.
         if (!overlay.isDrawing()) {
-            openEditor(chart, overlay);
+            openEditor$8(chart, overlay);
         }
     },
     onDoubleClick: function (_a) {
         var overlay = _a.overlay, chart = _a.chart;
-        openEditor(chart, overlay);
+        openEditor$8(chart, overlay);
     }
 };
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * TextBoxData populated from the shared style fields + a text payload —
+ * the per-tool callers add their own alignment/geometry fields.
+ */
+function baseTextBoxData(text, styles) {
+    var _a;
+    return {
+        text: text !== null && text !== void 0 ? text : '',
+        fontSize: (_a = styles.fontSize) !== null && _a !== void 0 ? _a : 12,
+        bold: styles.bold,
+        italic: styles.italic,
+        fontFamily: styles.fontFamily,
+        boxPadding: styles.boxPadding,
+        boxPaddingVert: styles.boxPaddingVert,
+        boxPaddingHorz: styles.boxPaddingHorz,
+        lineSpacing: styles.lineSpacing
+    };
+}
+/** RichTextStyle fields for the figure (bg pill / border / shadow / outline). */
+function richTextFigureStyle(styles) {
+    return {
+        color: styles.color,
+        backgroundColor: styles.backgroundColor,
+        borderColor: styles.borderColor,
+        borderWidth: styles.borderWidth,
+        backgroundRoundRect: styles.backgroundRoundRect,
+        boxShadow: styles.boxShadow,
+        outlineBorder: styles.outlineBorder
+    };
+}
+/** Convert a stored data point to the pane-local pixel the figure space uses. */
+function pointToCoordinate(chart, paneId, point) {
+    var _a, _b;
+    var coordinate = chart.convertToPixel(point, { paneId: paneId });
+    return { x: (_a = coordinate.x) !== null && _a !== void 0 ? _a : 0, y: (_b = coordinate.y) !== null && _b !== void 0 ? _b : 0 };
+}
+/**
+ * Commit an edited text payload — merges into extendData so other fields
+ * (alignment, direction, cells…) survive. Empty text never reaches here:
+ * openOverlayTextEditor removes the overlay itself unless onEmpty overrides.
+ */
+function commitText(chart, overlay, value, patch) {
+    chart.overrideOverlay({
+        id: overlay.id,
+        paneId: overlay.paneId,
+        extendData: __assign(__assign(__assign({}, overlay.extendData), patch), { text: value })
+    });
+}
+/**
+ * Open the in-place text editor for a text-bearing annotation. Mirrors the
+ * text.ts guard: mirror/ghost/locked overlays never open editors — edits
+ * happen on the owning chart and propagate through the sync layer.
+ */
+function openAnnotationEditor(options) {
+    var chart = options.chart, overlay = options.overlay;
+    if (overlay.ghost || overlay.synced || overlay.lock) {
+        return;
+    }
+    openOverlayTextEditor({
+        chart: chart,
+        overlay: overlay,
+        data: options.data,
+        anchor: options.anchor,
+        wordWrapEnabled: options.wordWrapEnabled,
+        forbidLineBreaks: options.forbidLineBreaks,
+        onCommit: options.onCommit,
+        onEmpty: options.onEmpty
+    });
+}
+/**
+ * The two template hooks every text tool shares: the editor opens when the
+ * placement draw completes (TV parity) and on double-click. onDrawEnd guards
+ * on `!isDrawing()` so API-created overlays don't pop the editor.
+ */
+function textEditorHooks(open) {
+    return {
+        onDrawEnd: function (_a) {
+            var overlay = _a.overlay, chart = _a.chart;
+            if (!overlay.isDrawing()) {
+                open(chart, overlay);
+            }
+        },
+        onDoubleClick: function (_a) {
+            var overlay = _a.overlay, chart = _a.chart;
+            open(chart, overlay);
+        }
+    };
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var STYLE_KEY$7 = 'anchoredNote';
+var DEFAULT_STEM_GAP = 10;
+var DEFAULT_MARKER_RADIUS = 3;
+function getNoteStyles$1(overlay) {
+    var _a, _b;
+    return ((_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a[STYLE_KEY$7]) !== null && _b !== void 0 ? _b : {});
+}
+function getText$4(overlay) {
+    var _a;
+    var extendData = overlay.extendData;
+    if (isString(extendData)) {
+        return extendData;
+    }
+    return (_a = extendData === null || extendData === void 0 ? void 0 : extendData.text) !== null && _a !== void 0 ? _a : '';
+}
+function getBoxData$7(overlay) {
+    var _a;
+    var styles = getNoteStyles$1(overlay);
+    return __assign(__assign({}, baseTextBoxData(getText$4(overlay), styles)), { horzAlign: 'center', vertAlign: 'bottom', horzTextAlign: 'center', offsetY: (_a = styles.stemGap) !== null && _a !== void 0 ? _a : DEFAULT_STEM_GAP });
+}
+function openEditor$7(chart, overlay) {
+    openAnnotationEditor({
+        chart: chart,
+        overlay: overlay,
+        data: function () { return getBoxData$7(overlay); },
+        anchor: function () { var _a; return pointToCoordinate(chart, overlay.paneId, (_a = overlay.points[0]) !== null && _a !== void 0 ? _a : {}); },
+        forbidLineBreaks: true,
+        onCommit: function (value) {
+            commitText(chart, overlay, value);
+        }
+    });
+}
+var anchoredNote = __assign({ name: 'anchoredNote', totalStep: 2, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, styles: {
+        anchoredNote: {
+            color: '#FFFFFF',
+            backgroundColor: '#2962FF',
+            borderColor: '#2962FF',
+            borderWidth: 1,
+            backgroundRoundRect: 4,
+            fontSize: 12,
+            boxPaddingHorz: 8,
+            boxPaddingVert: 4,
+            markerColor: '#2962FF',
+            markerRadius: DEFAULT_MARKER_RADIUS,
+            stemGap: DEFAULT_STEM_GAP
+        }
+    }, createPointFigures: function (_a) {
+        var _b, _c;
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        if (coordinates.length === 0) {
+            return [];
+        }
+        var point = coordinates[0];
+        var styles = getNoteStyles$1(overlay);
+        var data = getBoxData$7(overlay);
+        var attrs = __assign({ x: point.x, y: point.y }, data);
+        var layout = getRichTextLayout(attrs);
+        var markerColor = (_b = styles.markerColor) !== null && _b !== void 0 ? _b : styles.backgroundColor;
+        var markerRadius = (_c = styles.markerRadius) !== null && _c !== void 0 ? _c : DEFAULT_MARKER_RADIUS;
+        var boxBottom = layout.boxTop + layout.boxHeight;
+        var figures = [
+            // Stem from pill bottom down to the anchor dot.
+            {
+                key: 'stem',
+                type: 'line',
+                attrs: {
+                    coordinates: [
+                        { x: point.x, y: boxBottom },
+                        { x: point.x, y: point.y - markerRadius }
+                    ]
+                },
+                styles: { color: markerColor, size: 2 },
+                ignoreEvent: true
+            },
+            // Anchor dot at the exact point.
+            {
+                key: 'marker',
+                type: 'circle',
+                attrs: { x: point.x, y: point.y, r: markerRadius },
+                styles: { style: 'fill', color: markerColor },
+                ignoreEvent: true
+            },
+            {
+                key: 'notePill',
+                type: 'richText',
+                attrs: attrs,
+                styles: richTextFigureStyle(styles),
+                bounds: {
+                    x: layout.boxLeft,
+                    y: layout.boxTop,
+                    width: layout.boxWidth,
+                    height: layout.boxHeight
+                }
+            }
+        ];
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_'
+        })), false));
+        return figures;
+    } }, textEditorHooks(openEditor$7));
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+function getStyles(overlay) {
+    var _a, _b, _c, _d, _e;
+    // anchoredText shares the text tool's style shape; fall back to the
+    // legacy 'textNote' key so overlays styled for 'text' render identically.
+    return ((_e = (_d = (_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a.anchoredText) !== null && _b !== void 0 ? _b : (_c = overlay.styles) === null || _c === void 0 ? void 0 : _c.textNote) !== null && _d !== void 0 ? _d : overlay.styles) !== null && _e !== void 0 ? _e : {});
+}
+function getBoxData$6(overlay) {
+    var _a, _b, _c;
+    var extendData = (_a = overlay.extendData) !== null && _a !== void 0 ? _a : {};
+    var styles = getStyles(overlay);
+    return __assign(__assign({}, baseTextBoxData(extendData.text, styles)), { wordWrapWidth: extendData.wordWrapWidth, maxHeight: extendData.maxHeight, horzAlign: (_b = extendData.horzAlign) !== null && _b !== void 0 ? _b : 'left', vertAlign: (_c = extendData.vertAlign) !== null && _c !== void 0 ? _c : 'top', horzTextAlign: extendData.horzTextAlign, angle: extendData.angle, boxWidth: extendData.boxWidth, boxHeight: extendData.boxHeight, rtl: extendData.rtl });
+}
+function clamp01(value) {
+    return Math.max(0, Math.min(1, value));
+}
+function pointSnapshotEquals(point, data) {
+    return point.timestamp === data.anchorTimestamp &&
+        point.dataIndex === data.anchorDataIndex &&
+        point.value === data.anchorValue;
+}
+/**
+ * Resolve the box origin in pane pixels. Side effect: when the data point
+ * moved since the last capture (a user drag) the fraction + snapshot are
+ * rewritten in place so the box follows the cursor — invalidateFigures()
+ * marks the figure cache dirty for the next pass.
+ */
+function resolveScreenPosition(overlay, coordinate, bounding) {
+    var _a, _b, _c, _d;
+    var data = (_a = overlay.extendData) !== null && _a !== void 0 ? _a : {};
+    var point = (_b = overlay.points[0]) !== null && _b !== void 0 ? _b : {};
+    var haveFraction = data.anchorXPercent !== undefined && data.anchorYPercent !== undefined;
+    if (haveFraction && pointSnapshotEquals(point, data)) {
+        return {
+            x: bounding.left + bounding.width * ((_c = data.anchorXPercent) !== null && _c !== void 0 ? _c : 0),
+            y: bounding.top + bounding.height * ((_d = data.anchorYPercent) !== null && _d !== void 0 ? _d : 0)
+        };
+    }
+    var xPercent = bounding.width > 0 ? clamp01((coordinate.x - bounding.left) / bounding.width) : 0.5;
+    var yPercent = bounding.height > 0 ? clamp01((coordinate.y - bounding.top) / bounding.height) : 0.5;
+    if (!isValid(overlay.extendData)) {
+        overlay.extendData = { anchored: true };
+    }
+    var extendData = overlay.extendData;
+    extendData.anchorXPercent = xPercent;
+    extendData.anchorYPercent = yPercent;
+    extendData.anchorTimestamp = point.timestamp;
+    extendData.anchorDataIndex = point.dataIndex;
+    extendData.anchorValue = point.value;
+    overlay.invalidateFigures();
+    return { x: coordinate.x, y: coordinate.y };
+}
+function openEditor$6(chart, overlay) {
+    var data = getBoxData$6(overlay);
+    var wordWrapEnabled = data.wordWrapWidth !== undefined;
+    openAnnotationEditor({
+        chart: chart,
+        overlay: overlay,
+        data: function () { return getBoxData$6(overlay); },
+        // The editor must cover the RENDERED box (screen-fraction position),
+        // not the data point — they diverge once the chart scrolls.
+        anchor: function () {
+            var _a, _b, _c, _d;
+            var size = chart.getSize(overlay.paneId, 'main');
+            var extendData = (_a = overlay.extendData) !== null && _a !== void 0 ? _a : {};
+            if (size !== null &&
+                extendData.anchorXPercent !== undefined &&
+                extendData.anchorYPercent !== undefined) {
+                return {
+                    x: size.left + size.width * extendData.anchorXPercent,
+                    y: size.top + size.height * extendData.anchorYPercent
+                };
+            }
+            var coordinate = chart.convertToPixel((_b = overlay.points[0]) !== null && _b !== void 0 ? _b : {}, { paneId: overlay.paneId });
+            return { x: (_c = coordinate.x) !== null && _c !== void 0 ? _c : 0, y: (_d = coordinate.y) !== null && _d !== void 0 ? _d : 0 };
+        },
+        wordWrapEnabled: wordWrapEnabled,
+        forbidLineBreaks: !wordWrapEnabled,
+        onCommit: function (value) {
+            commitText(chart, overlay, value);
+        }
+    });
+}
+var anchoredText = __assign({ name: 'anchoredText', totalStep: 2, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, createPointFigures: function (_a) {
+        var overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        if (coordinates.length === 0) {
+            return [];
+        }
+        var position = resolveScreenPosition(overlay, coordinates[0], bounding);
+        var data = getBoxData$6(overlay);
+        var attrs = __assign({ x: position.x, y: position.y }, data);
+        var layout = getRichTextLayout(attrs);
+        var figures = [
+            {
+                key: 'textBox',
+                type: 'richText',
+                attrs: attrs,
+                styles: richTextFigureStyle(getStyles(overlay)),
+                bounds: {
+                    x: layout.boxLeft,
+                    y: layout.boxTop,
+                    width: layout.boxWidth,
+                    height: layout.boxHeight
+                }
+            }
+        ];
+        // The draggable handle sits on the RENDERED box (bottom-center), not on
+        // the raw data coordinate — scrolling leaves the data point behind.
+        var handle = {
+            x: layout.boxLeft + layout.boxWidth / 2,
+            y: layout.boxTop + layout.boxHeight
+        };
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: [handle],
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            shape: 'circle',
+            cursors: ['move'],
+            keyPrefix: 'anchor_'
+        })), false));
+        return figures;
+    } }, textEditorHooks(openEditor$6));
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var STYLE_KEY$6 = 'callout';
+var TARGET_DOT_RADIUS = 3;
+var ARROW_ANGLE = Math.PI / 6;
+function getCalloutStyles(overlay) {
+    var _a, _b;
+    return ((_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a[STYLE_KEY$6]) !== null && _b !== void 0 ? _b : {});
+}
+function getText$3(overlay) {
+    var _a;
+    var extendData = overlay.extendData;
+    if (isString(extendData)) {
+        return extendData;
+    }
+    return (_a = extendData === null || extendData === void 0 ? void 0 : extendData.text) !== null && _a !== void 0 ? _a : '';
+}
+function getBoxData$5(overlay) {
+    var _a;
+    var extendData = (_a = overlay.extendData) !== null && _a !== void 0 ? _a : {};
+    var styles = getCalloutStyles(overlay);
+    return __assign(__assign({}, baseTextBoxData(getText$3(overlay), styles)), { wordWrapWidth: extendData.wordWrapWidth, horzAlign: 'center', vertAlign: 'middle', horzTextAlign: 'center' });
+}
+function openEditor$5(chart, overlay) {
+    var data = getBoxData$5(overlay);
+    var wordWrapEnabled = data.wordWrapWidth !== undefined;
+    openAnnotationEditor({
+        chart: chart,
+        overlay: overlay,
+        data: function () { return getBoxData$5(overlay); },
+        // The box lives at point 1 — the editor must anchor there, not point 0.
+        anchor: function () { var _a; return pointToCoordinate(chart, overlay.paneId, (_a = overlay.points[1]) !== null && _a !== void 0 ? _a : {}); },
+        wordWrapEnabled: wordWrapEnabled,
+        forbidLineBreaks: !wordWrapEnabled,
+        onCommit: function (value) {
+            commitText(chart, overlay, value);
+        }
+    });
+}
+var callout = __assign({ name: 'callout', totalStep: 3, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, styles: {
+        callout: {
+            color: '#FFFFFF',
+            backgroundColor: 'rgba(42, 46, 57, 0.95)',
+            borderColor: '#2962FF',
+            borderWidth: 1,
+            backgroundRoundRect: 8,
+            fontSize: 12,
+            boxPaddingHorz: 10,
+            boxPaddingVert: 8,
+            connectorColor: '#2962FF',
+            connectorWidth: 2,
+            arrowSize: 8
+        }
+    }, createPointFigures: function (_a) {
+        var _b, _c, _d;
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        if (coordinates.length === 0) {
+            return [];
+        }
+        var styles = getCalloutStyles(overlay);
+        var data = getBoxData$5(overlay);
+        var connectorColor = (_b = styles.connectorColor) !== null && _b !== void 0 ? _b : styles.borderColor;
+        var connectorWidth = (_c = styles.connectorWidth) !== null && _c !== void 0 ? _c : 2;
+        var arrowSize = (_d = styles.arrowSize) !== null && _d !== void 0 ? _d : 8;
+        var figures = [];
+        var target = coordinates[0];
+        // Target marker — always visible; doubles as the point-0 drag figure.
+        figures.push({
+            key: 'target',
+            type: 'circle',
+            attrs: { x: target.x, y: target.y, r: TARGET_DOT_RADIUS },
+            styles: { style: 'fill', color: connectorColor },
+            pointIndex: 0
+        });
+        if (coordinates.length > 1) {
+            var boxCenter = coordinates[1];
+            var attrs = __assign({ x: boxCenter.x, y: boxCenter.y }, data);
+            var layout = getRichTextLayout(attrs);
+            // Connector start — the point where the box→target ray exits the box
+            // edge (choose the facing side, clamp to the box corner extents).
+            var dx = target.x - boxCenter.x;
+            var dy = target.y - boxCenter.y;
+            var halfW = layout.boxWidth / 2;
+            var halfH = layout.boxHeight / 2;
+            var startX = boxCenter.x;
+            var startY = boxCenter.y;
+            if (dx !== 0 || dy !== 0) {
+                var scaleX = dx !== 0 ? halfW / Math.abs(dx) : Number.MAX_SAFE_INTEGER;
+                var scaleY = dy !== 0 ? halfH / Math.abs(dy) : Number.MAX_SAFE_INTEGER;
+                var scale = Math.min(scaleX, scaleY, 1);
+                startX = boxCenter.x + dx * scale;
+                startY = boxCenter.y + dy * scale;
+            }
+            // Connector line — behind the box so it reads as attached.
+            figures.push({
+                key: 'connector',
+                type: 'line',
+                attrs: {
+                    coordinates: [
+                        { x: startX, y: startY },
+                        { x: target.x, y: target.y }
+                    ]
+                },
+                styles: { color: connectorColor, size: connectorWidth },
+                ignoreEvent: true
+            });
+            // Arrowhead at the target — filled triangle along the ray direction.
+            var angle = Math.atan2(target.y - startY, target.x - startX);
+            figures.push({
+                key: 'arrowHead',
+                type: 'polygon',
+                attrs: {
+                    coordinates: [
+                        { x: target.x, y: target.y },
+                        {
+                            x: target.x - arrowSize * Math.cos(angle - ARROW_ANGLE),
+                            y: target.y - arrowSize * Math.sin(angle - ARROW_ANGLE)
+                        },
+                        {
+                            x: target.x - arrowSize * Math.cos(angle + ARROW_ANGLE),
+                            y: target.y - arrowSize * Math.sin(angle + ARROW_ANGLE)
+                        }
+                    ]
+                },
+                styles: { style: 'fill', color: connectorColor },
+                ignoreEvent: true
+            });
+            // The text box IS the second anchor — dragging it moves point 1.
+            figures.push({
+                key: 'textBox',
+                type: 'richText',
+                attrs: attrs,
+                styles: richTextFigureStyle(styles),
+                pointIndex: 1,
+                bounds: {
+                    x: layout.boxLeft,
+                    y: layout.boxTop,
+                    width: layout.boxWidth,
+                    height: layout.boxHeight
+                }
+            });
+        }
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_'
+        })), false));
+        return figures;
+    } }, textEditorHooks(openEditor$5));
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var STYLE_KEY$5 = 'comment';
+var DEFAULT_TAIL_HEIGHT = 10;
+var DEFAULT_TAIL_WIDTH = 6;
+function getCommentStyles(overlay) {
+    var _a, _b;
+    return ((_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a[STYLE_KEY$5]) !== null && _b !== void 0 ? _b : {});
+}
+function getText$2(overlay) {
+    var _a;
+    var extendData = overlay.extendData;
+    if (isString(extendData)) {
+        return extendData;
+    }
+    return (_a = extendData === null || extendData === void 0 ? void 0 : extendData.text) !== null && _a !== void 0 ? _a : '';
+}
+function getBoxData$4(overlay) {
+    var _a;
+    var styles = getCommentStyles(overlay);
+    return __assign(__assign({}, baseTextBoxData(getText$2(overlay), styles)), { horzAlign: 'center', vertAlign: 'bottom', horzTextAlign: 'center', offsetY: (_a = styles.tailHeight) !== null && _a !== void 0 ? _a : DEFAULT_TAIL_HEIGHT });
+}
+function openEditor$4(chart, overlay) {
+    openAnnotationEditor({
+        chart: chart,
+        overlay: overlay,
+        data: function () { return getBoxData$4(overlay); },
+        anchor: function () { var _a; return pointToCoordinate(chart, overlay.paneId, (_a = overlay.points[0]) !== null && _a !== void 0 ? _a : {}); },
+        onCommit: function (value) {
+            commitText(chart, overlay, value);
+        }
+    });
+}
+var comment = __assign({ name: 'comment', totalStep: 2, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, styles: {
+        comment: {
+            color: '#D1D4DC',
+            backgroundColor: 'rgba(42, 46, 57, 0.95)',
+            borderColor: '#4A4E5C',
+            borderWidth: 1,
+            fontSize: 12,
+            boxPaddingHorz: 12,
+            boxPaddingVert: 8
+        }
+    }, createPointFigures: function (_a) {
+        var _b, _c;
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        if (coordinates.length === 0) {
+            return [];
+        }
+        var point = coordinates[0];
+        var styles = getCommentStyles(overlay);
+        var data = getBoxData$4(overlay);
+        var attrs = __assign({ x: point.x, y: point.y }, data);
+        // Capsule = fully rounded rect: radius is half the laid-out height.
+        var layout = getRichTextLayout(attrs);
+        var capsule = richTextFigureStyle(styles);
+        capsule.backgroundRoundRect = layout.boxHeight / 2;
+        var boxBottom = layout.boxTop + layout.boxHeight;
+        var tailHalf = (_b = styles.tailWidth) !== null && _b !== void 0 ? _b : DEFAULT_TAIL_WIDTH;
+        var figures = [
+            {
+                key: 'bubble',
+                type: 'richText',
+                attrs: attrs,
+                styles: capsule,
+                bounds: {
+                    x: layout.boxLeft,
+                    y: layout.boxTop,
+                    width: layout.boxWidth,
+                    height: layout.boxHeight + ((_c = styles.tailHeight) !== null && _c !== void 0 ? _c : DEFAULT_TAIL_HEIGHT)
+                }
+            },
+            // Tail — filled triangle joining the capsule to the anchor point.
+            {
+                key: 'tail',
+                type: 'polygon',
+                attrs: {
+                    coordinates: [
+                        { x: point.x - tailHalf, y: boxBottom - 1 },
+                        { x: point.x, y: point.y },
+                        { x: point.x + tailHalf, y: boxBottom - 1 }
+                    ]
+                },
+                styles: { style: 'fill', color: styles.backgroundColor },
+                ignoreEvent: true
+            }
+        ];
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_'
+        })), false));
+        return figures;
+    } }, textEditorHooks(openEditor$4));
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var STYLE_KEY$4 = 'flagMark';
+function getFlagStyles(overlay) {
+    var _a, _b;
+    return ((_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a[STYLE_KEY$4]) !== null && _b !== void 0 ? _b : {});
+}
+var flagMark = {
+    name: 'flagMark',
+    totalStep: 2,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    styles: {
+        flagMark: {
+            flagColor: '#2962FF',
+            poleColor: '#787B86',
+            poleHeight: 20,
+            poleWidth: 2,
+            flagWidth: 17,
+            flagHeight: 10
+        }
+    },
+    createPointFigures: function (_a) {
+        var _b, _c, _d, _e, _f, _g;
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        if (coordinates.length === 0) {
+            return [];
+        }
+        var point = coordinates[0];
+        var styles = getFlagStyles(overlay);
+        var poleHeight = (_b = styles.poleHeight) !== null && _b !== void 0 ? _b : 20;
+        var poleWidth = (_c = styles.poleWidth) !== null && _c !== void 0 ? _c : 2;
+        var flagWidth = (_d = styles.flagWidth) !== null && _d !== void 0 ? _d : 17;
+        var flagHeight = (_e = styles.flagHeight) !== null && _e !== void 0 ? _e : 10;
+        var flagColor = (_f = styles.flagColor) !== null && _f !== void 0 ? _f : '#2962FF';
+        var poleColor = (_g = styles.poleColor) !== null && _g !== void 0 ? _g : '#787B86';
+        var poleTop = point.y - poleHeight;
+        var flagX = point.x + poleWidth;
+        // Swallowtail: the right edge cuts in ~18% of the width at mid-height.
+        var notchX = flagX + flagWidth * 0.82;
+        var notchY = poleTop + flagHeight / 2;
+        var figures = [
+            // Pole — thin rect from the anchor up to the pennant.
+            {
+                key: 'pole',
+                type: 'rect',
+                attrs: {
+                    x: point.x,
+                    y: poleTop,
+                    width: poleWidth,
+                    height: poleHeight
+                },
+                styles: { style: 'fill', color: poleColor },
+                ignoreEvent: true
+            },
+            // Pennant — rectangle with a V notch in the right edge (swallowtail).
+            {
+                key: 'flag',
+                type: 'polygon',
+                attrs: {
+                    coordinates: [
+                        { x: flagX, y: poleTop },
+                        { x: flagX + flagWidth, y: poleTop },
+                        { x: notchX, y: notchY },
+                        { x: flagX + flagWidth, y: poleTop + flagHeight },
+                        { x: flagX, y: poleTop + flagHeight }
+                    ]
+                },
+                styles: { style: 'fill', color: flagColor },
+                bounds: {
+                    x: flagX,
+                    y: poleTop,
+                    width: flagWidth,
+                    height: flagHeight
+                }
+            }
+        ];
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_'
+        })), false));
+        return figures;
+    }
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var STYLE_KEY$3 = 'note';
+function getNoteStyles(overlay) {
+    var _a, _b;
+    return ((_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a[STYLE_KEY$3]) !== null && _b !== void 0 ? _b : {});
+}
+function getText$1(overlay) {
+    var _a;
+    // Kernel simpleTag stored the label as the raw extendData string.
+    var extendData = overlay.extendData;
+    if (isString(extendData)) {
+        return extendData;
+    }
+    return (_a = extendData === null || extendData === void 0 ? void 0 : extendData.text) !== null && _a !== void 0 ? _a : '';
+}
+function getBoxData$3(overlay) {
+    var styles = getNoteStyles(overlay);
+    return __assign(__assign({}, baseTextBoxData(getText$1(overlay), styles)), { horzAlign: 'center', vertAlign: 'middle', horzTextAlign: 'center' });
+}
+function openEditor$3(chart, overlay) {
+    openAnnotationEditor({
+        chart: chart,
+        overlay: overlay,
+        data: function () { return getBoxData$3(overlay); },
+        forbidLineBreaks: true,
+        onCommit: function (value) {
+            commitText(chart, overlay, value);
+        }
+    });
+}
+var simpleTag = __assign({ name: 'simpleTag', totalStep: 2, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, styles: {
+        note: {
+            color: '#FFFFFF',
+            backgroundColor: '#2962FF',
+            borderColor: '#2962FF',
+            borderWidth: 1,
+            backgroundRoundRect: 4,
+            fontSize: 12,
+            boxPaddingHorz: 8,
+            boxPaddingVert: 4
+        }
+    }, createPointFigures: function (_a) {
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        if (coordinates.length === 0) {
+            return [];
+        }
+        var data = getBoxData$3(overlay);
+        var attrs = __assign({ x: coordinates[0].x, y: coordinates[0].y }, data);
+        var layout = getRichTextLayout(attrs);
+        var figures = [
+            {
+                key: 'notePill',
+                type: 'richText',
+                attrs: attrs,
+                styles: richTextFigureStyle(getNoteStyles(overlay)),
+                bounds: {
+                    x: layout.boxLeft,
+                    y: layout.boxTop,
+                    width: layout.boxWidth,
+                    height: layout.boxHeight
+                }
+            }
+        ];
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_'
+        })), false));
+        return figures;
+    } }, textEditorHooks(openEditor$3));
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var STYLE_KEY$2 = 'priceLabel';
+var DEFAULT_TIP_WIDTH = 6;
+function getLabelStyles(overlay) {
+    var _a, _b;
+    return ((_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a[STYLE_KEY$2]) !== null && _b !== void 0 ? _b : {});
+}
+function getPrecision(chart, overlay, isCandle) {
+    var _a, _b;
+    if (isCandle) {
+        return (_b = (_a = chart.getSymbol()) === null || _a === void 0 ? void 0 : _a.pricePrecision) !== null && _b !== void 0 ? _b : SymbolDefaultPrecisionConstants.PRICE;
+    }
+    var precision = 0;
+    var indicators = chart.getIndicators({ paneId: overlay.paneId });
+    indicators.forEach(function (indicator) {
+        precision = Math.max(precision, indicator.precision);
+    });
+    return precision;
+}
+function getLabelText(chart, overlay, isCandle) {
+    var _a, _b;
+    var extendData = overlay.extendData;
+    if (isString(extendData)) {
+        return extendData;
+    }
+    if ((extendData === null || extendData === void 0 ? void 0 : extendData.text) !== undefined && extendData.text !== '') {
+        return extendData.text;
+    }
+    var value = (_b = (_a = overlay.points[0]) === null || _a === void 0 ? void 0 : _a.value) !== null && _b !== void 0 ? _b : 0;
+    return formatPrecision$1(value, getPrecision(chart, overlay, isCandle));
+}
+function getBoxData$2(chart, overlay, isCandle) {
+    var _a;
+    var styles = getLabelStyles(overlay);
+    return __assign(__assign({}, baseTextBoxData(getLabelText(chart, overlay, isCandle), styles)), { bold: (_a = styles.bold) !== null && _a !== void 0 ? _a : true, horzAlign: 'left', vertAlign: 'middle', horzTextAlign: 'center' });
+}
+function openEditor$2(chart, overlay) {
+    var _a;
+    var styles = getLabelStyles(overlay);
+    var tipWidth = (_a = styles.tipWidth) !== null && _a !== void 0 ? _a : DEFAULT_TIP_WIDTH;
+    openAnnotationEditor({
+        chart: chart,
+        overlay: overlay,
+        // Editor re-derives the label on each keystroke — once the user commits
+        // a custom text it replaces the price display; empty removes the tool.
+        data: function () { return getBoxData$2(chart, overlay, overlay.paneId === PaneIdConstants.CANDLE); },
+        anchor: function () {
+            var _a;
+            var coordinate = pointToCoordinate(chart, overlay.paneId, (_a = overlay.points[0]) !== null && _a !== void 0 ? _a : {});
+            return { x: coordinate.x + tipWidth, y: coordinate.y };
+        },
+        forbidLineBreaks: true,
+        onCommit: function (value) {
+            commitText(chart, overlay, value);
+        }
+    });
+}
+var priceLabel = __assign({ name: 'priceLabel', totalStep: 2, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, styles: {
+        priceLabel: {
+            color: '#FFFFFF',
+            backgroundColor: '#2962FF',
+            borderColor: '#2962FF',
+            borderWidth: 1,
+            backgroundRoundRect: 3,
+            fontSize: 12,
+            bold: true,
+            boxPaddingHorz: 8,
+            boxPaddingVert: 4
+        }
+    }, createPointFigures: function (_a) {
+        var _b, _c;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        if (coordinates.length === 0) {
+            return [];
+        }
+        var point = coordinates[0];
+        var styles = getLabelStyles(overlay);
+        var isCandle = (_b = yAxis === null || yAxis === void 0 ? void 0 : yAxis.isInCandle()) !== null && _b !== void 0 ? _b : true;
+        var data = getBoxData$2(chart, overlay, isCandle);
+        var tipWidth = (_c = styles.tipWidth) !== null && _c !== void 0 ? _c : DEFAULT_TIP_WIDTH;
+        var attrs = __assign({ x: point.x + tipWidth, y: point.y }, data);
+        var layout = getRichTextLayout(attrs);
+        var figures = [
+            // Left-pointing tip touching the anchor — the axis-tag wedge.
+            {
+                key: 'tip',
+                type: 'polygon',
+                attrs: {
+                    coordinates: [
+                        { x: point.x, y: point.y },
+                        { x: point.x + tipWidth, y: point.y - layout.boxHeight / 2 },
+                        { x: point.x + tipWidth, y: point.y + layout.boxHeight / 2 }
+                    ]
+                },
+                styles: { style: 'fill', color: styles.backgroundColor },
+                ignoreEvent: true
+            },
+            {
+                key: 'labelPill',
+                type: 'richText',
+                attrs: attrs,
+                styles: richTextFigureStyle(styles),
+                bounds: {
+                    x: point.x,
+                    y: point.y - layout.boxHeight / 2,
+                    width: layout.boxWidth + tipWidth,
+                    height: layout.boxHeight
+                }
+            }
+        ];
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            moveDirections: ['vert'],
+            keyPrefix: 'anchor_'
+        })), false));
+        return figures;
+    } }, textEditorHooks(openEditor$2));
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var STYLE_KEY$1 = 'signpost';
+var POLE_WIDTH = 3;
+var ARROW_TIP = 8;
+var SIGN_PADDING_HORZ = 8;
+var BASE_RADIUS = 4;
+function getSignpostStyles(overlay) {
+    var _a, _b;
+    return ((_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a[STYLE_KEY$1]) !== null && _b !== void 0 ? _b : {});
+}
+function getText(overlay) {
+    var _a;
+    var extendData = overlay.extendData;
+    if (isString(extendData)) {
+        return extendData;
+    }
+    return (_a = extendData === null || extendData === void 0 ? void 0 : extendData.text) !== null && _a !== void 0 ? _a : '';
+}
+function getDirection(overlay) {
+    var extendData = overlay.extendData;
+    return (extendData === null || extendData === void 0 ? void 0 : extendData.direction) === 'down' ? 'down' : 'up';
+}
+function getBoxData$1(overlay) {
+    var _a;
+    var styles = getSignpostStyles(overlay);
+    return __assign(__assign({}, baseTextBoxData(getText(overlay), styles)), { bold: (_a = styles.bold) !== null && _a !== void 0 ? _a : true, horzAlign: 'center', vertAlign: 'middle', horzTextAlign: 'center' });
+}
+function openEditor$1(chart, overlay) {
+    var _a;
+    var styles = getSignpostStyles(overlay);
+    var poleHeight = (_a = styles.poleHeight) !== null && _a !== void 0 ? _a : 40;
+    var direction = getDirection(overlay);
+    openAnnotationEditor({
+        chart: chart,
+        overlay: overlay,
+        data: function () { return getBoxData$1(overlay); },
+        // Text sits in the sign board at the far end of the pole.
+        anchor: function () {
+            var _a;
+            var coordinate = pointToCoordinate(chart, overlay.paneId, (_a = overlay.points[0]) !== null && _a !== void 0 ? _a : {});
+            return { x: coordinate.x - ARROW_TIP / 2, y: coordinate.y + (direction === 'up' ? -poleHeight : poleHeight) };
+        },
+        forbidLineBreaks: true,
+        onCommit: function (value) {
+            commitText(chart, overlay, value);
+        }
+    });
+}
+var signpost = __assign({ name: 'signpost', totalStep: 2, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, styles: {
+        signpost: {
+            color: '#FFFFFF',
+            signColor: '#2962FF',
+            poleColor: '#787B86',
+            fontSize: 11,
+            bold: true,
+            poleHeight: 40,
+            signHeight: 24,
+            minSignWidth: 56
+        }
+    }, createPointFigures: function (_a) {
+        var _b, _c, _d, _e, _f;
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        if (coordinates.length === 0) {
+            return [];
+        }
+        var point = coordinates[0];
+        var styles = getSignpostStyles(overlay);
+        var data = getBoxData$1(overlay);
+        var direction = getDirection(overlay);
+        var isUp = direction === 'up';
+        var poleHeight = (_b = styles.poleHeight) !== null && _b !== void 0 ? _b : 40;
+        var signHeight = (_c = styles.signHeight) !== null && _c !== void 0 ? _c : 24;
+        var minSignWidth = (_d = styles.minSignWidth) !== null && _d !== void 0 ? _d : 56;
+        var signColor = (_e = styles.signColor) !== null && _e !== void 0 ? _e : '#2962FF';
+        var poleColor = (_f = styles.poleColor) !== null && _f !== void 0 ? _f : '#787B86';
+        var headCenterY = point.y + (isUp ? -poleHeight : poleHeight);
+        var textWidth = measureText(data.text, textBoxFont(data)).width;
+        var headWidth = Math.max(textWidth + 2 * SIGN_PADDING_HORZ + ARROW_TIP, minSignWidth);
+        var figures = [
+            // Pole
+            {
+                key: 'pole',
+                type: 'rect',
+                attrs: {
+                    x: point.x - POLE_WIDTH / 2,
+                    y: isUp ? headCenterY : point.y,
+                    width: POLE_WIDTH,
+                    height: poleHeight
+                },
+                styles: { style: 'fill', color: poleColor },
+                ignoreEvent: true
+            },
+            // Sign board — flat pentagon with an arrow tip on the right edge.
+            {
+                key: 'signBoard',
+                type: 'polygon',
+                attrs: {
+                    coordinates: [
+                        { x: point.x - headWidth / 2, y: headCenterY - signHeight / 2 },
+                        { x: point.x + headWidth / 2 - ARROW_TIP, y: headCenterY - signHeight / 2 },
+                        { x: point.x + headWidth / 2, y: headCenterY },
+                        { x: point.x + headWidth / 2 - ARROW_TIP, y: headCenterY + signHeight / 2 },
+                        { x: point.x - headWidth / 2, y: headCenterY + signHeight / 2 }
+                    ]
+                },
+                styles: { style: 'fill', color: signColor }
+            },
+            // Board text — centered on the flat (non-arrow) part of the board.
+            {
+                key: 'signText',
+                type: 'richText',
+                attrs: __assign({ x: point.x - ARROW_TIP / 2, y: headCenterY }, data),
+                styles: { color: styles.color },
+                ignoreEvent: true
+            },
+            // Base dot at the anchor.
+            {
+                key: 'base',
+                type: 'circle',
+                attrs: { x: point.x, y: point.y, r: BASE_RADIUS },
+                styles: { style: 'fill', color: poleColor },
+                ignoreEvent: true
+            }
+        ];
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_'
+        })), false));
+        return figures;
+    } }, textEditorHooks(openEditor$1));
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var STYLE_KEY = 'table';
+var DEFAULT_ROWS = 3;
+var DEFAULT_COLS = 3;
+var DEFAULT_TABLE_WIDTH = 300;
+var DEFAULT_TABLE_HEIGHT = 120;
+var DEFAULT_CELL_PADDING = 4;
+function getTableStyles(overlay) {
+    var _a, _b;
+    return ((_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a[STYLE_KEY]) !== null && _b !== void 0 ? _b : {});
+}
+function getExtendData(overlay) {
+    var extendData = overlay.extendData;
+    // Legacy string payloads can't express a grid — start empty instead.
+    if (isString(extendData) || extendData === undefined) {
+        return {};
+    }
+    return extendData;
+}
+function getGrid(overlay) {
+    var _a, _b, _c, _d;
+    var extendData = getExtendData(overlay);
+    var rows = Math.max(1, (_a = extendData.rows) !== null && _a !== void 0 ? _a : DEFAULT_ROWS);
+    var cols = Math.max(1, (_b = extendData.cols) !== null && _b !== void 0 ? _b : DEFAULT_COLS);
+    var cells = [];
+    for (var i = 0; i < rows * cols; i++) {
+        cells.push((_d = (_c = extendData.cells) === null || _c === void 0 ? void 0 : _c[i]) !== null && _d !== void 0 ? _d : '');
+    }
+    return { rows: rows, cols: cols, cells: cells };
+}
+function gridToTsv(rows, cols, cells) {
+    var lines = [];
+    for (var r = 0; r < rows; r++) {
+        lines.push(cells.slice(r * cols, (r + 1) * cols).join('\t'));
+    }
+    return lines.join('\n');
+}
+function tsvToGrid(tsv) {
+    var e_1, _a, e_2, _b;
+    var _c;
+    var lines = tsv.split(/\r\n|\r|\n/);
+    var grid = lines.map(function (line) { return line.split('\t'); });
+    var rows = grid.length;
+    var cols = 0;
+    try {
+        for (var grid_1 = __values(grid), grid_1_1 = grid_1.next(); !grid_1_1.done; grid_1_1 = grid_1.next()) {
+            var row = grid_1_1.value;
+            cols = Math.max(cols, row.length);
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (grid_1_1 && !grid_1_1.done && (_a = grid_1.return)) _a.call(grid_1);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    var cells = [];
+    try {
+        for (var grid_2 = __values(grid), grid_2_1 = grid_2.next(); !grid_2_1.done; grid_2_1 = grid_2.next()) {
+            var row = grid_2_1.value;
+            for (var c = 0; c < cols; c++) {
+                cells.push((_c = row[c]) !== null && _c !== void 0 ? _c : '');
+            }
+        }
+    }
+    catch (e_2_1) { e_2 = { error: e_2_1 }; }
+    finally {
+        try {
+            if (grid_2_1 && !grid_2_1.done && (_b = grid_2.return)) _b.call(grid_2);
+        }
+        finally { if (e_2) throw e_2.error; }
+    }
+    return { rows: rows, cols: cols, cells: cells };
+}
+function getBoxData(overlay) {
+    var _a, _b;
+    var styles = getTableStyles(overlay);
+    var extendData = getExtendData(overlay);
+    var _c = getGrid(overlay), rows = _c.rows, cols = _c.cols, cells = _c.cells;
+    return __assign(__assign({}, baseTextBoxData(gridToTsv(rows, cols, cells), styles)), { boxWidth: (_a = extendData.tableWidth) !== null && _a !== void 0 ? _a : DEFAULT_TABLE_WIDTH, boxHeight: (_b = extendData.tableHeight) !== null && _b !== void 0 ? _b : DEFAULT_TABLE_HEIGHT, horzAlign: 'left', vertAlign: 'top' });
+}
+function openEditor(chart, overlay) {
+    openAnnotationEditor({
+        chart: chart,
+        overlay: overlay,
+        data: function () { return getBoxData(overlay); },
+        anchor: function () { var _a; return pointToCoordinate(chart, overlay.paneId, (_a = overlay.points[0]) !== null && _a !== void 0 ? _a : {}); },
+        onCommit: function (value) {
+            var _a = tsvToGrid(value), rows = _a.rows, cols = _a.cols, cells = _a.cells;
+            chart.overrideOverlay({
+                id: overlay.id,
+                paneId: overlay.paneId,
+                extendData: __assign(__assign({}, (getExtendData(overlay))), { rows: rows, cols: cols, cells: cells })
+            });
+        }
+    });
+}
+var table = __assign({ name: 'table', totalStep: 2, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, styles: {
+        table: {
+            color: '#131722',
+            backgroundColor: '#FFFFFF',
+            borderColor: '#787B86',
+            backgroundEnabled: true,
+            borderEnabled: true,
+            fontSize: 12,
+            textAlign: 'center',
+            cellPadding: DEFAULT_CELL_PADDING
+        }
+    }, createPointFigures: function (_a) {
+        var _b, _c, _d, _e, _f, _g;
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        if (coordinates.length === 0) {
+            return [];
+        }
+        var point = coordinates[0];
+        var styles = getTableStyles(overlay);
+        var extendData = getExtendData(overlay);
+        var _h = getGrid(overlay), rows = _h.rows, cols = _h.cols, cells = _h.cells;
+        var tableWidth = (_b = extendData.tableWidth) !== null && _b !== void 0 ? _b : DEFAULT_TABLE_WIDTH;
+        var tableHeight = (_c = extendData.tableHeight) !== null && _c !== void 0 ? _c : DEFAULT_TABLE_HEIGHT;
+        var cellPadding = (_d = styles.cellPadding) !== null && _d !== void 0 ? _d : DEFAULT_CELL_PADDING;
+        var cellWidth = tableWidth / cols;
+        var cellHeight = tableHeight / rows;
+        var backgroundEnabled = (_e = styles.backgroundEnabled) !== null && _e !== void 0 ? _e : true;
+        var borderEnabled = (_f = styles.borderEnabled) !== null && _f !== void 0 ? _f : true;
+        var borderColor = styles.borderColor;
+        var textAlign = (_g = styles.textAlign) !== null && _g !== void 0 ? _g : 'center';
+        var figures = [];
+        // Background fill — one rect for the whole grid.
+        if (backgroundEnabled) {
+            figures.push({
+                key: 'background',
+                type: 'rect',
+                attrs: { x: point.x, y: point.y, width: tableWidth, height: tableHeight },
+                styles: { style: 'fill', color: styles.backgroundColor },
+                ignoreEvent: true
+            });
+        }
+        // Grid lines — rows+1 horizontal, cols+1 vertical.
+        if (borderEnabled) {
+            for (var r = 0; r <= rows; r++) {
+                var y = point.y + r * cellHeight;
+                figures.push({
+                    key: "gridH_".concat(r),
+                    type: 'line',
+                    attrs: {
+                        coordinates: [
+                            { x: point.x, y: y },
+                            { x: point.x + tableWidth, y: y }
+                        ]
+                    },
+                    styles: { color: borderColor, size: 1 },
+                    ignoreEvent: true
+                });
+            }
+            for (var c = 0; c <= cols; c++) {
+                var x = point.x + c * cellWidth;
+                figures.push({
+                    key: "gridV_".concat(c),
+                    type: 'line',
+                    attrs: {
+                        coordinates: [
+                            { x: x, y: point.y },
+                            { x: x, y: point.y + tableHeight }
+                        ]
+                    },
+                    styles: { color: borderColor, size: 1 },
+                    ignoreEvent: true
+                });
+            }
+        }
+        // Cell texts — richText so bold/italic/fontFamily render consistently;
+        // no box background, just the glyphs.
+        var cellData = __assign(__assign({}, baseTextBoxData('', styles)), { vertAlign: 'middle', horzTextAlign: textAlign });
+        for (var r = 0; r < rows; r++) {
+            for (var c = 0; c < cols; c++) {
+                var content = cells[r * cols + c];
+                if (content === '') {
+                    continue;
+                }
+                var cellLeft = point.x + c * cellWidth;
+                var cellMidY = point.y + r * cellHeight + cellHeight / 2;
+                var anchorX = cellLeft + cellWidth / 2;
+                var horzAlign = 'center';
+                if (textAlign === 'left') {
+                    anchorX = cellLeft + cellPadding;
+                    horzAlign = 'left';
+                }
+                else if (textAlign === 'right') {
+                    anchorX = cellLeft + cellWidth - cellPadding;
+                    horzAlign = 'right';
+                }
+                var attrs = __assign(__assign({ x: anchorX, y: cellMidY }, cellData), { text: content, horzAlign: horzAlign });
+                figures.push({
+                    key: "cell_".concat(r, "_").concat(c),
+                    type: 'richText',
+                    attrs: attrs,
+                    styles: { color: styles.color },
+                    ignoreEvent: true
+                });
+            }
+        }
+        // Outer border + whole-grid hit body for dragging.
+        figures.push({
+            key: 'frame',
+            type: 'rect',
+            attrs: { x: point.x, y: point.y, width: tableWidth, height: tableHeight },
+            styles: {
+                style: 'stroke',
+                color: 'transparent',
+                borderColor: borderEnabled ? borderColor : 'transparent',
+                borderSize: borderEnabled ? 1 : 0
+            },
+            bounds: { x: point.x, y: point.y, width: tableWidth, height: tableHeight }
+        });
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_'
+        })), false));
+        return figures;
+    } }, textEditorHooks(openEditor));
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var FIB_TREND_COLOR = '#787b86';
+var FIB_TREND_DASH = [4, 4];
+var FIB_FILL_ALPHA = 0.1;
+var FIB_LABEL_SIZE = 12;
+/** Cull margin (px) for vertical lines outside the pane. */
+var FIB_TIME_CULL = 100;
+/** 'fibonacciLine' default — TV retracement set + hidden extension rows. */
+var FIB_RETRACEMENT_LEVELS = [
+    { visible: true, coeff: 0, color: '#787b86' },
+    { visible: true, coeff: 0.236, color: '#f23645' },
+    { visible: true, coeff: 0.382, color: '#ff9800' },
+    { visible: true, coeff: 0.5, color: '#4caf50' },
+    { visible: true, coeff: 0.618, color: '#089981' },
+    { visible: true, coeff: 0.786, color: '#00bcd4' },
+    { visible: true, coeff: 1, color: '#787b86' },
+    { visible: false, coeff: 1.272, color: '#ff9800' },
+    { visible: false, coeff: 1.618, color: '#2962ff' }
+];
+/** 'fibChannel' / 'fibExtension' default — consumer's 11-level set. */
+var FIB_EXTENSION_LEVELS = [
+    { visible: true, coeff: 0, color: '#787b86' },
+    { visible: true, coeff: 0.236, color: '#f23645' },
+    { visible: true, coeff: 0.382, color: '#ff9800' },
+    { visible: true, coeff: 0.5, color: '#4caf50' },
+    { visible: true, coeff: 0.618, color: '#089981' },
+    { visible: true, coeff: 0.786, color: '#00bcd4' },
+    { visible: true, coeff: 1, color: '#2962ff' },
+    { visible: true, coeff: 1.618, color: '#2962ff' },
+    { visible: true, coeff: 2.618, color: '#f23645' },
+    { visible: true, coeff: 3.618, color: '#9c27b0' },
+    { visible: true, coeff: 4.236, color: '#e91e63' }
+];
+/** 'fibTimeZone' default — fib numbers as coeff, deduped (0,1,2,3,5,...). */
+var FIB_TIME_ZONE_LEVELS = [
+    { visible: true, coeff: 0, color: '#787b86' },
+    { visible: true, coeff: 1, color: '#2962ff' },
+    { visible: true, coeff: 2, color: '#2962ff' },
+    { visible: true, coeff: 3, color: '#2962ff' },
+    { visible: true, coeff: 5, color: '#2962ff' },
+    { visible: true, coeff: 8, color: '#2962ff' },
+    { visible: true, coeff: 13, color: '#2962ff' },
+    { visible: true, coeff: 21, color: '#2962ff' },
+    { visible: true, coeff: 34, color: '#2962ff' },
+    { visible: true, coeff: 55, color: '#2962ff' },
+    { visible: true, coeff: 89, color: '#2962ff' }
+];
+/** 'fibTimeExtension' default — ratio multipliers on the time axis. */
+var FIB_TIME_EXTENSION_LEVELS = [
+    { visible: true, coeff: 0, color: '#787b86' },
+    { visible: true, coeff: 0.382, color: '#f23645' },
+    { visible: true, coeff: 0.5, color: '#ff9800' },
+    { visible: true, coeff: 0.618, color: '#4caf50' },
+    { visible: true, coeff: 1, color: '#089981' },
+    { visible: true, coeff: 1.382, color: '#00bcd4' },
+    { visible: true, coeff: 1.618, color: '#2962ff' },
+    { visible: true, coeff: 2, color: '#673ab7' },
+    { visible: true, coeff: 2.382, color: '#9c27b0' },
+    { visible: true, coeff: 2.618, color: '#e91e63' },
+    { visible: true, coeff: 3, color: '#f44336' }
+];
+/**
+ * Resolve the levels array for a fib overlay: `fib.levels` (pack contract)
+ * first, then the `levels`/`data.levels` paths the lib settings dialog
+ * binds. Whole-array shape only — invalid rows are dropped; a fully
+ * empty/invalid array falls through to `defaults`.
+ */
+function getFibLevels(extendData, defaults) {
+    var e_1, _a, e_2, _b;
+    var _c, _d;
+    var ed = extendData !== null && extendData !== void 0 ? extendData : {};
+    var candidates = [(_c = ed.fib) === null || _c === void 0 ? void 0 : _c.levels, ed.levels, (_d = ed.data) === null || _d === void 0 ? void 0 : _d.levels];
+    try {
+        for (var candidates_1 = __values(candidates), candidates_1_1 = candidates_1.next(); !candidates_1_1.done; candidates_1_1 = candidates_1.next()) {
+            var candidate = candidates_1_1.value;
+            if (isArray(candidate)) {
+                var rows = [];
+                try {
+                    for (var candidate_1 = (e_2 = void 0, __values(candidate)), candidate_1_1 = candidate_1.next(); !candidate_1_1.done; candidate_1_1 = candidate_1.next()) {
+                        var item = candidate_1_1.value;
+                        if (item !== null && typeof item === 'object') {
+                            // extendData is untyped JSON at runtime — normalize each row.
+                            var level = item;
+                            if (isNumber(level.coeff)) {
+                                rows.push({
+                                    visible: level.visible !== false,
+                                    coeff: level.coeff,
+                                    color: typeof level.color === 'string' ? level.color : '#787b86',
+                                    label: typeof level.label === 'string' ? level.label : undefined
+                                });
+                            }
+                        }
+                    }
+                }
+                catch (e_2_1) { e_2 = { error: e_2_1 }; }
+                finally {
+                    try {
+                        if (candidate_1_1 && !candidate_1_1.done && (_b = candidate_1.return)) _b.call(candidate_1);
+                    }
+                    finally { if (e_2) throw e_2.error; }
+                }
+                if (rows.length > 0) {
+                    return rows;
+                }
+            }
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (candidates_1_1 && !candidates_1_1.done && (_a = candidates_1.return)) _a.call(candidates_1);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    return defaults;
+}
+function getFillBetween(extendData) {
+    var _a, _b;
+    return (_b = (_a = extendData === null || extendData === void 0 ? void 0 : extendData.fib) === null || _a === void 0 ? void 0 : _a.fillBetween) !== null && _b !== void 0 ? _b : true;
+}
+/** Visible levels sorted by coeff — adjacency order for fills. */
+function sortedVisibleLevels(levels) {
+    return levels.filter(function (level) { return level.visible; }).sort(function (a, b) { return a.coeff - b.coeff; });
+}
+/**
+ * Precision mirror of `extension/overlay/fibonacciLine`: symbol
+ * pricePrecision on candle panes, max indicator precision elsewhere.
+ */
+function getPricePrecision$1(chart, overlay, yAxis) {
+    var _a, _b, _c;
+    var precision = 0;
+    if ((_a = yAxis === null || yAxis === void 0 ? void 0 : yAxis.isInCandle()) !== null && _a !== void 0 ? _a : true) {
+        precision = (_c = (_b = chart.getSymbol()) === null || _b === void 0 ? void 0 : _b.pricePrecision) !== null && _c !== void 0 ? _c : SymbolDefaultPrecisionConstants.PRICE;
+    }
+    else {
+        var indicators = chart.getIndicators({ paneId: overlay.paneId });
+        indicators.forEach(function (indicator) {
+            precision = Math.max(precision, indicator.precision);
+        });
+    }
+    return precision;
+}
+/** Kernel fibonacciLine value formatting — decimal fold + thousands separator. */
+function formatFibPrice(chart, value, precision) {
+    return chart.getDecimalFold().format(chart.getThousandsSeparator().format(value.toFixed(precision)));
+}
+/** Level caption — `label` overrides the coeff text; price appended in parens. */
+function fibLevelText(level, priceText) {
+    var _a;
+    var coeffText = (_a = level.label) !== null && _a !== void 0 ? _a : String(level.coeff);
+    return priceText !== undefined ? "".concat(coeffText, " (").concat(priceText, ")") : coeffText;
+}
+/** #rrggbb(+alpha) — mirrors extension/overlay/lineCommon.alphaColor. */
+function fibAlphaColor(hex, alpha) {
+    var match = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    if (match === null) {
+        return hex;
+    }
+    var r = parseInt(match[1], 16);
+    var g = parseInt(match[2], 16);
+    var b = parseInt(match[3], 16);
+    return "rgba(".concat(r, ",").concat(g, ",").concat(b, ",").concat(Math.max(0, Math.min(1, alpha)), ")");
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/** Extend a segment's ends to the pane edges along its own direction. */
+function extendSegment(start, end, extendLeft, extendRight, width) {
+    var s = start;
+    var e = end;
+    if (start.x === end.x) {
+        return [s, e];
+    }
+    if (extendLeft) {
+        var x = start.x < end.x ? 0 : width;
+        s = { x: x, y: getLinearYFromCoordinates(start, end, { x: x, y: start.y }) };
+    }
+    if (extendRight) {
+        var x = start.x < end.x ? width : 0;
+        e = { x: x, y: getLinearYFromCoordinates(start, end, { x: x, y: end.y }) };
+    }
+    return [s, e];
+}
+var fibChannel = {
+    name: 'fibChannel',
+    totalStep: 4,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    createPointFigures: function (_a) {
+        var _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var figures = [];
+        if (coordinates.length < 2) {
+            return figures;
+        }
+        var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
+        var levels = sortedVisibleLevels(getFibLevels(extendData, FIB_EXTENSION_LEVELS));
+        var precision = getPricePrecision$1(chart, overlay, yAxis);
+        var lineSize = (_e = (_d = (_c = overlay.styles) === null || _c === void 0 ? void 0 : _c.line) === null || _d === void 0 ? void 0 : _d.size) !== null && _e !== void 0 ? _e : 1;
+        var labelSize = (_h = (_g = (_f = overlay.styles) === null || _f === void 0 ? void 0 : _f.text) === null || _g === void 0 ? void 0 : _g.size) !== null && _h !== void 0 ? _h : FIB_LABEL_SIZE;
+        var c1 = coordinates[0];
+        var c2 = coordinates[1];
+        var c3 = coordinates[2];
+        var extendLeft = extendData.extendLeft === true;
+        var extendRight = extendData.extendRight === true;
+        // Dashed baseline P1→P2 (extended with the channel when enabled).
+        if (extendData.showTrend !== false) {
+            var _q = __read(extendSegment(c1, c2, extendLeft, extendRight, bounding.width), 2), bs = _q[0], be = _q[1];
+            figures.push({
+                key: 'trend',
+                type: 'line',
+                attrs: { coordinates: [bs, be] },
+                styles: { style: 'dashed', color: FIB_TREND_COLOR, size: lineSize, dashedValue: FIB_TREND_DASH }
+            });
+        }
+        if (coordinates.length < 3) {
+            figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+                coordinates: coordinates,
+                isSelected: isSelected,
+                isHovered: isHovered,
+                isDrawing: overlay.isDrawing(),
+                lock: overlay.lock,
+                keyPrefix: 'anchor_'
+            })), false));
+            return figures;
+        }
+        // Channel width in value space: signed distance between P3's value and
+        // the baseline value at P3's index.
+        var i1 = (_j = overlay.points[0]) === null || _j === void 0 ? void 0 : _j.dataIndex;
+        var i2 = (_k = overlay.points[1]) === null || _k === void 0 ? void 0 : _k.dataIndex;
+        var i3 = (_l = overlay.points[2]) === null || _l === void 0 ? void 0 : _l.dataIndex;
+        var v1 = (_m = overlay.points[0]) === null || _m === void 0 ? void 0 : _m.value;
+        var v2 = (_o = overlay.points[1]) === null || _o === void 0 ? void 0 : _o.value;
+        var v3 = (_p = overlay.points[2]) === null || _p === void 0 ? void 0 : _p.value;
+        var hasValues = isNumber(i1) && isNumber(i2) && isNumber(i3) && i2 !== i1 &&
+            isNumber(v1) && isNumber(v2) && isNumber(v3);
+        var useValue = hasValues && yAxis !== null;
+        // Fallback: vertical pixel offset of P3 above/below the baseline.
+        var offPx = c2.x !== c1.x
+            ? c3.y - getLinearYFromCoordinates(c1, c2, { x: c3.x, y: c3.y })
+            : c3.y - c1.y;
+        var deltaV = hasValues
+            ? v3 - (v1 + (v2 - v1) * ((i3 - i1) / (i2 - i1)))
+            : 0;
+        var levelLines = levels.map(function (level) {
+            var start = useValue
+                ? { x: c1.x, y: yAxis.convertToPixel(v1 + level.coeff * deltaV) }
+                : { x: c1.x, y: c1.y + level.coeff * offPx };
+            var end = useValue
+                ? { x: c2.x, y: yAxis.convertToPixel(v2 + level.coeff * deltaV) }
+                : { x: c2.x, y: c2.y + level.coeff * offPx };
+            var _a = __read(extendSegment(start, end, extendLeft, extendRight, bounding.width), 2), s = _a[0], e = _a[1];
+            return {
+                level: level,
+                start: s,
+                end: e,
+                endValue: useValue ? v2 + level.coeff * deltaV : undefined
+            };
+        });
+        // Fill parallelograms between adjacent level lines.
+        if (getFillBetween(extendData)) {
+            for (var i = 0; i < levelLines.length - 1; i++) {
+                var a = levelLines[i];
+                var b = levelLines[i + 1];
+                figures.push({
+                    key: "fill_".concat(i),
+                    type: 'polygon',
+                    attrs: {
+                        coordinates: [a.start, a.end, b.end, b.start]
+                    },
+                    styles: { style: 'fill', color: fibAlphaColor(levels[i].color, FIB_FILL_ALPHA) },
+                    ignoreEvent: true
+                });
+            }
+        }
+        // Level lines + labels at the right end of each line.
+        levelLines.forEach(function (line, index) {
+            figures.push({
+                key: "level_".concat(index),
+                type: 'line',
+                attrs: { coordinates: [line.start, line.end] },
+                styles: { color: line.level.color, size: lineSize }
+            });
+            var priceText = line.endValue !== undefined
+                ? formatFibPrice(chart, line.endValue, precision)
+                : undefined;
+            figures.push({
+                key: "levelLabel_".concat(index),
+                type: 'text',
+                attrs: {
+                    x: line.end.x - 4,
+                    y: line.end.y,
+                    text: fibLevelText(line.level, priceText),
+                    align: 'right',
+                    baseline: 'bottom'
+                },
+                styles: { color: line.level.color, size: labelSize, backgroundColor: 'transparent' },
+                ignoreEvent: true
+            });
+        });
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_'
+        })), false));
+        return figures;
+    }
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var fibExtension = {
+    name: 'fibExtension',
+    totalStep: 4,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    createPointFigures: function (_a) {
+        var _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var figures = [];
+        if (coordinates.length < 2) {
+            return figures;
+        }
+        var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
+        var levels = sortedVisibleLevels(getFibLevels(extendData, FIB_EXTENSION_LEVELS));
+        var precision = getPricePrecision$1(chart, overlay, yAxis);
+        var lineSize = (_e = (_d = (_c = overlay.styles) === null || _c === void 0 ? void 0 : _c.line) === null || _d === void 0 ? void 0 : _d.size) !== null && _e !== void 0 ? _e : 1;
+        var labelSize = (_h = (_g = (_f = overlay.styles) === null || _f === void 0 ? void 0 : _f.text) === null || _g === void 0 ? void 0 : _g.size) !== null && _h !== void 0 ? _h : FIB_LABEL_SIZE;
+        var c1 = coordinates[0];
+        var c2 = coordinates[1];
+        // Dashed trend line P1→P2 always drawable at 2+ coords; P2→P3 joins at 3.
+        if (extendData.showTrend !== false) {
+            figures.push({
+                key: 'trend_12',
+                type: 'line',
+                attrs: { coordinates: [c1, c2] },
+                styles: { style: 'dashed', color: FIB_TREND_COLOR, size: lineSize, dashedValue: FIB_TREND_DASH }
+            });
+        }
+        if (coordinates.length < 3) {
+            figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+                coordinates: coordinates,
+                isSelected: isSelected,
+                isHovered: isHovered,
+                isDrawing: overlay.isDrawing(),
+                lock: overlay.lock,
+                keyPrefix: 'anchor_'
+            })), false));
+            return figures;
+        }
+        var c3 = coordinates[2];
+        if (extendData.showTrend !== false) {
+            figures.push({
+                key: 'trend_23',
+                type: 'line',
+                attrs: { coordinates: [c2, c3] },
+                styles: { style: 'dashed', color: FIB_TREND_COLOR, size: lineSize, dashedValue: FIB_TREND_DASH }
+            });
+        }
+        var v1 = (_j = overlay.points[0]) === null || _j === void 0 ? void 0 : _j.value;
+        var v2 = (_k = overlay.points[1]) === null || _k === void 0 ? void 0 : _k.value;
+        var v3 = (_l = overlay.points[2]) === null || _l === void 0 ? void 0 : _l.value;
+        var useValue = isNumber(v1) && isNumber(v2) && isNumber(v3);
+        var vDif = (v2 !== null && v2 !== void 0 ? v2 : 0) - (v1 !== null && v1 !== void 0 ? v1 : 0);
+        var levelValue = function (coeff) { return (v3 !== null && v3 !== void 0 ? v3 : 0) + vDif * coeff; };
+        var levelY = function (coeff) {
+            if (useValue && yAxis !== null) {
+                return yAxis.convertToPixel(levelValue(coeff));
+            }
+            return c3.y + (c2.y - c1.y) * coeff;
+        };
+        var leftX = c3.x;
+        var rightX = bounding.width;
+        var levelYs = levels.map(function (level) { return levelY(level.coeff); });
+        // Fills between adjacent visible levels, spanning the ray region.
+        if (getFillBetween(extendData)) {
+            for (var i = 0; i < levels.length - 1; i++) {
+                var yA = levelYs[i];
+                var yB = levelYs[i + 1];
+                figures.push({
+                    key: "fill_".concat(i),
+                    type: 'polygon',
+                    attrs: {
+                        coordinates: [
+                            { x: leftX, y: yA },
+                            { x: rightX, y: yA },
+                            { x: rightX, y: yB },
+                            { x: leftX, y: yB }
+                        ]
+                    },
+                    styles: { style: 'fill', color: fibAlphaColor(levels[i].color, FIB_FILL_ALPHA) },
+                    ignoreEvent: true
+                });
+            }
+        }
+        levels.forEach(function (level, index) {
+            var y = levelYs[index];
+            figures.push({
+                key: "level_".concat(index),
+                type: 'line',
+                attrs: { coordinates: [{ x: leftX, y: y }, { x: rightX, y: y }] },
+                styles: { color: level.color, size: lineSize }
+            });
+            var priceText = useValue ? formatFibPrice(chart, levelValue(level.coeff), precision) : undefined;
+            figures.push({
+                key: "levelLabel_".concat(index),
+                type: 'text',
+                attrs: {
+                    x: leftX + 4,
+                    y: y,
+                    text: fibLevelText(level, priceText),
+                    align: 'left',
+                    baseline: 'bottom'
+                },
+                styles: { color: level.color, size: labelSize, backgroundColor: 'transparent' },
+                ignoreEvent: true
+            });
+        });
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_'
+        })), false));
+        return figures;
+    }
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var fibRetracement = {
+    name: 'fibonacciLine',
+    totalStep: 3,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    createPointFigures: function (_a) {
+        var _b, _c, _d, _e, _f, _g, _h, _j, _k;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var figures = [];
+        if (coordinates.length < 2) {
+            return figures;
+        }
+        var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
+        var levels = sortedVisibleLevels(getFibLevels(extendData, FIB_RETRACEMENT_LEVELS));
+        var precision = getPricePrecision$1(chart, overlay, yAxis);
+        var lineSize = (_e = (_d = (_c = overlay.styles) === null || _c === void 0 ? void 0 : _c.line) === null || _d === void 0 ? void 0 : _d.size) !== null && _e !== void 0 ? _e : 1;
+        var labelSize = (_h = (_g = (_f = overlay.styles) === null || _f === void 0 ? void 0 : _f.text) === null || _g === void 0 ? void 0 : _g.size) !== null && _h !== void 0 ? _h : FIB_LABEL_SIZE;
+        var c1 = coordinates[0];
+        var c2 = coordinates[1];
+        var leftX = extendData.extendLeft === true ? 0 : Math.min(c1.x, c2.x);
+        var rightX = extendData.extendRight === true ? bounding.width : Math.max(c1.x, c2.x);
+        var v1 = (_j = overlay.points[0]) === null || _j === void 0 ? void 0 : _j.value;
+        var v2 = (_k = overlay.points[1]) === null || _k === void 0 ? void 0 : _k.value;
+        // Value-space level math keeps prices correct on log axes; pixel-space
+        // interpolation is the fallback when values are absent (mid-drag).
+        var useValue = isNumber(v1) && isNumber(v2);
+        var vBase = v2 !== null && v2 !== void 0 ? v2 : 0;
+        var vDif = (v1 !== null && v1 !== void 0 ? v1 : 0) - (v2 !== null && v2 !== void 0 ? v2 : 0);
+        var levelValue = function (coeff) { return vBase + vDif * coeff; };
+        var levelY = function (coeff) {
+            if (useValue && yAxis !== null) {
+                return yAxis.convertToPixel(levelValue(coeff));
+            }
+            return c2.y + (c1.y - c2.y) * coeff;
+        };
+        var levelYs = levels.map(function (level) { return levelY(level.coeff); });
+        // Fills between adjacent visible levels (sorted by coeff → adjacent in y).
+        if (getFillBetween(extendData)) {
+            for (var i = 0; i < levels.length - 1; i++) {
+                var yA = levelYs[i];
+                var yB = levelYs[i + 1];
+                figures.push({
+                    key: "fill_".concat(i),
+                    type: 'polygon',
+                    attrs: {
+                        coordinates: [
+                            { x: leftX, y: yA },
+                            { x: rightX, y: yA },
+                            { x: rightX, y: yB },
+                            { x: leftX, y: yB }
+                        ]
+                    },
+                    styles: { style: 'fill', color: fibAlphaColor(levels[i].color, FIB_FILL_ALPHA) },
+                    ignoreEvent: true
+                });
+            }
+        }
+        // Dashed trend line P1→P2.
+        if (extendData.showTrend !== false) {
+            figures.push({
+                key: 'trend',
+                type: 'line',
+                attrs: { coordinates: [c1, c2] },
+                styles: { style: 'dashed', color: FIB_TREND_COLOR, size: lineSize, dashedValue: FIB_TREND_DASH }
+            });
+        }
+        // Level lines + labels.
+        levels.forEach(function (level, index) {
+            var y = levelYs[index];
+            figures.push({
+                key: "level_".concat(index),
+                type: 'line',
+                attrs: { coordinates: [{ x: leftX, y: y }, { x: rightX, y: y }] },
+                styles: { color: level.color, size: lineSize }
+            });
+            var priceText = useValue ? formatFibPrice(chart, levelValue(level.coeff), precision) : undefined;
+            figures.push({
+                key: "levelLabel_".concat(index),
+                type: 'text',
+                attrs: {
+                    x: leftX + 4,
+                    y: y,
+                    text: fibLevelText(level, priceText),
+                    align: 'left',
+                    baseline: 'bottom'
+                },
+                styles: { color: level.color, size: labelSize, backgroundColor: 'transparent' },
+                ignoreEvent: true
+            });
+        });
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_',
+            midPoint: true
+        })), false));
+        return figures;
+    }
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var fibTimeExtension = {
+    name: 'fibTimeExtension',
+    totalStep: 4,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    createPointFigures: function (_a) {
+        var _b, _c, _d, _e, _f, _g, _h;
+        var overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var figures = [];
+        if (coordinates.length < 2) {
+            return figures;
+        }
+        var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
+        var levels = sortedVisibleLevels(getFibLevels(extendData, FIB_TIME_EXTENSION_LEVELS));
+        var lineSize = (_e = (_d = (_c = overlay.styles) === null || _c === void 0 ? void 0 : _c.line) === null || _d === void 0 ? void 0 : _d.size) !== null && _e !== void 0 ? _e : 1;
+        var labelSize = (_h = (_g = (_f = overlay.styles) === null || _f === void 0 ? void 0 : _f.text) === null || _g === void 0 ? void 0 : _g.size) !== null && _h !== void 0 ? _h : FIB_LABEL_SIZE;
+        var showLabels = extendData.showLabels !== false;
+        var c1 = coordinates[0];
+        var c2 = coordinates[1];
+        var unit = c2.x - c1.x;
+        // Dashed trend lines P1→P2 and P2→P3 (foreground, TV order).
+        var trendFigures = [];
+        if (extendData.showTrend !== false) {
+            trendFigures.push({
+                key: 'trend_12',
+                type: 'line',
+                attrs: { coordinates: [c1, c2] },
+                styles: { style: 'dashed', color: FIB_TREND_COLOR, size: lineSize, dashedValue: FIB_TREND_DASH }
+            });
+        }
+        if (coordinates.length < 3) {
+            figures.push.apply(figures, __spreadArray([], __read(trendFigures), false));
+            figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+                coordinates: coordinates,
+                isSelected: isSelected,
+                isHovered: isHovered,
+                isDrawing: overlay.isDrawing(),
+                lock: overlay.lock,
+                keyPrefix: 'anchor_'
+            })), false));
+            return figures;
+        }
+        var c3 = coordinates[2];
+        if (extendData.showTrend !== false) {
+            trendFigures.push({
+                key: 'trend_23',
+                type: 'line',
+                attrs: { coordinates: [c2, c3] },
+                styles: { style: 'dashed', color: FIB_TREND_COLOR, size: lineSize, dashedValue: FIB_TREND_DASH }
+            });
+        }
+        // Line x positions sorted left→right for adjacent-band fills.
+        var positions = levels
+            .map(function (level) { return ({ level: level, x: c3.x + level.coeff * unit }); })
+            .sort(function (a, b) { return a.x - b.x; });
+        if (getFillBetween(extendData)) {
+            for (var i = 0; i < positions.length - 1; i++) {
+                var xA = positions[i].x;
+                var xB = positions[i + 1].x;
+                if (xB < -FIB_TIME_CULL || xA > bounding.width + FIB_TIME_CULL) {
+                    continue;
+                }
+                figures.push({
+                    key: "fill_".concat(i),
+                    type: 'polygon',
+                    attrs: {
+                        coordinates: [
+                            { x: xA, y: 0 },
+                            { x: xB, y: 0 },
+                            { x: xB, y: bounding.height },
+                            { x: xA, y: bounding.height }
+                        ]
+                    },
+                    styles: { style: 'fill', color: fibAlphaColor(positions[i].level.color, FIB_FILL_ALPHA) },
+                    ignoreEvent: true
+                });
+            }
+        }
+        positions.forEach(function (_a, index) {
+            var _b;
+            var level = _a.level, x = _a.x;
+            if (x < -FIB_TIME_CULL || x > bounding.width + FIB_TIME_CULL) {
+                return;
+            }
+            figures.push({
+                key: "level_".concat(index),
+                type: 'line',
+                attrs: { coordinates: [{ x: x, y: 0 }, { x: x, y: bounding.height }] },
+                styles: { color: level.color, size: lineSize }
+            });
+            if (showLabels) {
+                figures.push({
+                    key: "levelLabel_".concat(index),
+                    type: 'text',
+                    attrs: {
+                        x: x + 4,
+                        y: bounding.height - 4,
+                        text: (_b = level.label) !== null && _b !== void 0 ? _b : String(level.coeff),
+                        align: 'left',
+                        baseline: 'bottom'
+                    },
+                    styles: { color: level.color, size: labelSize, backgroundColor: 'transparent' },
+                    ignoreEvent: true
+                });
+            }
+        });
+        figures.push.apply(figures, __spreadArray([], __read(trendFigures), false));
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_'
+        })), false));
+        return figures;
+    }
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var fibTimeZone = {
+    name: 'fibTimeZone',
+    totalStep: 3,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    createPointFigures: function (_a) {
+        var _b, _c, _d, _e, _f, _g, _h;
+        var overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var figures = [];
+        if (coordinates.length < 2) {
+            return figures;
+        }
+        var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
+        var levels = sortedVisibleLevels(getFibLevels(extendData, FIB_TIME_ZONE_LEVELS));
+        var lineSize = (_e = (_d = (_c = overlay.styles) === null || _c === void 0 ? void 0 : _c.line) === null || _d === void 0 ? void 0 : _d.size) !== null && _e !== void 0 ? _e : 1;
+        var labelSize = (_h = (_g = (_f = overlay.styles) === null || _f === void 0 ? void 0 : _f.text) === null || _g === void 0 ? void 0 : _g.size) !== null && _h !== void 0 ? _h : FIB_LABEL_SIZE;
+        var showLabels = extendData.showLabels !== false;
+        var c1 = coordinates[0];
+        var unit = coordinates[1].x - c1.x;
+        // Line x positions sorted left→right for adjacent-band fills.
+        var positions = levels
+            .map(function (level) { return ({ level: level, x: c1.x + level.coeff * unit }); })
+            .sort(function (a, b) { return a.x - b.x; });
+        if (getFillBetween(extendData)) {
+            for (var i = 0; i < positions.length - 1; i++) {
+                var xA = positions[i].x;
+                var xB = positions[i + 1].x;
+                if (xB < -FIB_TIME_CULL || xA > bounding.width + FIB_TIME_CULL) {
+                    continue;
+                }
+                figures.push({
+                    key: "fill_".concat(i),
+                    type: 'polygon',
+                    attrs: {
+                        coordinates: [
+                            { x: xA, y: 0 },
+                            { x: xB, y: 0 },
+                            { x: xB, y: bounding.height },
+                            { x: xA, y: bounding.height }
+                        ]
+                    },
+                    styles: { style: 'fill', color: fibAlphaColor(positions[i].level.color, FIB_FILL_ALPHA) },
+                    ignoreEvent: true
+                });
+            }
+        }
+        positions.forEach(function (_a, index) {
+            var _b;
+            var level = _a.level, x = _a.x;
+            if (x < -FIB_TIME_CULL || x > bounding.width + FIB_TIME_CULL) {
+                return;
+            }
+            figures.push({
+                key: "level_".concat(index),
+                type: 'line',
+                attrs: { coordinates: [{ x: x, y: 0 }, { x: x, y: bounding.height }] },
+                styles: { color: level.color, size: lineSize }
+            });
+            if (showLabels) {
+                figures.push({
+                    key: "levelLabel_".concat(index),
+                    type: 'text',
+                    attrs: {
+                        x: x + 4,
+                        y: bounding.height - 4,
+                        text: (_b = level.label) !== null && _b !== void 0 ? _b : String(level.coeff),
+                        align: 'left',
+                        baseline: 'bottom'
+                    },
+                    styles: { color: level.color, size: labelSize, backgroundColor: 'transparent' },
+                    ignoreEvent: true
+                });
+            }
+        });
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_',
+            midPoint: true
+        })), false));
+        return figures;
+    }
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+// Per-overlay, per-slot — an overlay wrapping more than one figure callback
+// (createPointFigures + createXAxisFigures + createYAxisFigures) gets an
+// independent entry per slot so the callbacks don't fight over one cache key.
+var cache = new WeakMap();
+function coordsSignature(coordinates) {
+    var e_1, _a;
+    // Quarter-pixel rounding absorbs sub-pixel jitter from axis math without
+    // masking real moves.
+    var sig = '';
+    try {
+        for (var coordinates_1 = __values(coordinates), coordinates_1_1 = coordinates_1.next(); !coordinates_1_1.done; coordinates_1_1 = coordinates_1.next()) {
+            var c = coordinates_1_1.value;
+            sig += "".concat(Math.round(c.x * 4), ",").concat(Math.round(c.y * 4), ";");
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (coordinates_1_1 && !coordinates_1_1.done && (_a = coordinates_1.return)) _a.call(coordinates_1);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    return sig;
+}
+/**
+ * CONTRACT: the returned array is SHARED — the view and every subsequent
+ * createFigures call see the same instance until the signature changes.
+ * Templates must treat it as read-only (never push/splice/mutate figure
+ * attrs on the result).
+ */
+function withFigureCache(fn, options) {
+    return function (params) {
+        var _a, _b, _c, _d;
+        var signature = coordsSignature(params.coordinates) +
+            "|r".concat(params.overlay.figuresRev) +
+            "|s".concat(params.isSelected === true ? 1 : 0, "h").concat(params.isHovered === true ? 1 : 0) +
+            "|l".concat(params.overlay.lock ? 1 : 0) +
+            "|b".concat(params.bounding.width, "x").concat(params.bounding.height) +
+            "|c".concat(params.overlay.currentStep) +
+            "|h".concat((_a = params.hoveredFigureKey) !== null && _a !== void 0 ? _a : '') +
+            "|k".concat((_c = (_b = options === null || options === void 0 ? void 0 : options.extraKey) === null || _b === void 0 ? void 0 : _b.call(options, params)) !== null && _c !== void 0 ? _c : '');
+        var slotKey = (_d = options === null || options === void 0 ? void 0 : options.slot) !== null && _d !== void 0 ? _d : '';
+        var slots = cache.get(params.overlay);
+        var entry = slots === null || slots === void 0 ? void 0 : slots.get(slotKey);
+        if (entry !== undefined && entry.signature === signature) {
+            return entry.figures;
+        }
+        var result = fn(params);
+        var figures = Array.isArray(result) ? result : [result];
+        if (slots === undefined) {
+            slots = new Map();
+            cache.set(params.overlay, slots);
+        }
+        slots.set(slotKey, { signature: signature, figures: figures });
+        return figures;
+    };
+}
+function boundsOutside(bounds, bounding, margin) {
+    return (bounds.x + bounds.width < -margin ||
+        bounds.x > bounding.width + margin ||
+        bounds.y + bounds.height < -margin ||
+        bounds.y > bounding.height + margin);
+}
+/**
+ * Drop figures that declare `bounds` fully outside the viewport. Figures
+ * without bounds are always kept (opt-in per figure).
+ */
+function withViewportCull(fn, options) {
+    var _a;
+    var margin = (_a = options === null || options === void 0 ? void 0 : options.margin) !== null && _a !== void 0 ? _a : 24;
+    return function (params) {
+        var result = fn(params);
+        var figures = Array.isArray(result) ? result : [result];
+        var bounding = params.bounding;
+        return figures.filter(function (figure) {
+            var bounds = figure.bounds;
+            return bounds === undefined || !boundsOutside(bounds, bounding, margin);
+        });
+    };
+}
+/**
+ * Convenience: cache → cull. The composition order matters — cull is inner
+ * so off-screen figures never enter the cache output.
+ */
+function withPerfPipeline(fn, options) {
+    return withFigureCache(withViewportCull(fn, options), options);
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var TRENDLINE_COLOR = '#787b86';
+var TRENDLINE_DASH = [4, 4];
+var GRID_DASH = [2, 4];
+/** Shared TradingView-ish level palette. */
+var FIB_COLORS = {
+    red: '#f23645',
+    orange: '#ff9800',
+    green: '#4caf50',
+    teal: '#089981',
+    cyan: '#00bcd4',
+    blue: '#2962ff',
+    purple: '#9c27b0',
+    pink: '#e91e63',
+    gray: '#787b86'
+};
+function fibLevel(coeff, color, visible, label) {
+    if (visible === void 0) { visible = true; }
+    var level = { coeff: coeff, color: color, visible: visible };
+    if (label !== undefined) {
+        level.label = label;
+    }
+    return level;
+}
+/**
+ * Whole-array levels read: validates every row, keeps the user's ordering,
+ * falls back to `defaults` when the overlay carries no usable array.
+ */
+function readLevels(extendData, defaults) {
+    var e_1, _a;
+    var levels = extendData === null || extendData === void 0 ? void 0 : extendData.levels;
+    if (!isArray(levels) || levels.length === 0) {
+        return defaults;
+    }
+    var result = [];
+    try {
+        for (var levels_1 = __values(levels), levels_1_1 = levels_1.next(); !levels_1_1.done; levels_1_1 = levels_1.next()) {
+            var raw = levels_1_1.value;
+            if (raw === null || typeof raw !== 'object') {
+                continue;
+            }
+            var level = raw;
+            if (!isNumber(level.coeff)) {
+                continue;
+            }
+            result.push({
+                coeff: level.coeff,
+                color: isString(level.color) ? level.color : FIB_COLORS.gray,
+                visible: level.visible !== false,
+                label: isString(level.label) ? level.label : undefined
+            });
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (levels_1_1 && !levels_1_1.done && (_a = levels_1.return)) _a.call(levels_1);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    return result;
+}
+function formatLevelLabel(level) {
+    if (isString(level.label)) {
+        return level.label;
+    }
+    // Compact coeff printing: 0.5 → '0.5', 1/3 → '0.333'
+    return "".concat(Math.round(level.coeff * 1000) / 1000);
+}
+function distance(a, b) {
+    var dx = b.x - a.x;
+    var dy = b.y - a.y;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+function midpoint(a, b) {
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+/**
+ * Ray exit point: the ray from `from` through `through` clipped at the pane
+ * bounding rect. Falls back to `through` for degenerate directions or an
+ * origin that lies outside the rect and moves away from it.
+ */
+function rayToBoundingEdge(from, through, bounding) {
+    var dx = through.x - from.x;
+    var dy = through.y - from.y;
+    var t = Number.POSITIVE_INFINITY;
+    if (dx > 0) {
+        t = Math.min(t, (bounding.width - from.x) / dx);
+    }
+    else if (dx < 0) {
+        t = Math.min(t, -from.x / dx);
+    }
+    if (dy > 0) {
+        t = Math.min(t, (bounding.height - from.y) / dy);
+    }
+    else if (dy < 0) {
+        t = Math.min(t, -from.y / dy);
+    }
+    if (!Number.isFinite(t) || t <= 0) {
+        return through;
+    }
+    return { x: from.x + dx * t, y: from.y + dy * t };
+}
+function lineFigure(key, segments, styles, ignoreEvent) {
+    if (ignoreEvent === void 0) { ignoreEvent = false; }
+    var attrs = segments.map(function (coordinates) { return ({ coordinates: coordinates }); });
+    var figure = { key: key, type: 'line', attrs: attrs, styles: styles };
+    if (ignoreEvent) {
+        figure.ignoreEvent = true;
+    }
+    return figure;
+}
+function labelFigure(key, x, y, text, color, align, baseline) {
+    if (align === void 0) { align = 'center'; }
+    if (baseline === void 0) { baseline = 'middle'; }
+    var attrs = { x: x, y: y, text: text, align: align, baseline: baseline };
+    return {
+        key: key,
+        type: 'text',
+        attrs: attrs,
+        styles: {
+            color: color,
+            size: 11,
+            weight: 'normal',
+            backgroundColor: 'transparent',
+            paddingLeft: 0,
+            paddingRight: 0,
+            paddingTop: 0,
+            paddingBottom: 0
+        },
+        ignoreEvent: true
+    };
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var DEFAULT_LEVELS$4 = [
+    fibLevel(0, FIB_COLORS.gray),
+    fibLevel(0.236, FIB_COLORS.red),
+    fibLevel(0.382, FIB_COLORS.orange),
+    fibLevel(0.5, FIB_COLORS.green),
+    fibLevel(0.618, FIB_COLORS.teal),
+    fibLevel(0.786, FIB_COLORS.cyan),
+    fibLevel(1, FIB_COLORS.blue),
+    fibLevel(1.272, FIB_COLORS.orange),
+    fibLevel(1.618, FIB_COLORS.purple)
+];
+var fibCircles = {
+    name: 'fibCircles',
+    totalStep: 3,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    styles: {
+        line: { color: TRENDLINE_COLOR, size: 1, style: 'dashed', dashedValue: TRENDLINE_DASH },
+        text: { color: TRENDLINE_COLOR, size: 11 }
+    },
+    extendData: {
+        levels: DEFAULT_LEVELS$4,
+        trendlineVisible: true,
+        showLabels: true
+    },
+    createPointFigures: withPerfPipeline(function (_a) {
+        var _b, _c, _d, _e, _f, _g;
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
+        var figures = [];
+        if (coordinates.length >= 2) {
+            var _h = __read(coordinates, 2), p1 = _h[0], p2 = _h[1];
+            var baseRadius_1 = distance(p1, p2);
+            if (baseRadius_1 > 0) {
+                var center_1 = midpoint(p1, p2);
+                if ((_c = extendData.trendlineVisible) !== null && _c !== void 0 ? _c : true) {
+                    // Inherits styles.line (dashed trendline color from the toolbar).
+                    figures.push(lineFigure('fib_circles_trend', [[p1, p2]], {}));
+                }
+                var levels = readLevels(extendData, DEFAULT_LEVELS$4);
+                var showLabels_1 = (_d = extendData.showLabels) !== null && _d !== void 0 ? _d : true;
+                var lineSize_1 = (_g = (_f = (_e = overlay.styles) === null || _e === void 0 ? void 0 : _e.line) === null || _f === void 0 ? void 0 : _f.size) !== null && _g !== void 0 ? _g : 1;
+                levels.forEach(function (level, index) {
+                    if (!level.visible) {
+                        return;
+                    }
+                    var r = baseRadius_1 * level.coeff;
+                    if (r <= 0) {
+                        return;
+                    }
+                    figures.push({
+                        key: "fib_circle_".concat(index),
+                        type: 'circle',
+                        attrs: { x: center_1.x, y: center_1.y, r: r },
+                        styles: { style: 'stroke', borderColor: level.color, borderSize: lineSize_1 },
+                        bounds: { x: center_1.x - r, y: center_1.y - r, width: r * 2, height: r * 2 }
+                    });
+                    if (showLabels_1) {
+                        // Label hangs off the circle's bottom point (TV labelPoint).
+                        figures.push(labelFigure("fib_circle_label_".concat(index), center_1.x, center_1.y + r, formatLevelLabel(level), level.color, 'center', 'top'));
+                    }
+                });
+            }
+        }
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_',
+            midPoint: true,
+            cursors: coordinates.length >= 2
+                ? [computeResizeCursor(coordinates[1], coordinates[0]), computeResizeCursor(coordinates[0], coordinates[1])]
+                : undefined
+        })), false));
+        return figures;
+    })
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var DEFAULT_LEVELS$3 = [
+    fibLevel(0.236, FIB_COLORS.red),
+    fibLevel(0.382, FIB_COLORS.orange),
+    fibLevel(0.5, FIB_COLORS.green),
+    fibLevel(0.618, FIB_COLORS.teal),
+    fibLevel(0.786, FIB_COLORS.cyan),
+    fibLevel(1, FIB_COLORS.blue)
+];
+var fibSpeedArcs = {
+    name: 'fibSpeedArcs',
+    totalStep: 3,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    styles: {
+        line: { color: TRENDLINE_COLOR, size: 1, style: 'dashed', dashedValue: TRENDLINE_DASH },
+        text: { color: TRENDLINE_COLOR, size: 11 }
+    },
+    extendData: {
+        levels: DEFAULT_LEVELS$3,
+        trendlineVisible: true,
+        showLabels: true
+    },
+    createPointFigures: withPerfPipeline(function (_a) {
+        var _b, _c, _d, _e, _f, _g;
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
+        var figures = [];
+        if (coordinates.length >= 2) {
+            var _h = __read(coordinates, 2), p1_1 = _h[0], p2 = _h[1];
+            var baseRadius_1 = distance(p1_1, p2);
+            if (baseRadius_1 > 0) {
+                if ((_c = extendData.trendlineVisible) !== null && _c !== void 0 ? _c : true) {
+                    figures.push(lineFigure('fib_sra_trend', [[p1_1, p2]], {}));
+                }
+                // The half-circle opens toward P2's vertical side: lower half when
+                // P2 sits below P1 on screen (y down), upper half otherwise.
+                var dir_1 = p2.y - p1_1.y >= 0 ? 1 : -1;
+                var startAngle_1 = dir_1 > 0 ? 0 : Math.PI;
+                var endAngle_1 = startAngle_1 + Math.PI;
+                var labelBaseline_1 = dir_1 > 0 ? 'top' : 'bottom';
+                var levels = readLevels(extendData, DEFAULT_LEVELS$3);
+                var showLabels_1 = (_d = extendData.showLabels) !== null && _d !== void 0 ? _d : true;
+                var lineSize_1 = (_g = (_f = (_e = overlay.styles) === null || _e === void 0 ? void 0 : _e.line) === null || _f === void 0 ? void 0 : _f.size) !== null && _g !== void 0 ? _g : 1;
+                levels.forEach(function (level, index) {
+                    if (!level.visible) {
+                        return;
+                    }
+                    var r = baseRadius_1 * level.coeff;
+                    if (r <= 0) {
+                        return;
+                    }
+                    var attrs = { x: p1_1.x, y: p1_1.y, r: r, startAngle: startAngle_1, endAngle: endAngle_1 };
+                    figures.push({
+                        key: "fib_sra_".concat(index),
+                        type: 'arc',
+                        attrs: attrs,
+                        styles: { style: 'solid', size: lineSize_1, color: level.color },
+                        bounds: { x: p1_1.x - r, y: p1_1.y - r, width: r * 2, height: r * 2 }
+                    });
+                    if (showLabels_1) {
+                        figures.push(labelFigure("fib_sra_label_".concat(index), p1_1.x, p1_1.y + dir_1 * r, formatLevelLabel(level), level.color, 'center', labelBaseline_1));
+                    }
+                });
+            }
+        }
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_',
+            midPoint: true,
+            cursors: coordinates.length >= 2
+                ? [computeResizeCursor(coordinates[1], coordinates[0]), computeResizeCursor(coordinates[0], coordinates[1])]
+                : undefined
+        })), false));
+        return figures;
+    })
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var DEFAULT_LEVELS$2 = [
+    fibLevel(1 / 3, FIB_COLORS.red, true, '1/3'),
+    fibLevel(0.382, FIB_COLORS.orange),
+    fibLevel(0.5, FIB_COLORS.green),
+    fibLevel(0.618, FIB_COLORS.teal),
+    fibLevel(2 / 3, FIB_COLORS.cyan, true, '2/3')
+];
+var fibSpeedFan = {
+    name: 'fibSpeedFan',
+    totalStep: 3,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    styles: {
+        line: { color: TRENDLINE_COLOR, size: 1, style: 'dashed', dashedValue: GRID_DASH },
+        text: { color: TRENDLINE_COLOR, size: 11 }
+    },
+    extendData: {
+        levels: DEFAULT_LEVELS$2,
+        showBox: true,
+        showLabels: true
+    },
+    createPointFigures: withPerfPipeline(function (_a) {
+        var _b, _c, _d, _e, _f, _g;
+        var overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
+        var figures = [];
+        if (coordinates.length >= 2) {
+            var _h = __read(coordinates, 2), p1_1 = _h[0], p2_1 = _h[1];
+            var dx_1 = p2_1.x - p1_1.x;
+            var dy_1 = p2_1.y - p1_1.y;
+            if (dx_1 !== 0 || dy_1 !== 0) {
+                if ((_c = extendData.showBox) !== null && _c !== void 0 ? _c : true) {
+                    // Box outline + the P1→P2 diagonal, both in styles.line.
+                    figures.push(lineFigure('srf_box', [[
+                            { x: p1_1.x, y: p1_1.y },
+                            { x: p2_1.x, y: p1_1.y },
+                            { x: p2_1.x, y: p2_1.y },
+                            { x: p1_1.x, y: p2_1.y },
+                            { x: p1_1.x, y: p1_1.y }
+                        ]], {}));
+                    figures.push(lineFigure('srf_trend', [[p1_1, p2_1]], {}));
+                }
+                var levels = readLevels(extendData, DEFAULT_LEVELS$2);
+                var showLabels_1 = (_d = extendData.showLabels) !== null && _d !== void 0 ? _d : true;
+                var lineSize_1 = (_g = (_f = (_e = overlay.styles) === null || _e === void 0 ? void 0 : _e.line) === null || _f === void 0 ? void 0 : _f.size) !== null && _g !== void 0 ? _g : 1;
+                var labelAlign_1 = dx_1 >= 0 ? 'left' : 'right';
+                var labelOffset_1 = dx_1 >= 0 ? 4 : -4;
+                levels.forEach(function (level, index) {
+                    if (!level.visible) {
+                        return;
+                    }
+                    // Horizontal-axis family: division point on the P2.x edge.
+                    var hTarget = { x: p2_1.x, y: p1_1.y + dy_1 * level.coeff };
+                    figures.push(lineFigure("srf_h_".concat(index), [[p1_1, rayToBoundingEdge(p1_1, hTarget, bounding)]], { style: 'solid', size: lineSize_1, color: level.color }));
+                    // Vertical-axis family: division point on the P2.y edge.
+                    var vTarget = { x: p1_1.x + dx_1 * level.coeff, y: p2_1.y };
+                    figures.push(lineFigure("srf_v_".concat(index), [[p1_1, rayToBoundingEdge(p1_1, vTarget, bounding)]], { style: 'solid', size: lineSize_1, color: level.color }));
+                    if (showLabels_1) {
+                        figures.push(labelFigure("srf_label_".concat(index), hTarget.x + labelOffset_1, hTarget.y, formatLevelLabel(level), level.color, labelAlign_1, 'middle'));
+                    }
+                });
+            }
+        }
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_',
+            midPoint: true,
+            cursors: coordinates.length >= 2
+                ? [computeResizeCursor(coordinates[1], coordinates[0]), computeResizeCursor(coordinates[0], coordinates[1])]
+                : undefined
+        })), false));
+        return figures;
+    })
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var PHI = 1.618033988749895;
+var SPIRAL_STEPS = 360;
+var MIN_THETA = -4 * Math.PI;
+var MAX_THETA = 4 * Math.PI;
+var MAX_RADIUS_FACTOR = 20;
+var MIN_RADIUS_PX = 0.5;
+var fibSpiral = {
+    name: 'fibSpiral',
+    totalStep: 3,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    styles: {
+        line: { color: '#2962ff', size: 2, style: 'solid' }
+    },
+    extendData: {
+        counterclockwise: false,
+        trendlineVisible: true
+    },
+    createPointFigures: withPerfPipeline(function (_a) {
+        var _b, _c, _d, _e, _f, _g;
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
+        var figures = [];
+        if (coordinates.length >= 2) {
+            var _h = __read(coordinates, 2), p1 = _h[0], p2 = _h[1];
+            var dx = p2.x - p1.x;
+            var dy = p2.y - p1.y;
+            var baseRadius = Math.sqrt(dx * dx + dy * dy);
+            var baseAngle = Math.atan2(dy, dx);
+            if (baseRadius >= 1) {
+                var dir = ((_c = extendData.counterclockwise) !== null && _c !== void 0 ? _c : false) ? -1 : 1;
+                var maxRadius = baseRadius * MAX_RADIUS_FACTOR;
+                var spiralPoints = [];
+                for (var i = 0; i <= SPIRAL_STEPS; i++) {
+                    var theta = MIN_THETA + (i / SPIRAL_STEPS) * (MAX_THETA - MIN_THETA);
+                    var r = baseRadius * Math.pow(PHI, (2 * theta) / Math.PI);
+                    if (r < MIN_RADIUS_PX) {
+                        continue;
+                    }
+                    if (r > maxRadius) {
+                        break;
+                    }
+                    spiralPoints.push({
+                        x: p1.x + r * Math.cos(baseAngle + dir * theta),
+                        y: p1.y + r * Math.sin(baseAngle + dir * theta)
+                    });
+                }
+                if (spiralPoints.length >= 2) {
+                    // Inherits styles.line (color/width from the toolbar).
+                    figures.push(lineFigure('fib_spiral', [spiralPoints], {}));
+                }
+                if ((_d = extendData.trendlineVisible) !== null && _d !== void 0 ? _d : true) {
+                    var lineColor = (_g = (_f = (_e = overlay.styles) === null || _e === void 0 ? void 0 : _e.line) === null || _f === void 0 ? void 0 : _f.color) !== null && _g !== void 0 ? _g : '#2962ff';
+                    figures.push(lineFigure('fib_spiral_trend', [[p1, p2]], { style: 'dashed', size: 1, color: lineColor, dashedValue: TRENDLINE_DASH }, true));
+                }
+            }
+        }
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_',
+            midPoint: true,
+            cursors: coordinates.length >= 2
+                ? [computeResizeCursor(coordinates[1], coordinates[0]), computeResizeCursor(coordinates[0], coordinates[1])]
+                : undefined
+        })), false));
+        return figures;
+    })
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var DEFAULT_LEVELS$1 = [
+    fibLevel(0.236, FIB_COLORS.red),
+    fibLevel(0.382, FIB_COLORS.orange),
+    fibLevel(0.5, FIB_COLORS.green),
+    fibLevel(0.618, FIB_COLORS.teal),
+    fibLevel(0.786, FIB_COLORS.cyan)
+];
+/** Signed smallest rotation from a1 to a2 in (−π, π] — the wedge always spans the small sector. */
+function signedSectorAngle(a1, a2) {
+    var da = a2 - a1;
+    while (da > Math.PI) {
+        da -= Math.PI * 2;
+    }
+    while (da <= -Math.PI) {
+        da += Math.PI * 2;
+    }
+    return da;
+}
+var fibWedge = {
+    name: 'fibWedge',
+    totalStep: 4,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    styles: {
+        line: { color: TRENDLINE_COLOR, size: 1, style: 'solid' },
+        arc: { color: TRENDLINE_COLOR, size: 1, style: 'solid' },
+        text: { color: TRENDLINE_COLOR, size: 11 }
+    },
+    extendData: {
+        levels: DEFAULT_LEVELS$1,
+        showLabels: true
+    },
+    createPointFigures: withPerfPipeline(function (_a) {
+        var _b, _c, _d, _e, _f, _g, _h, _j;
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
+        var figures = [];
+        if (coordinates.length >= 3) {
+            var _k = __read(coordinates, 3), p1_1 = _k[0], p2 = _k[1], p3 = _k[2];
+            var radius_1 = distance(p1_1, p2);
+            var spread = distance(p1_1, p3);
+            if (radius_1 > 0 && spread > 0) {
+                var a1_1 = Math.atan2(p2.y - p1_1.y, p2.x - p1_1.x);
+                var a2 = Math.atan2(p3.y - p1_1.y, p3.x - p1_1.x);
+                var da_1 = signedSectorAngle(a1_1, a2);
+                var lineSize_1 = (_e = (_d = (_c = overlay.styles) === null || _c === void 0 ? void 0 : _c.line) === null || _d === void 0 ? void 0 : _d.size) !== null && _e !== void 0 ? _e : 1;
+                var lineColor = (_h = (_g = (_f = overlay.styles) === null || _f === void 0 ? void 0 : _f.line) === null || _g === void 0 ? void 0 : _g.color) !== null && _h !== void 0 ? _h : TRENDLINE_COLOR;
+                // Boundary rays — P1→P2 exact, P1→P3 projected onto its own ray at
+                // the wedge radius so both edges close on the same sector arc.
+                figures.push(lineFigure('fib_wedge_edge', [
+                    [p1_1, p2],
+                    [p1_1, { x: p1_1.x + Math.cos(a2) * radius_1, y: p1_1.y + Math.sin(a2) * radius_1 }]
+                ], {}));
+                // Fib-ratio intermediate rays subdividing the sector angle.
+                var levels = readLevels(extendData, DEFAULT_LEVELS$1);
+                var showLabels_1 = (_j = extendData.showLabels) !== null && _j !== void 0 ? _j : true;
+                levels.forEach(function (level, index) {
+                    if (!level.visible) {
+                        return;
+                    }
+                    var angle = a1_1 + da_1 * level.coeff;
+                    var end = { x: p1_1.x + Math.cos(angle) * radius_1, y: p1_1.y + Math.sin(angle) * radius_1 };
+                    figures.push(lineFigure("fib_wedge_ray_".concat(index), [[p1_1, end]], { style: 'solid', size: lineSize_1, color: level.color }));
+                    if (showLabels_1) {
+                        var labelRadius = radius_1 + 12;
+                        figures.push(labelFigure("fib_wedge_label_".concat(index), p1_1.x + Math.cos(angle) * labelRadius, p1_1.y + Math.sin(angle) * labelRadius, formatLevelLabel(level), level.color, 'center', 'middle'));
+                    }
+                });
+                // Sector arc at the wedge radius closing the two boundary rays.
+                if (da_1 !== 0) {
+                    var attrs = {
+                        x: p1_1.x,
+                        y: p1_1.y,
+                        r: radius_1,
+                        startAngle: da_1 > 0 ? a1_1 : a1_1 + da_1,
+                        endAngle: da_1 > 0 ? a1_1 + da_1 : a1_1
+                    };
+                    figures.push({
+                        key: 'fib_wedge_arc',
+                        type: 'arc',
+                        attrs: attrs,
+                        styles: { style: 'solid', size: lineSize_1, color: lineColor },
+                        bounds: { x: p1_1.x - radius_1, y: p1_1.y - radius_1, width: radius_1 * 2, height: radius_1 * 2 }
+                    });
+                }
+            }
+        }
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_'
+        })), false));
+        return figures;
+    })
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var DEFAULT_LEVELS = [
+    fibLevel(1 / 8, FIB_COLORS.orange, true, '1×8'),
+    fibLevel(1 / 4, FIB_COLORS.green, true, '1×4'),
+    fibLevel(1 / 3, FIB_COLORS.teal, true, '1×3'),
+    fibLevel(1 / 2, FIB_COLORS.green, true, '1×2'),
+    fibLevel(1, FIB_COLORS.cyan, true, '1×1'),
+    fibLevel(2, FIB_COLORS.blue, true, '2×1'),
+    fibLevel(3, FIB_COLORS.purple, true, '3×1'),
+    fibLevel(4, FIB_COLORS.pink, true, '4×1'),
+    fibLevel(8, FIB_COLORS.red, true, '8×1')
+];
+var gannFan = {
+    name: 'gannFan',
+    totalStep: 3,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    styles: {
+        line: { color: TRENDLINE_COLOR, size: 1, style: 'solid' },
+        text: { color: TRENDLINE_COLOR, size: 11 }
+    },
+    extendData: {
+        levels: DEFAULT_LEVELS,
+        showLabels: true
+    },
+    createPointFigures: withPerfPipeline(function (_a) {
+        var _b, _c, _d, _e, _f;
+        var overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
+        var figures = [];
+        if (coordinates.length >= 2) {
+            var _g = __read(coordinates, 2), p1_1 = _g[0], p2_1 = _g[1];
+            var dx_1 = p2_1.x - p1_1.x;
+            var dy_1 = p2_1.y - p1_1.y;
+            if (dx_1 !== 0 || dy_1 !== 0) {
+                var levels = readLevels(extendData, DEFAULT_LEVELS);
+                var showLabels_1 = (_c = extendData.showLabels) !== null && _c !== void 0 ? _c : true;
+                var lineSize_1 = (_f = (_e = (_d = overlay.styles) === null || _d === void 0 ? void 0 : _d.line) === null || _e === void 0 ? void 0 : _e.size) !== null && _f !== void 0 ? _f : 1;
+                var labelAlign_1 = dx_1 >= 0 ? 'left' : 'right';
+                var labelOffset_1 = dx_1 >= 0 ? 4 : -4;
+                levels.forEach(function (level, index) {
+                    if (!level.visible) {
+                        return;
+                    }
+                    // TradingView division point: steep ratios (>1) divide the y-span
+                    // on the P2.x edge; shallow ratios divide the x-span on P2.y edge.
+                    var division = level.coeff > 1
+                        ? { x: p2_1.x, y: p1_1.y + dy_1 / level.coeff }
+                        : { x: p1_1.x + dx_1 * level.coeff, y: p2_1.y };
+                    figures.push(lineFigure("gann_fan_".concat(index), [[p1_1, rayToBoundingEdge(p1_1, division, bounding)]], { style: 'solid', size: lineSize_1, color: level.color }));
+                    if (showLabels_1) {
+                        figures.push(labelFigure("gann_fan_label_".concat(index), division.x + labelOffset_1, division.y, formatLevelLabel(level), level.color, labelAlign_1, 'middle'));
+                    }
+                });
+            }
+        }
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_',
+            midPoint: true,
+            cursors: coordinates.length >= 2
+                ? [computeResizeCursor(coordinates[1], coordinates[0]), computeResizeCursor(coordinates[0], coordinates[1])]
+                : undefined
+        })), false));
+        return figures;
+    })
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * Shared helpers for the measure/prediction tool group — color math,
+ * Vietnamese label formatting, bar-window statistics and a small
+ * label-pill figure builder used by every tool in this directory.
+ */
+// ═══════════════════════════════════════
+// Color helpers
+// ═══════════════════════════════════════
+/**
+ * `#rrggbb` + alpha → `rgba(r, g, b, a)`. `rgb()/rgba()` inputs pass
+ * through unchanged; alpha 1 keeps the hex as-is.
+ */
+function alpha(color, opacity) {
+    var clamp = Math.max(0, Math.min(1, opacity));
+    if (color.startsWith('rgba') || color.startsWith('rgb(')) {
+        return color;
+    }
+    var match = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(color);
+    if (match == null) {
+        return color;
+    }
+    if (clamp >= 1) {
+        return color;
+    }
+    var r = parseInt(match[1], 16);
+    var g = parseInt(match[2], 16);
+    var b = parseInt(match[3], 16);
+    return "rgba(".concat(r, ", ").concat(g, ", ").concat(b, ", ").concat(clamp, ")");
+}
+// ═══════════════════════════════════════
+// Number / duration / volume formatting
+// ═══════════════════════════════════════
+function fmtNum(value, precision) {
+    return formatPrecision$1(value, precision);
+}
+function signedNum(value, precision) {
+    var s = formatPrecision$1(value, precision);
+    return value >= 0 ? "+".concat(s) : s;
+}
+/** Compact sign-aware percent: "+1.23%" / "-1.23%". */
+function signedPct(value) {
+    var s = "".concat(value.toFixed(2), "%");
+    return value >= 0 ? "+".concat(s) : s;
+}
+/**
+ * Vietnamese compact duration from elapsed minutes:
+ * `27n` (ngày) · `5h 12p` · `30p`.
+ */
+function formatDurationMinutes(totalMinutes) {
+    var mins = Math.round(Math.abs(totalMinutes));
+    if (mins >= 1440) {
+        var days = Math.floor(mins / 1440);
+        var hours = Math.floor((mins % 1440) / 60);
+        return hours > 0 ? "".concat(days, "n ").concat(hours, "h") : "".concat(days, "n");
+    }
+    if (mins >= 60) {
+        var hours = Math.floor(mins / 60);
+        var rest = mins % 60;
+        return rest > 0 ? "".concat(hours, "h ").concat(rest, "p") : "".concat(hours, "h");
+    }
+    return "".concat(mins, "p");
+}
+function formatVolume(volume) {
+    if (volume >= 1000000000) {
+        return "".concat((volume / 1000000000).toFixed(3), "B");
+    }
+    if (volume >= 1000000) {
+        return "".concat((volume / 1000000).toFixed(3), "M");
+    }
+    if (volume >= 1000) {
+        return "".concat((volume / 1000).toFixed(1), "K");
+    }
+    return "".concat(volume);
+}
+// ═══════════════════════════════════════
+// Data access helpers (no host injection)
+// ═══════════════════════════════════════
+function getPricePrecision(chart, override) {
+    var _a, _b;
+    return override !== null && override !== void 0 ? override : ((_b = (_a = chart.getSymbol()) === null || _a === void 0 ? void 0 : _a.pricePrecision) !== null && _b !== void 0 ? _b : 2);
+}
+/** Average bar spacing (ms) across the loaded range — 0 when unknown. */
+function barSpacingMs(dataList) {
+    if (dataList.length < 2) {
+        return 0;
+    }
+    var span = dataList[dataList.length - 1].timestamp - dataList[0].timestamp;
+    return span > 0 ? span / (dataList.length - 1) : 0;
+}
+/**
+ * Bars / duration / volume for the window spanned by two anchors.
+ * Points drawn past the right edge carry a dataIndex but no timestamp —
+ * the duration then falls back to the mean bar spacing instead of NaN.
+ */
+function windowStats(dataList, p1, p2) {
+    var _a;
+    var a = p1 === null || p1 === void 0 ? void 0 : p1.dataIndex;
+    var b = p2 === null || p2 === void 0 ? void 0 : p2.dataIndex;
+    var bars = a != null && b != null ? Math.abs(Math.round(b - a)) : 0;
+    var t1 = p1 === null || p1 === void 0 ? void 0 : p1.timestamp;
+    var t2 = p2 === null || p2 === void 0 ? void 0 : p2.timestamp;
+    var minutes = 0;
+    if (t1 != null && t2 != null) {
+        minutes = Math.abs(t2 - t1) / 60000;
+    }
+    else {
+        minutes = (bars * barSpacingMs(dataList)) / 60000;
+    }
+    var volume = 0;
+    if (a != null && b != null && dataList.length > 0) {
+        var lo = Math.max(0, Math.floor(Math.min(a, b)));
+        var hi = Math.min(dataList.length - 1, Math.ceil(Math.max(a, b)));
+        for (var i = lo; i <= hi; i++) {
+            volume += (_a = dataList[i].volume) !== null && _a !== void 0 ? _a : 0;
+        }
+    }
+    return { bars: bars, minutes: minutes, volume: volume };
+}
+/**
+ * Build a centered multi-line label pill (background rect + one text
+ * figure per line). All figures are decorative (`ignoreEvent`). `topY`
+ * is the pill's TOP edge — callers position above/below zones.
+ * Returns [] when there is nothing to draw.
+ */
+function pillFigures(key, centerX, topY, lines, opts) {
+    var e_1, _a;
+    var _b, _c, _d, _e, _f, _g, _h;
+    if (lines.length === 0) {
+        return [];
+    }
+    var padH = (_b = opts.paddingH) !== null && _b !== void 0 ? _b : 8;
+    var padV = (_c = opts.paddingV) !== null && _c !== void 0 ? _c : 5;
+    var gap = (_d = opts.lineGap) !== null && _d !== void 0 ? _d : 2;
+    var fontSize = (_e = opts.fontSize) !== null && _e !== void 0 ? _e : 11;
+    var family = opts.family;
+    var textW = 0;
+    var textH = 0;
+    try {
+        for (var lines_1 = __values(lines), lines_1_1 = lines_1.next(); !lines_1_1.done; lines_1_1 = lines_1.next()) {
+            var line = lines_1_1.value;
+            var size = (_f = line.size) !== null && _f !== void 0 ? _f : fontSize;
+            textW = Math.max(textW, calcTextWidth(line.text, size, line.weight, family));
+            textH += size;
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (lines_1_1 && !lines_1_1.done && (_a = lines_1.return)) _a.call(lines_1);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    textH += gap * (lines.length - 1);
+    var pillW = textW + padH * 2;
+    var pillH = textH + padV * 2;
+    var left = centerX - pillW / 2;
+    var figures = [{
+            key: "".concat(key, "_bg"),
+            type: 'rect',
+            attrs: { x: left, y: topY, width: pillW, height: pillH },
+            styles: {
+                style: opts.borderColor != null ? 'stroke_fill' : 'fill',
+                color: opts.bgColor,
+                borderColor: opts.borderColor,
+                borderSize: (_g = opts.borderSize) !== null && _g !== void 0 ? _g : 1,
+                borderRadius: (_h = opts.borderRadius) !== null && _h !== void 0 ? _h : 4
+            },
+            ignoreEvent: true
+        }];
+    var lineY = topY + padV;
+    lines.forEach(function (line, index) {
+        var _a, _b;
+        var size = (_a = line.size) !== null && _a !== void 0 ? _a : fontSize;
+        figures.push({
+            key: "".concat(key, "_text_").concat(index),
+            type: 'text',
+            attrs: {
+                x: centerX,
+                y: lineY + size / 2,
+                text: line.text,
+                align: 'center',
+                baseline: 'middle'
+            },
+            styles: {
+                color: (_b = line.color) !== null && _b !== void 0 ? _b : '#ffffff',
+                size: size,
+                weight: line.weight,
+                family: family,
+                backgroundColor: 'transparent'
+            },
+            ignoreEvent: true
+        });
+        lineY += size + gap;
+    });
+    return figures;
+}
+/** Line dash pattern for the shared 'solid' | 'dashed' | 'dotted' vocab. */
+function dashValueFor(lineStyle) {
+    if (lineStyle === 'dashed') {
+        return [6, 4];
+    }
+    if (lineStyle === 'dotted') {
+        return [2, 2];
+    }
+    return [];
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var DEFAULT_COLOR$2 = '#2962FF';
+var DEFAULT_FILL_OPACITY$2 = 0.15;
+var TOOLTIP_BG$1 = 'rgba(30, 30, 30, 0.9)';
+var ARROW_SIZE$3 = 6;
+var dateAndPriceRange = {
+    name: 'dateAndPriceRange',
+    totalStep: 3,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    createPointFigures: function (_a) {
+        var _b, _c, _d, _e, _f, _g, _h, _j;
+        var chart = _a.chart, coordinates = _a.coordinates, overlay = _a.overlay, bounding = _a.bounding, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        if (coordinates.length < 2) {
+            return [];
+        }
+        var _k = __read(coordinates, 2), start = _k[0], end = _k[1];
+        var ext = isValid(overlay.extendData) ? overlay.extendData : {};
+        var color = (_b = ext.color) !== null && _b !== void 0 ? _b : DEFAULT_COLOR$2;
+        var fillColor = alpha(color, (_c = ext.fillOpacity) !== null && _c !== void 0 ? _c : DEFAULT_FILL_OPACITY$2);
+        var lineWidth = (_d = ext.lineWidth) !== null && _d !== void 0 ? _d : 2;
+        var lineStyle = (_e = ext.lineStyle) !== null && _e !== void 0 ? _e : 'solid';
+        var dashed = dashValueFor(lineStyle);
+        var lineFigureStyle = { style: lineStyle === 'solid' ? 'solid' : 'dashed', color: color, size: lineWidth, dashedValue: dashed };
+        var precision = getPricePrecision(chart, ext.pricePrecision);
+        var startPrice = (_g = (_f = overlay.points[0]) === null || _f === void 0 ? void 0 : _f.value) !== null && _g !== void 0 ? _g : 0;
+        var endPrice = (_j = (_h = overlay.points[1]) === null || _h === void 0 ? void 0 : _h.value) !== null && _j !== void 0 ? _j : 0;
+        var priceDiff = endPrice - startPrice;
+        var pricePct = startPrice !== 0 ? (priceDiff / startPrice) * 100 : 0;
+        var pips = Math.round(priceDiff * 100);
+        var stats = windowStats(chart.getDataList(), overlay.points[0], overlay.points[1]);
+        var x = Math.min(start.x, end.x);
+        var y = Math.min(start.y, end.y);
+        var width = Math.abs(end.x - start.x);
+        var height = Math.abs(end.y - start.y);
+        var midX = (start.x + end.x) / 2;
+        var midY = (start.y + end.y) / 2;
+        var figures = [{
+                key: 'dpr_rect',
+                type: 'rect',
+                attrs: { x: x, y: y, width: width, height: height },
+                styles: {
+                    style: 'stroke_fill',
+                    color: fillColor,
+                    borderColor: color,
+                    borderSize: lineWidth,
+                    borderStyle: lineStyle === 'solid' ? 'solid' : 'dashed',
+                    borderDashedValue: dashed
+                },
+                bounds: { x: x - ARROW_SIZE$3, y: y - ARROW_SIZE$3, width: width + ARROW_SIZE$3 * 2, height: height + ARROW_SIZE$3 * 2 }
+            }];
+        // Crosshair edges at the end corner (consumer parity).
+        figures.push({
+            key: 'dpr_cross_h',
+            type: 'line',
+            attrs: { coordinates: [{ x: start.x, y: end.y }, { x: end.x, y: end.y }] },
+            styles: lineFigureStyle,
+            ignoreEvent: true
+        });
+        figures.push({
+            key: 'dpr_cross_v',
+            type: 'line',
+            attrs: { coordinates: [{ x: end.x, y: start.y }, { x: end.x, y: end.y }] },
+            styles: lineFigureStyle,
+            ignoreEvent: true
+        });
+        // Horizontal arrow at mid-height.
+        var direction = end.x >= start.x ? 1 : -1;
+        figures.push({
+            key: 'dpr_arrow_h',
+            type: 'line',
+            attrs: { coordinates: [{ x: start.x, y: midY }, { x: end.x, y: midY }] },
+            styles: lineFigureStyle,
+            ignoreEvent: true
+        });
+        figures.push({
+            key: 'dpr_arrow_h_head',
+            type: 'line',
+            attrs: {
+                coordinates: [
+                    { x: end.x - ARROW_SIZE$3 * direction, y: midY - ARROW_SIZE$3 / 2 },
+                    { x: end.x, y: midY },
+                    { x: end.x - ARROW_SIZE$3 * direction, y: midY + ARROW_SIZE$3 / 2 }
+                ]
+            },
+            styles: { style: 'solid', color: color, size: 1 },
+            ignoreEvent: true
+        });
+        // Vertical arrow at mid-width.
+        var vDirection = end.y >= start.y ? 1 : -1;
+        figures.push({
+            key: 'dpr_arrow_v',
+            type: 'line',
+            attrs: { coordinates: [{ x: midX, y: start.y }, { x: midX, y: end.y }] },
+            styles: { style: 'solid', color: color, size: lineWidth },
+            ignoreEvent: true
+        });
+        figures.push({
+            key: 'dpr_arrow_v_head',
+            type: 'line',
+            attrs: {
+                coordinates: [
+                    { x: midX - ARROW_SIZE$3 / 2, y: end.y - ARROW_SIZE$3 * vDirection },
+                    { x: midX, y: end.y },
+                    { x: midX + ARROW_SIZE$3 / 2, y: end.y - ARROW_SIZE$3 * vDirection }
+                ]
+            },
+            styles: { style: 'solid', color: color, size: 1 },
+            ignoreEvent: true
+        });
+        // Dark tooltip below the rect (above when it would clip the pane):
+        // "+Δ (+%) , pips" / "N thanh, 3n" / "Khối lượng 1.2M".
+        var line1 = "".concat(signedNum(priceDiff, precision), " (").concat(signedPct(pricePct), ") , ").concat(pips);
+        var line2 = "".concat(stats.bars, " thanh, ").concat(formatDurationMinutes(stats.minutes));
+        var line3 = "Kh\u1ED1i l\u01B0\u1EE3ng ".concat(formatVolume(stats.volume));
+        var pillH = (12 + 11 + 11) + 2 * 2 + 10;
+        var belowTop = Math.max(start.y, end.y) + 15;
+        var topY = belowTop + pillH > bounding.height ? y - pillH - 15 : belowTop;
+        figures.push.apply(figures, __spreadArray([], __read(pillFigures('dpr_tip', midX, topY, [
+            { text: line1, color: color, weight: 'bold', size: 12 },
+            { text: line2, color: '#FFFFFF' },
+            { text: line3, color: '#FFFFFF' }
+        ], {
+            bgColor: TOOLTIP_BG$1,
+            borderColor: color,
+            borderSize: 1,
+            borderRadius: 4,
+            fontSize: 11
+        })), false));
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_'
+        })), false));
+        return figures;
+    }
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var DEFAULT_COLOR$1 = '#2962FF';
+var DEFAULT_FILL_OPACITY$1 = 0.15;
+var ARROW_SIZE$2 = 6;
+var dateRange = {
+    name: 'dateRange',
+    totalStep: 3,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    createPointFigures: function (_a) {
+        var _b, _c, _d, _e;
+        var chart = _a.chart, coordinates = _a.coordinates, overlay = _a.overlay, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        if (coordinates.length < 2) {
+            return [];
+        }
+        var _f = __read(coordinates, 2), start = _f[0], end = _f[1];
+        var ext = isValid(overlay.extendData) ? overlay.extendData : {};
+        var color = (_b = ext.color) !== null && _b !== void 0 ? _b : DEFAULT_COLOR$1;
+        var fillColor = alpha(color, (_c = ext.fillOpacity) !== null && _c !== void 0 ? _c : DEFAULT_FILL_OPACITY$1);
+        var lineWidth = (_d = ext.lineWidth) !== null && _d !== void 0 ? _d : 2;
+        var lineStyle = (_e = ext.lineStyle) !== null && _e !== void 0 ? _e : 'solid';
+        var dashed = dashValueFor(lineStyle);
+        var lineFigureStyle = { style: lineStyle === 'solid' ? 'solid' : 'dashed', color: color, size: lineWidth, dashedValue: dashed };
+        var stats = windowStats(chart.getDataList(), overlay.points[0], overlay.points[1]);
+        var x = Math.min(start.x, end.x);
+        var y = Math.min(start.y, end.y);
+        var width = Math.abs(end.x - start.x);
+        var height = Math.abs(end.y - start.y);
+        var midY = (start.y + end.y) / 2;
+        var figures = [{
+                key: 'dr_rect',
+                type: 'rect',
+                attrs: { x: x, y: y, width: width, height: height },
+                styles: { style: 'fill', color: fillColor },
+                bounds: { x: x - ARROW_SIZE$2, y: y - ARROW_SIZE$2, width: width + ARROW_SIZE$2 * 2, height: height + ARROW_SIZE$2 * 2 }
+            }];
+        // Edge lines on both time bounds.
+        figures.push({
+            key: 'dr_edge_l',
+            type: 'line',
+            attrs: { coordinates: [{ x: x, y: y }, { x: x, y: y + height }] },
+            styles: lineFigureStyle,
+            ignoreEvent: true
+        });
+        figures.push({
+            key: 'dr_edge_r',
+            type: 'line',
+            attrs: { coordinates: [{ x: x + width, y: y }, { x: x + width, y: y + height }] },
+            styles: lineFigureStyle,
+            ignoreEvent: true
+        });
+        // Horizontal arrow at mid-height pointing toward the end anchor.
+        var direction = end.x >= start.x ? 1 : -1;
+        figures.push({
+            key: 'dr_arrow',
+            type: 'line',
+            attrs: { coordinates: [{ x: start.x, y: midY }, { x: end.x, y: midY }] },
+            styles: lineFigureStyle,
+            ignoreEvent: true
+        });
+        figures.push({
+            key: 'dr_arrow_head',
+            type: 'line',
+            attrs: {
+                coordinates: [
+                    { x: end.x - ARROW_SIZE$2 * direction, y: midY - ARROW_SIZE$2 / 2 },
+                    { x: end.x, y: midY },
+                    { x: end.x - ARROW_SIZE$2 * direction, y: midY + ARROW_SIZE$2 / 2 }
+                ]
+            },
+            styles: { style: 'solid', color: color, size: 1 },
+            ignoreEvent: true
+        });
+        // Label pill below the band: "N thanh, 3n 5h" (+ "Khối lượng 1.2M").
+        var lines = [
+            { text: "".concat(stats.bars, " thanh, ").concat(formatDurationMinutes(stats.minutes)), color: '#FFFFFF', weight: 'bold' }
+        ];
+        if (ext.showVolume !== false) {
+            lines.push({ text: "Kh\u1ED1i l\u01B0\u1EE3ng ".concat(formatVolume(stats.volume)), color: '#FFFFFF' });
+        }
+        figures.push.apply(figures, __spreadArray([], __read(pillFigures('dr_label', (start.x + end.x) / 2, y + height + 10, lines, {
+            bgColor: color,
+            borderRadius: 4
+        })), false));
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_'
+        })), false));
+        return figures;
+    }
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var DEFAULT_UP_COLOR = '#1E88E5';
+var DEFAULT_DOWN_COLOR = '#F44336';
+var TOOLTIP_BG = 'rgba(30, 30, 30, 0.9)';
+var ARROW_SIZE$1 = 6;
+var measure = {
+    name: 'measure',
+    // Unlimited-step freehand: the stroke collects points for the whole
+    // press-drag gesture; only the first/last points are ever read.
+    totalStep: Number.MAX_SAFE_INTEGER,
+    freehand: true,
+    freehandMinDistance: 4,
+    transient: true,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    createPointFigures: function (_a) {
+        var _b, _c, _d, _e;
+        var chart = _a.chart, coordinates = _a.coordinates, overlay = _a.overlay, bounding = _a.bounding;
+        if (coordinates.length < 2) {
+            return [];
+        }
+        var start = coordinates[0];
+        var end = coordinates[coordinates.length - 1];
+        var p1 = isValid(overlay.points[0]) ? overlay.points[0] : undefined;
+        var p2 = isValid(overlay.points[overlay.points.length - 1]) ? overlay.points[overlay.points.length - 1] : undefined;
+        var startPrice = (_b = p1 === null || p1 === void 0 ? void 0 : p1.value) !== null && _b !== void 0 ? _b : 0;
+        var endPrice = (_c = p2 === null || p2 === void 0 ? void 0 : p2.value) !== null && _c !== void 0 ? _c : 0;
+        var priceDiff = endPrice - startPrice;
+        var pricePct = startPrice !== 0 ? (priceDiff / startPrice) * 100 : 0;
+        var pips = Math.round(priceDiff * 100);
+        var stats = windowStats(chart.getDataList(), p1, p2);
+        var ext = isValid(overlay.extendData) ? overlay.extendData : undefined;
+        var precision = getPricePrecision(chart, ext === null || ext === void 0 ? void 0 : ext.pricePrecision);
+        var isUp = priceDiff >= 0;
+        var base = isUp ? ((_d = ext === null || ext === void 0 ? void 0 : ext.upColor) !== null && _d !== void 0 ? _d : DEFAULT_UP_COLOR) : ((_e = ext === null || ext === void 0 ? void 0 : ext.downColor) !== null && _e !== void 0 ? _e : DEFAULT_DOWN_COLOR);
+        var fillColor = alpha(base, 0.25);
+        var borderColor = base;
+        var x = Math.min(start.x, end.x);
+        var y = Math.min(start.y, end.y);
+        var width = Math.abs(end.x - start.x);
+        var height = Math.abs(end.y - start.y);
+        var midX = (start.x + end.x) / 2;
+        var midY = (start.y + end.y) / 2;
+        var figures = [{
+                key: 'ms_rect',
+                type: 'rect',
+                attrs: { x: x, y: y, width: width, height: height },
+                styles: {
+                    style: 'stroke_fill',
+                    color: fillColor,
+                    borderColor: borderColor,
+                    borderSize: 1
+                },
+                bounds: { x: x - ARROW_SIZE$1, y: y - ARROW_SIZE$1, width: width + ARROW_SIZE$1 * 2, height: height + ARROW_SIZE$1 * 2 },
+                ignoreEvent: true
+            }];
+        // Crosshair edges at the release corner (consumer parity).
+        figures.push({
+            key: 'ms_cross_h',
+            type: 'line',
+            attrs: { coordinates: [{ x: start.x, y: end.y }, { x: end.x, y: end.y }] },
+            styles: { style: 'solid', color: borderColor, size: 1 },
+            ignoreEvent: true
+        });
+        figures.push({
+            key: 'ms_cross_v',
+            type: 'line',
+            attrs: { coordinates: [{ x: end.x, y: start.y }, { x: end.x, y: end.y }] },
+            styles: { style: 'solid', color: borderColor, size: 1 },
+            ignoreEvent: true
+        });
+        // Horizontal arrow at mid-height.
+        var direction = end.x >= start.x ? 1 : -1;
+        figures.push({
+            key: 'ms_arrow_h',
+            type: 'line',
+            attrs: { coordinates: [{ x: start.x, y: midY }, { x: end.x, y: midY }] },
+            styles: { style: 'solid', color: borderColor, size: 1 },
+            ignoreEvent: true
+        });
+        figures.push({
+            key: 'ms_arrow_h_head',
+            type: 'line',
+            attrs: {
+                coordinates: [
+                    { x: end.x - ARROW_SIZE$1 * direction, y: midY - ARROW_SIZE$1 / 2 },
+                    { x: end.x, y: midY },
+                    { x: end.x - ARROW_SIZE$1 * direction, y: midY + ARROW_SIZE$1 / 2 }
+                ]
+            },
+            styles: { style: 'solid', color: borderColor, size: 1 },
+            ignoreEvent: true
+        });
+        // Vertical arrow at mid-width.
+        var vDirection = end.y >= start.y ? 1 : -1;
+        figures.push({
+            key: 'ms_arrow_v',
+            type: 'line',
+            attrs: { coordinates: [{ x: midX, y: start.y }, { x: midX, y: end.y }] },
+            styles: { style: 'solid', color: borderColor, size: 1 },
+            ignoreEvent: true
+        });
+        figures.push({
+            key: 'ms_arrow_v_head',
+            type: 'line',
+            attrs: {
+                coordinates: [
+                    { x: midX - ARROW_SIZE$1 / 2, y: end.y - ARROW_SIZE$1 * vDirection },
+                    { x: midX, y: end.y },
+                    { x: midX + ARROW_SIZE$1 / 2, y: end.y - ARROW_SIZE$1 * vDirection }
+                ]
+            },
+            styles: { style: 'solid', color: borderColor, size: 1 },
+            ignoreEvent: true
+        });
+        // Tooltip pinned below the rect — above it when it would clip the pane.
+        var line1 = "".concat(fmtNum(priceDiff, precision), " (").concat(signedPct(pricePct), ") , ").concat(pips);
+        var line2 = "".concat(stats.bars, " thanh, ").concat(formatDurationMinutes(stats.minutes));
+        var line3 = "Kh\u1ED1i l\u01B0\u1EE3ng ".concat(formatVolume(stats.volume));
+        var tooltipTop = Math.max(start.y, end.y) + 15;
+        var tooltipH = 3 * 11 + 2 * 4 + 10;
+        var topY = tooltipTop + tooltipH > bounding.height ? y - tooltipH - 15 : tooltipTop;
+        figures.push.apply(figures, __spreadArray([], __read(pillFigures('ms_tip', midX, topY, [
+            { text: line1, color: borderColor, weight: 'bold', size: 12 },
+            { text: line2, color: '#FFFFFF' },
+            { text: line3, color: '#FFFFFF' }
+        ], {
+            bgColor: TOOLTIP_BG,
+            borderColor: borderColor,
+            borderSize: 1,
+            borderRadius: 4,
+            fontSize: 11
+        })), false));
+        return figures;
+    },
+    onDrawEnd: function (_a) {
+        var chart = _a.chart, overlay = _a.overlay;
+        // TV parity: the ruler lives only for the drag — release removes it.
+        // Ghosts/mirrors are never created for transient tools, but guard anyway.
+        if (!overlay.ghost && !overlay.synced) {
+            chart.removeOverlay({ id: overlay.id });
+        }
+    },
+    onDeselected: function (_a) {
+        var chart = _a.chart, overlay = _a.overlay;
+        // Safety net — a ruler that survived by any path still vanishes on
+        // deselect, matching the "gone on click-away" consumer behavior.
+        if (!overlay.ghost && !overlay.synced) {
+            chart.removeOverlay({ id: overlay.id });
+        }
+    }
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var DEFAULT_COLOR = '#2962FF';
+var DEFAULT_FILL_OPACITY = 0.15;
+var ARROW_SIZE = 6;
+var priceRange = {
+    name: 'priceRange',
+    totalStep: 3,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    createPointFigures: function (_a) {
+        var _b, _c, _d, _e, _f, _g, _h, _j;
+        var chart = _a.chart, coordinates = _a.coordinates, overlay = _a.overlay, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        if (coordinates.length < 2) {
+            return [];
+        }
+        var _k = __read(coordinates, 2), start = _k[0], end = _k[1];
+        var ext = isValid(overlay.extendData) ? overlay.extendData : {};
+        var color = (_b = ext.color) !== null && _b !== void 0 ? _b : DEFAULT_COLOR;
+        var fillColor = alpha(color, (_c = ext.fillOpacity) !== null && _c !== void 0 ? _c : DEFAULT_FILL_OPACITY);
+        var lineWidth = (_d = ext.lineWidth) !== null && _d !== void 0 ? _d : 2;
+        var lineStyle = (_e = ext.lineStyle) !== null && _e !== void 0 ? _e : 'solid';
+        var dashed = dashValueFor(lineStyle);
+        var precision = getPricePrecision(chart, ext.pricePrecision);
+        var startPrice = (_g = (_f = overlay.points[0]) === null || _f === void 0 ? void 0 : _f.value) !== null && _g !== void 0 ? _g : 0;
+        var endPrice = (_j = (_h = overlay.points[1]) === null || _h === void 0 ? void 0 : _h.value) !== null && _j !== void 0 ? _j : 0;
+        var priceDiff = endPrice - startPrice;
+        var pricePct = startPrice !== 0 ? (priceDiff / startPrice) * 100 : 0;
+        var tickSize = Math.pow(10, -precision);
+        var ticks = Math.round(priceDiff / tickSize);
+        var x = Math.min(start.x, end.x);
+        var y = Math.min(start.y, end.y);
+        var width = Math.abs(end.x - start.x);
+        var height = Math.abs(end.y - start.y);
+        var midX = (start.x + end.x) / 2;
+        var figures = [{
+                key: 'pr_rect',
+                type: 'rect',
+                attrs: { x: x, y: y, width: width, height: height },
+                styles: {
+                    style: 'stroke_fill',
+                    color: fillColor,
+                    borderColor: color,
+                    borderSize: lineWidth,
+                    borderStyle: lineStyle === 'solid' ? 'solid' : 'dashed',
+                    borderDashedValue: dashed
+                },
+                bounds: { x: x - ARROW_SIZE, y: y - ARROW_SIZE - 20, width: width + ARROW_SIZE * 2, height: height + ARROW_SIZE * 2 + 40 }
+            }];
+        // Horizontal edge lines on both price bounds.
+        figures.push({
+            key: 'pr_edge_t',
+            type: 'line',
+            attrs: { coordinates: [{ x: x, y: y }, { x: x + width, y: y }] },
+            styles: { style: lineStyle === 'solid' ? 'solid' : 'dashed', color: color, size: lineWidth, dashedValue: dashed },
+            ignoreEvent: true
+        });
+        figures.push({
+            key: 'pr_edge_b',
+            type: 'line',
+            attrs: { coordinates: [{ x: x, y: y + height }, { x: x + width, y: y + height }] },
+            styles: { style: lineStyle === 'solid' ? 'solid' : 'dashed', color: color, size: lineWidth, dashedValue: dashed },
+            ignoreEvent: true
+        });
+        // Vertical arrow at mid-width + circle marker on the start level.
+        var vDirection = end.y >= start.y ? 1 : -1;
+        figures.push({
+            key: 'pr_arrow',
+            type: 'line',
+            attrs: { coordinates: [{ x: midX, y: start.y }, { x: midX, y: end.y }] },
+            styles: { style: 'solid', color: color, size: lineWidth },
+            ignoreEvent: true
+        });
+        figures.push({
+            key: 'pr_arrow_head',
+            type: 'line',
+            attrs: {
+                coordinates: [
+                    { x: midX - ARROW_SIZE / 2, y: end.y - ARROW_SIZE * vDirection },
+                    { x: midX, y: end.y },
+                    { x: midX + ARROW_SIZE / 2, y: end.y - ARROW_SIZE * vDirection }
+                ]
+            },
+            styles: { style: 'solid', color: color, size: 1 },
+            ignoreEvent: true
+        });
+        figures.push({
+            key: 'pr_start_dot',
+            type: 'circle',
+            attrs: { x: midX, y: start.y, r: 3 },
+            styles: { style: 'stroke', borderColor: color, borderSize: 1 },
+            ignoreEvent: true
+        });
+        // Label on the end side: "Δ (±%) ticks" — center sits one gap past
+        // the end level (mirrors the consumer tooltip placement).
+        var labelText = "".concat(fmtNum(priceDiff, precision), " (").concat(signedPct(pricePct), ") ").concat(ticks);
+        var pillH = 12 + 5 * 2;
+        var labelTop = end.y + vDirection * (pillH / 2 + 10) - pillH / 2;
+        figures.push.apply(figures, __spreadArray([], __read(pillFigures('pr_label', midX, labelTop, [
+            { text: labelText, color: '#FFFFFF' }
+        ], { bgColor: color, borderRadius: 4, fontSize: 12 })), false));
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_'
+        })), false));
+        return figures;
+    }
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+
+ * http://www.apache.org/licenses/LICENSE-2.0
+
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * Drawing-subsystem tool registry — self-registers on module load so
+ * `import ... from 'super-chart'` makes every rebuilt tool available to
+ * `chart.createOverlay` / `chart.drawings.activate` with no host setup.
+ * Loaded AFTER src/extension/overlay (barrel order in src/index.ts), so
+ * same-name rebuilt templates replace their kernel predecessors.
+ */
+var drawingTools = [
+    textNote,
+    anchoredNote,
+    anchoredText,
+    callout,
+    comment,
+    flagMark,
+    simpleTag,
+    priceLabel,
+    signpost,
+    table,
+    fibChannel,
+    fibExtension,
+    fibRetracement,
+    fibTimeExtension,
+    fibTimeZone,
+    fibCircles,
+    fibSpeedArcs,
+    fibSpeedFan,
+    fibSpiral,
+    fibWedge,
+    gannFan,
+    dateAndPriceRange,
+    dateRange,
+    measure,
+    priceRange
+];
+drawingTools.forEach(function (template) {
+    registerOverlay(template);
+});
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+function getCommonState(overlay) {
+    var _a;
+    var ed = overlay.extendData;
+    return (_a = ed === null || ed === void 0 ? void 0 : ed.common) !== null && _a !== void 0 ? _a : {};
+}
+function isVisibleOnInterval(overlay, interval) {
+    var visibleIntervals = getCommonState(overlay).visibleIntervals;
+    return visibleIntervals === undefined || visibleIntervals.length === 0 || visibleIntervals.includes(interval);
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * wordWrap with an LRU memo on top — ported from TradingView's
+ * wordWrapCached. Cache key is (font, skipHiddenLines, wrapWidth, text);
+ * the metrics cache identity is intentionally NOT part of the key (TV
+ * parity — widths for a given font are cache-independent).
+ *
+ * The underlying wordWrap mutates nothing, so cached WrappedLine arrays
+ * are safe to share — callers must not mutate the returned lines.
+ */
+var MAX_ENTRIES = 200;
+function createCachedWordWrap() {
+    var cache = new Map();
+    return function (text, font, metricsCache, skipHiddenLines, wrapWidth) {
+        if (skipHiddenLines === void 0) { skipHiddenLines = true; }
+        var key = "".concat(font, "|").concat(skipHiddenLines ? 's' : 'h', "|").concat(wrapWidth !== null && wrapWidth !== void 0 ? wrapWidth : -1, "|").concat(text);
+        var cached = cache.get(key);
+        if (cached !== undefined) {
+            // Refresh recency for LRU eviction.
+            cache.delete(key);
+            cache.set(key, cached);
+            return cached;
+        }
+        var lines = wordWrap(text, font, metricsCache, skipHiddenLines, wrapWidth);
+        if (cache.size >= MAX_ENTRIES) {
+            var oldest = cache.keys().next();
+            if (oldest.done !== true) {
+                cache.delete(oldest.value);
+            }
+        }
+        cache.set(key, lines);
+        return lines;
+    };
+}
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");

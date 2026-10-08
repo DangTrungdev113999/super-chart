@@ -734,6 +734,11 @@ export interface OverlayCreateFiguresCallbackParams<E> {
 	 * a figure of this overlay. Lets templates render per-anchor hover rings.
 	 */
 	hoveredFigureKey?: string;
+	/**
+	 * True when the last pointer routed to this view was touch-originated —
+	 * use it for larger hit targets (~13px anchor half-size vs ~6px mouse).
+	 */
+	isTouch?: boolean;
 }
 export interface OverlayEvent<E> extends Partial<MouseTouchEvent> {
 	figure?: OverlayFigure;
@@ -2114,6 +2119,12 @@ export interface DrawingKeyboardHandlers {
 	onRedo?: () => void;
 	onCopy?: () => void;
 	onPaste?: () => void;
+	/**
+	 * Unmodified single-key press (letter/digit) — tool hotkeys. The handler
+	 * decides whether the key maps to a tool; returning nothing keeps the
+	 * event unhandled for the browser.
+	 */
+	onHotkey?: (key: string) => void;
 }
 export interface DrawingKeyboardOptions {
 	/**
@@ -2137,6 +2148,12 @@ export interface FigureCacheOptions<E> {
 	 * labels, external flags).
 	 */
 	extraKey?: (params: OverlayCreateFiguresCallbackParams<E>) => string;
+	/**
+	 * Cache slot — REQUIRED when the same overlay wraps more than one figure
+	 * callback kind (point/x-axis/y-axis figures). Give each a distinct slot
+	 * ('point', 'x', 'y'); defaults to a single shared slot.
+	 */
+	slot?: string;
 }
 /**
  * CONTRACT: the returned array is SHARED — the view and every subsequent
