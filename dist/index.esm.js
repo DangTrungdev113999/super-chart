@@ -25450,6 +25450,14 @@ function isIOS() {
     }
     return /iPhone|iPad|iPod|iOS/.test(window.navigator.userAgent);
 }
+function isMac() {
+    if (typeof window === 'undefined') {
+        return false;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- navigator.platform is the most reliable macOS signal; userAgent can be spoofed/reduced.
+    var platform = window.navigator.platform;
+    return platform.includes('Mac') || window.navigator.userAgent.includes('Mac OS X');
+}
 
 /* eslint-disable eslint-comments/require-description -- ignore */
 // we can use `const name = 500;` but with `const enum` this values will be inlined into code
@@ -29570,6 +29578,951 @@ function withPerfPipeline(fn, options) {
 }
 
 /**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var LAYER_ATTR = 'data-sc-dom-layer';
+var ISOLATED_EVENTS = [
+    'mousedown', 'mouseup', 'mousemove',
+    'click', 'dblclick', 'contextmenu',
+    'wheel',
+    'touchstart', 'touchmove', 'touchend', 'touchcancel',
+    'pointerdown', 'pointermove', 'pointerup', 'pointercancel'
+];
+var PaneDomLayerImp = /** @class */ (function () {
+    function PaneDomLayerImp(host) {
+        this._interactive = new Map();
+        this._destroyed = false;
+        this._element = createDom('div', {
+            position: 'absolute',
+            top: '0',
+            left: '0',
+            right: '0',
+            bottom: '0',
+            margin: '0',
+            padding: '0',
+            overflow: 'hidden',
+            pointerEvents: 'none',
+            // Above the widget's main + overlay canvases (z-index 2).
+            zIndex: '4',
+            boxSizing: 'border-box'
+        });
+        this._element.setAttribute(LAYER_ATTR, '');
+        host.appendChild(this._element);
+    }
+    PaneDomLayerImp.prototype.getElement = function () {
+        return this._element;
+    };
+    PaneDomLayerImp.prototype.mount = function (element, options) {
+        var _this = this;
+        var _a;
+        if (this._destroyed) {
+            return function () {
+                // layer gone — nothing to unmount.
+            };
+        }
+        if ((options === null || options === void 0 ? void 0 : options.className) !== undefined) {
+            element.classList.add(options.className);
+        }
+        if ((options === null || options === void 0 ? void 0 : options.zIndex) !== undefined) {
+            element.style.zIndex = String(options.zIndex);
+        }
+        if ((options === null || options === void 0 ? void 0 : options.interactive) === true) {
+            element.style.pointerEvents = 'auto';
+            var isolate_1 = (_a = options.isolate) !== null && _a !== void 0 ? _a : (function () { return true; });
+            var handler_1 = function (e) {
+                if (isolate_1(e)) {
+                    e.stopPropagation();
+                }
+            };
+            ISOLATED_EVENTS.forEach(function (type) {
+                element.addEventListener(type, handler_1);
+            });
+            this._interactive.set(element, handler_1);
+        }
+        this._element.appendChild(element);
+        return function () {
+            _this.detach(element);
+        };
+    };
+    PaneDomLayerImp.prototype.detach = function (element) {
+        var handler = this._interactive.get(element);
+        if (handler !== undefined) {
+            ISOLATED_EVENTS.forEach(function (type) {
+                element.removeEventListener(type, handler);
+            });
+            this._interactive.delete(element);
+            element.style.pointerEvents = '';
+        }
+        if (element.parentElement === this._element) {
+            this._element.removeChild(element);
+        }
+    };
+    PaneDomLayerImp.prototype.clear = function () {
+        var _this = this;
+        Array.from(this._interactive.keys()).forEach(function (element) {
+            _this.detach(element);
+        });
+        this._element.innerHTML = '';
+    };
+    PaneDomLayerImp.prototype.destroy = function () {
+        var _a;
+        this._destroyed = true;
+        this.clear();
+        (_a = this._element.parentElement) === null || _a === void 0 ? void 0 : _a.removeChild(this._element);
+    };
+    return PaneDomLayerImp;
+}());
+var layers = new WeakMap();
+/**
+ * Resolve (creating on first use) the DOM layer for a pane's main widget.
+ * Returns null when the pane does not exist — SSR-safe when chart is gone.
+ */
+function getPaneDomLayer(chart, paneId) {
+    var host = chart.getDom(paneId, 'main');
+    if (host === null) {
+        return null;
+    }
+    var layer = layers.get(host);
+    if (layer === undefined) {
+        layer = new PaneDomLayerImp(host);
+        layers.set(host, layer);
+    }
+    return layer;
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+function getMinTextMetrics(metrics) {
+    return {
+        width: metrics.width,
+        actualBoundingBoxAscent: metrics.actualBoundingBoxAscent,
+        actualBoundingBoxDescent: metrics.actualBoundingBoxDescent,
+        fontBoundingBoxAscent: metrics.fontBoundingBoxAscent,
+        fontBoundingBoxDescent: metrics.fontBoundingBoxDescent
+    };
+}
+/** Bounded FIFO text-metrics cache — TV uses capacity 150 per font. */
+var CircularMetricsCache = /** @class */ (function () {
+    function CircularMetricsCache(_capacity) {
+        this._capacity = _capacity;
+        this._map = new Map();
+    }
+    CircularMetricsCache.prototype.get = function (key) {
+        return this._map.get(key);
+    };
+    CircularMetricsCache.prototype.set = function (key, value) {
+        if (this._map.has(key)) {
+            this._map.delete(key);
+        }
+        else if (this._map.size >= this._capacity) {
+            var oldest = this._map.keys().next();
+            if (oldest.done !== true) {
+                this._map.delete(oldest.value);
+            }
+        }
+        this._map.set(key, value);
+    };
+    CircularMetricsCache.prototype.clear = function () {
+        this._map.clear();
+    };
+    return CircularMetricsCache;
+}());
+function createTextWidthCache(capacity) {
+    if (capacity === void 0) { capacity = 150; }
+    return new TextWidthCacheImp(capacity);
+}
+var TextWidthCacheImp = /** @class */ (function () {
+    function TextWidthCacheImp(_capacity) {
+        if (_capacity === void 0) { _capacity = 150; }
+        this._capacity = _capacity;
+        this._perFont = new Map();
+    }
+    TextWidthCacheImp.prototype.measureText = function (context, text, options) {
+        var cacheKey = text;
+        if ((options === null || options === void 0 ? void 0 : options.mono) === true) {
+            cacheKey = text.replace(/\d/g, '0');
+        }
+        return this.getMetrics(context, cacheKey).width;
+    };
+    TextWidthCacheImp.prototype.yMidCorrection = function (context, text) {
+        var metrics = this.getMetrics(context, text);
+        return metrics.actualBoundingBoxAscent !== undefined && metrics.actualBoundingBoxDescent !== undefined
+            ? (metrics.actualBoundingBoxAscent - metrics.actualBoundingBoxDescent) / 2
+            : 0;
+    };
+    TextWidthCacheImp.prototype.getMetrics = function (context, text) {
+        var font = context.font;
+        var cache = this._perFont.get(font);
+        if (cache === undefined) {
+            cache = new CircularMetricsCache(this._capacity);
+            this._perFont.set(font, cache);
+            // Bound the font map too — fonts are finite in practice.
+            if (this._perFont.size > 32) {
+                var oldest = this._perFont.keys().next();
+                if (oldest.done !== true) {
+                    this._perFont.delete(oldest.value);
+                }
+            }
+        }
+        var cached = cache.get(text);
+        if (cached !== undefined) {
+            return cached;
+        }
+        var previousBaseline = context.textBaseline;
+        context.textBaseline = 'middle';
+        var metrics = getMinTextMetrics(context.measureText(text));
+        context.textBaseline = previousBaseline;
+        // Do not cache zero-width nonempty text (font still loading).
+        if (!(metrics.width === 0 && text.length > 0)) {
+            cache.set(text, metrics);
+        }
+        return metrics;
+    };
+    TextWidthCacheImp.prototype.reset = function () {
+        this._perFont.clear();
+    };
+    return TextWidthCacheImp;
+}());
+var measurementContext = null;
+var measurementCanvas = null;
+function getMeasurementContext() {
+    if (measurementContext === null) {
+        measurementCanvas = document.createElement('canvas');
+        measurementCanvas.width = 0;
+        measurementCanvas.height = 0;
+        // Safari/macOS returns wrong metrics for detached canvases — TV attaches
+        // a display:none canvas to the document there.
+        if (isMac() && typeof document.body !== 'undefined') {
+            measurementCanvas.style.display = 'none';
+            document.body.append(measurementCanvas);
+        }
+        measurementContext = measurementCanvas.getContext('2d');
+        measurementContext.textBaseline = 'alphabetic';
+        measurementContext.textAlign = 'center';
+    }
+    return measurementContext;
+}
+/**
+ * Measure text against the shared measurement context.
+ * Pass a TextWidthCache to cache by (font, text).
+ */
+function measureText(text, font, widthCache) {
+    var context = getMeasurementContext();
+    if (context.font !== font) {
+        context.font = font;
+    }
+    return widthCache !== undefined
+        ? widthCache.getMetrics(context, text)
+        : getMinTextMetrics(context.measureText(text));
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+function splitWordsAndSpaces(text) {
+    var tokens = [];
+    do {
+        var match = /\s+/.exec(text);
+        if (match === null) {
+            tokens.push({ word: text, spaces: '' });
+            break;
+        }
+        tokens.push({ word: text.slice(0, match.index), spaces: match[0] });
+        text = text.slice(match.index + match[0].length);
+    } while (text.length > 0);
+    return tokens;
+}
+function upperbound(items, value, predicate, start, end) {
+    var left = start;
+    var right = end;
+    while (left < right) {
+        var mid = (left + right) >>> 1;
+        if (predicate(value, items[mid])) {
+            right = mid;
+        }
+        else {
+            left = mid + 1;
+        }
+    }
+    return left;
+}
+/**
+ * Find the longest fitting prefix by binary search. Keeps at least one code
+ * unit so the loop progresses even if a single character exceeds maxWidth.
+ */
+function splitIntoFittingChunks(text, font, metricsCache, maxWidth) {
+    var chunks = [];
+    var characterIndices = [];
+    for (var index = 0; index < text.length; ++index) {
+        characterIndices.push(index);
+    }
+    var _loop_1 = function () {
+        var sourceText = text;
+        var prefixLength = Math.max(1, upperbound(characterIndices, maxWidth, function (widthLimit, characterIndex) {
+            return measureText(sourceText.slice(0, characterIndex + 1), font, metricsCache).width > widthLimit;
+        }, 0, sourceText.length));
+        chunks.push(sourceText.slice(0, prefixLength));
+        text = sourceText.slice(prefixLength);
+    };
+    while (text.length > 0) {
+        _loop_1();
+    }
+    return chunks;
+}
+function wordWrap(text, font, metricsCache, skipHiddenLines, wrapWidth) {
+    var e_1, _a;
+    if (skipHiddenLines === void 0) { skipHiddenLines = true; }
+    if (typeof wrapWidth === 'string') {
+        wrapWidth = parseInt(wrapWidth);
+    }
+    // Preserve explicit line breaks.
+    var sourceLines = text.split(/\r\n|\r|\n|$/).map(function (lineText) { return ({
+        text: lineText,
+        hidden: false,
+        wrappedLinePart: false,
+        wrappedLineEnd: false
+    }); });
+    if (typeof wrapWidth !== 'number' || !isFinite(wrapWidth) || wrapWidth <= 0) {
+        return sourceLines;
+    }
+    if (measureText('x', font, metricsCache).width > wrapWidth) {
+        return sourceLines;
+    }
+    var wrappedLines = [];
+    try {
+        for (var sourceLines_1 = __values(sourceLines), sourceLines_1_1 = sourceLines_1.next(); !sourceLines_1_1.done; sourceLines_1_1 = sourceLines_1.next()) {
+            var sourceLine = sourceLines_1_1.value;
+            if (measureText(sourceLine.text, font, metricsCache).width <= wrapWidth) {
+                wrappedLines.push(sourceLine);
+                continue;
+            }
+            var tokens = splitWordsAndSpaces(sourceLine.text);
+            var isWrappedLine = true;
+            var pendingText = '';
+            var tokenIndex = 0;
+            while (tokenIndex < tokens.length) {
+                var token = tokens[tokenIndex];
+                var candidateText = "".concat(pendingText).concat(token.word);
+                var candidateWidth = measureText(candidateText, font, metricsCache).width;
+                if (candidateWidth > wrapWidth) {
+                    if (pendingText !== '') {
+                        wrappedLines.push({
+                            text: pendingText,
+                            hidden: false,
+                            wrappedLinePart: isWrappedLine,
+                            wrappedLineEnd: false
+                        });
+                        pendingText = '';
+                    }
+                    else if (candidateText.length === 1) {
+                        wrappedLines.push({
+                            text: candidateText,
+                            hidden: false,
+                            wrappedLinePart: isWrappedLine,
+                            wrappedLineEnd: true
+                        });
+                        token.word = '';
+                    }
+                    else {
+                        var wordChunks = splitIntoFittingChunks(candidateText, font, metricsCache, wrapWidth);
+                        for (var chunkIndex = 0; chunkIndex < wordChunks.length - 1; chunkIndex += 1) {
+                            wrappedLines.push({
+                                text: wordChunks[chunkIndex],
+                                hidden: false,
+                                wrappedLinePart: isWrappedLine,
+                                wrappedLineEnd: false
+                            });
+                        }
+                        token.word = wordChunks[wordChunks.length - 1];
+                    }
+                    continue; // Retry the same token with the remaining word/pending text.
+                }
+                candidateText = "".concat(pendingText).concat(token.word).concat(token.spaces);
+                candidateWidth = measureText(candidateText, font, metricsCache).width;
+                if (candidateWidth < wrapWidth) {
+                    pendingText = candidateText;
+                    tokenIndex += 1;
+                    continue;
+                }
+                var chunks = splitIntoFittingChunks(candidateText, font, metricsCache, wrapWidth);
+                for (var chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+                    var chunkText = chunks[chunkIndex];
+                    var line = {
+                        text: chunkText,
+                        hidden: chunkIndex > 0,
+                        wrappedLinePart: isWrappedLine,
+                        wrappedLineEnd: tokenIndex === tokens.length - 1 && chunkIndex === chunks.length - 1
+                    };
+                    if (!(line.hidden && skipHiddenLines)) {
+                        wrappedLines.push(line);
+                    }
+                }
+                pendingText = '';
+                tokenIndex += 1;
+            }
+            if (pendingText !== '') {
+                wrappedLines.push({
+                    text: pendingText,
+                    wrappedLinePart: isWrappedLine,
+                    hidden: false,
+                    wrappedLineEnd: true
+                });
+            }
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (sourceLines_1_1 && !sourceLines_1_1.done && (_a = sourceLines_1.return)) _a.call(sourceLines_1);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    return wrappedLines;
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+function caretOrigin(textAlign, textWidth, rtl) {
+    switch (textAlign) {
+        case 'center': return textWidth / 2;
+        case 'start': return rtl ? textWidth : 0;
+        case 'end': return rtl ? 0 : textWidth;
+        case 'right': return textWidth;
+        default: return 0;
+    }
+}
+/**
+ * Map a string position through wrapped and hidden line segments to caret
+ * coordinates. A caret at a wrap boundary advances to the next visible line.
+ */
+function getCaretPosition(options) {
+    var symbolPosition = options.symbolPosition, textWidth = options.textWidth, lines = options.lines, lineHeight = options.lineHeight, font = options.font, textAlign = options.textAlign, _a = options.lineSpacing, lineSpacing = _a === void 0 ? 0 : _a, _b = options.rtl, rtl = _b === void 0 ? false : _b, widthCache = options.widthCache;
+    var caretX = caretOrigin(textAlign, textWidth, rtl);
+    var caretY = 0;
+    var lineAdvance = lineHeight + lineSpacing;
+    var consumedSymbols = 0;
+    var lineNumber = 0;
+    var visibleText = '';
+    for (var index = 0; index < lines.length; index++) {
+        var positionInLine = symbolPosition - consumedSymbols;
+        var _c = lines[index], wrappedLinePart = _c.wrappedLinePart, wrappedLineEnd = _c.wrappedLineEnd, hidden = _c.hidden, text = _c.text;
+        var nextLine = index < lines.length - 1 ? lines[index + 1] : null;
+        if (!hidden) {
+            visibleText = text;
+        }
+        if (nextLine !== null && positionInLine > text.length) {
+            consumedSymbols += text.length + (wrappedLinePart && !wrappedLineEnd ? 0 : 1);
+            if (!hidden) {
+                caretY += lineAdvance;
+            }
+            continue;
+        }
+        if (hidden) {
+            caretY -= lineAdvance;
+        }
+        var caretMovesToNextLine = wrappedLinePart &&
+            !wrappedLineEnd &&
+            text.length === positionInLine &&
+            nextLine !== null &&
+            !nextLine.hidden;
+        if (hidden) {
+            visibleText += ' ';
+            positionInLine = visibleText.length;
+        }
+        if (textAlign === 'center') {
+            if (caretMovesToNextLine) {
+                caretX = textWidth / 2;
+            }
+            else {
+                var lineWidth = measureText(visibleText, font, widthCache).width;
+                var prefixWidth = measureText(visibleText.slice(0, positionInLine), font, widthCache).width;
+                var centerX = textWidth / 2;
+                caretX = rtl
+                    ? centerX + lineWidth / 2 - prefixWidth
+                    : centerX - lineWidth / 2 + prefixWidth;
+            }
+        }
+        else if ((textAlign === 'right' && !rtl) ||
+            (textAlign === 'left' && rtl) ||
+            textAlign === 'end') {
+            if (caretMovesToNextLine) {
+                caretX = textWidth;
+            }
+            else {
+                var measuredWidth = measureText(visibleText.slice(positionInLine), font, widthCache).width;
+                caretX = rtl ? measuredWidth : textWidth - measuredWidth;
+            }
+        }
+        else if (caretMovesToNextLine) {
+            caretX = 0;
+        }
+        else {
+            var measuredWidth = measureText(visibleText.slice(0, positionInLine), font, widthCache).width;
+            caretX = rtl ? textWidth - measuredWidth : measuredWidth;
+        }
+        if (caretMovesToNextLine) {
+            lineNumber = index + 1;
+            caretY += lineAdvance;
+        }
+        else {
+            lineNumber = index;
+        }
+        break;
+    }
+    return { x: caretX, y: caretY, lineNumber: lineNumber };
+}
+/**
+ * Selection rectangles per visible line — including the space width that an
+ * explicit newline contributes at a line end. Same math as drawSelection,
+ * returned as data so the editor can render DOM nodes.
+ */
+function getSelectionRects(options) {
+    var start = options.start, end = options.end, lines = options.lines, font = options.font, left = options.left, right = options.right, lineHeight = options.lineHeight, _a = options.lineSpacing, lineSpacing = _a === void 0 ? 0 : _a, textAlign = options.textAlign, _b = options.rtl, rtl = _b === void 0 ? false : _b, widthCache = options.widthCache;
+    var lineAdvance = lineHeight + lineSpacing;
+    var centerX = (left + right) / 2;
+    var rects = [];
+    if (start.lineNumber === end.lineNumber) {
+        rects.push({
+            x: Math.min(start.x, end.x),
+            y: start.y,
+            width: Math.abs(start.x - end.x),
+            height: lineAdvance
+        });
+        return rects;
+    }
+    var spaceWidth = measureText(' ', font, widthCache).width;
+    var visibleLineIndex = 0;
+    for (var lineIndex = start.lineNumber; lineIndex <= end.lineNumber; lineIndex++) {
+        var isFirstLine = lineIndex === start.lineNumber;
+        var isLastLine = lineIndex === end.lineNumber;
+        var line = lines[lineIndex];
+        if (lineIndex >= lines.length || line.hidden) {
+            continue;
+        }
+        var lineWidth = measureText(line.text, font, widthCache).width;
+        var selectionLeft = 0;
+        var selectionRight = 0;
+        var rightAligned = false;
+        if (textAlign === 'center') {
+            selectionLeft = isFirstLine ? start.x : (rtl ? centerX + lineWidth / 2 : centerX - lineWidth / 2);
+            selectionRight = isLastLine ? end.x : (rtl ? centerX - lineWidth / 2 : centerX + lineWidth / 2);
+        }
+        else if (textAlign === 'right' ||
+            (rtl && textAlign === 'start') ||
+            (!rtl && textAlign === 'end')) {
+            selectionLeft = isFirstLine ? start.x : right - lineWidth;
+            selectionRight = isLastLine ? end.x : right;
+            rightAligned = true;
+        }
+        else {
+            selectionLeft = isFirstLine ? start.x : left;
+            selectionRight = isLastLine ? end.x : left + lineWidth;
+        }
+        var rangeLeft = Math.min(selectionLeft, selectionRight);
+        var rangeRight = Math.max(selectionLeft, selectionRight);
+        if (!(isLastLine || (line.wrappedLinePart && !line.wrappedLineEnd))) {
+            if (rightAligned) {
+                rangeLeft -= spaceWidth;
+            }
+            else {
+                rangeRight += spaceWidth;
+            }
+        }
+        rects.push({
+            x: rangeLeft,
+            y: start.y + visibleLineIndex * lineAdvance,
+            width: rangeRight - rangeLeft,
+            height: lineAdvance
+        });
+        visibleLineIndex += 1;
+    }
+    return rects;
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * Empirical textarea↔canvas letter-spacing compensation (verbatim from
+ * TradingView module 488679). Key = `${fontSize}${b}${i}_${normalizedDpr}`.
+ * Matching the native textarea's wrapping to the canvas measurement is
+ * pixel-sensitive — keep the table exact and DO NOT add fallbacks.
+ */
+var LETTER_SPACING_BY_FONT_AND_DPR = new Map([
+    ['10b_2', 0.15], ['10bi_2', 0.15], ['12_3', 0.8],
+    ['12b_2', 0.5], ['12bi_2', 0.45], ['14b_2', 0.65],
+    ['14bi_2', 0.65], ['16_2.5', 0.8], ['16b_2', 0.8],
+    ['16bi_2', 0.75], ['16b_2.5', 0.8], ['16bi_2.5', 0.75],
+    ['16bi_3', 0.65], ['20_2', 1], ['20b_2', 0.8],
+    ['20bi_2', 0.75], ['20bi_3', 0.55], ['20_2.5', 0.25],
+    ['20_3', 0.8], ['24_2.5', 0.95], ['24_3', 0.95],
+    ['28_2', 1.4], ['28_2.5', 1.38], ['28_3', 1.38],
+    ['32_2', 1.6], ['32_2.5', 1.6], ['32_3', 1.6]
+]);
+function normalizedDevicePixelRatio(dpr) {
+    if (dpr <= 2 || dpr >= 3) {
+        return dpr;
+    }
+    return dpr < 2.5 ? 2 : 2.5;
+}
+/**
+ * Letter-spacing compensation for the invisible textarea — undefined means
+ * the font/dpr combo has no calibrated entry and 'normal' should be used
+ * (the original deliberately has no fallback).
+ */
+function getEditorLetterSpacing(font, fontSize, dpr) {
+    var boldSuffix = font.includes('bold') ? 'b' : '';
+    var italicSuffix = font.includes('italic') ? 'i' : '';
+    return LETTER_SPACING_BY_FONT_AND_DPR.get("".concat(fontSize).concat(boldSuffix).concat(italicSuffix, "_").concat(normalizedDevicePixelRatio(dpr)));
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var EDITOR_PADDING = 2;
+/** TradingView MouseEventHandlerDelay.ResetClick. */
+var OPENING_CLICK_GUARD_MS = 500;
+var STYLE_ID = 'sc-text-editor-styles';
+var stylesInjected = false;
+function ensureEditorStyles() {
+    if (stylesInjected || typeof document === 'undefined') {
+        return;
+    }
+    stylesInjected = true;
+    var style = document.createElement('style');
+    style.id = STYLE_ID;
+    // Caret: TV blinks at 1s period (500 off / 500 on) starting 300ms after
+    // open — steps(1) holds each keyframe half the period.
+    style.textContent = "\n@keyframes sc-caret-blink { 0% { opacity: 0 } 50% { opacity: 1 } 100% { opacity: 0 } }\n.sc-text-caret { animation: sc-caret-blink 1s steps(1) 0.3s infinite; }\n.sc-text-sel { position: absolute; pointer-events: none; }\n".trim();
+    document.head.appendChild(style);
+}
+var sharedWidthCache = createTextWidthCache();
+function createTextEditorSession(options) {
+    return new TextEditorSessionImp(options);
+}
+var TextEditorSessionImp = /** @class */ (function () {
+    function TextEditorSessionImp(options) {
+        var _this = this;
+        var _a;
+        this._mountedAt = performance.now();
+        this._closed = false;
+        this._unmounts = [];
+        this._options = options;
+        this._layer = getPaneDomLayer(options.chart, options.paneId);
+        ensureEditorStyles();
+        this._wrapper = createDom('div', {
+            position: 'absolute',
+            margin: '0',
+            boxSizing: 'border-box',
+            pointerEvents: 'none'
+        });
+        this._wrapper.setAttribute('data-name', 'text-editor');
+        this._textarea = createDom('textarea', {
+            // Invisible input device — the chart renders the text.
+            opacity: '0',
+            position: 'absolute',
+            margin: '0',
+            border: '0',
+            outline: '0',
+            padding: "".concat(EDITOR_PADDING, "px"),
+            overflow: 'hidden',
+            resize: 'none',
+            boxSizing: 'border-box',
+            pointerEvents: 'all',
+            background: 'transparent'
+        });
+        this._textarea.value = options.value;
+        if (options.placeholder !== undefined) {
+            this._textarea.placeholder = options.placeholder;
+        }
+        if (options.maxLength !== undefined) {
+            this._textarea.maxLength = options.maxLength;
+        }
+        this._textarea.setAttribute('data-qa-id', 'inplace-text-editor');
+        this._wrapper.appendChild(this._textarea);
+        this._caret = createDom('div', {
+            position: 'absolute',
+            pointerEvents: 'none',
+            width: '2px'
+        });
+        this._caret.classList.add('sc-text-caret');
+        this._wrapper.appendChild(this._caret);
+        this._selHost = createDom('div', { position: 'absolute', pointerEvents: 'none', top: '0', left: '0' });
+        this._wrapper.insertBefore(this._selHost, this._textarea);
+        // 500ms opening-click guard: during the ResetClick window the click that
+        // opened the editor keeps flowing to the chart (TV parity); after that
+        // all gestures inside the editor are contained.
+        var unmountWrapper = (_a = this._layer) === null || _a === void 0 ? void 0 : _a.mount(this._wrapper, {
+            interactive: true,
+            isolate: function () { return performance.now() - _this._mountedAt > OPENING_CLICK_GUARD_MS; }
+        });
+        if (unmountWrapper !== undefined) {
+            this._unmounts.push(unmountWrapper);
+        }
+        this._bindEvents();
+        this._relayout();
+        // Focus after mount so the opening click can't steal it back.
+        this._textarea.focus();
+        this._textarea.setSelectionRange(options.value.length, options.value.length);
+        this._syncCaret();
+    }
+    Object.defineProperty(TextEditorSessionImp.prototype, "value", {
+        get: function () {
+            return this._textarea.value;
+        },
+        enumerable: false,
+        configurable: true
+    });
+    Object.defineProperty(TextEditorSessionImp.prototype, "closed", {
+        get: function () {
+            return this._closed;
+        },
+        enumerable: false,
+        configurable: true
+    });
+    TextEditorSessionImp.prototype._bindEvents = function () {
+        var _this = this;
+        var onChange = function () {
+            _this._emitSelection();
+            _this._relayout();
+            _this._syncCaret();
+        };
+        var onKeyDown = function (e) {
+            // Escape commits (approved TV behavior — never cancels).
+            if (e.key === 'Escape' || (_this._options.forbidLineBreaks === true && e.key === 'Enter')) {
+                e.preventDefault();
+                _this.close('hotkey');
+            }
+        };
+        var onBlur = function () {
+            _this.close('blur');
+        };
+        var onSelect = function () {
+            _this._emitSelection();
+            _this._syncCaret();
+        };
+        var syncSelection = function () {
+            _this._emitSelection();
+            _this._syncCaret();
+        };
+        this._textarea.addEventListener('input', onChange);
+        this._textarea.addEventListener('keydown', onKeyDown);
+        this._textarea.addEventListener('blur', onBlur);
+        this._textarea.addEventListener('select', onSelect);
+        document.addEventListener('mousemove', syncSelection);
+        document.addEventListener('touchmove', syncSelection);
+        this._unmounts.push(function () {
+            document.removeEventListener('mousemove', syncSelection);
+            document.removeEventListener('touchmove', syncSelection);
+        });
+    };
+    TextEditorSessionImp.prototype._emitSelection = function () {
+        var _a, _b;
+        (_b = (_a = this._options).onSelectionChange) === null || _b === void 0 ? void 0 : _b.call(_a, {
+            start: this._textarea.selectionStart,
+            end: this._textarea.selectionEnd
+        });
+    };
+    /** Reposition the wrapper + textarea + caret + selection from layout(). */
+    TextEditorSessionImp.prototype._relayout = function () {
+        var info = this._options.layout(this._textarea.value).info;
+        var textWidth = Math.ceil(info.textRight - info.textLeft) + 1;
+        var textHeight = Math.ceil(info.textBottom - info.textTop);
+        var top = 0;
+        var left = 0;
+        var rotationAngle = 0;
+        if (info.centerRotation === undefined || info.centerRotation.angle === 0) {
+            top = Math.round(info.textTop);
+            left = Math.round(info.textLeft);
+        }
+        else {
+            left = info.centerRotation.x - textWidth / 2;
+            top = info.centerRotation.y - textHeight / 2;
+            rotationAngle = info.centerRotation.angle;
+        }
+        var w = this._wrapper.style;
+        w.left = "".concat(left - EDITOR_PADDING, "px");
+        w.top = "".concat(top - EDITOR_PADDING, "px");
+        w.width = "".concat(textWidth + 2 * EDITOR_PADDING, "px");
+        w.height = "".concat(textHeight + 2 * EDITOR_PADDING, "px");
+        w.transform = rotationAngle !== 0 ? "rotate(".concat(rotationAngle, "rad)") : '';
+        w.transformOrigin = rotationAngle !== 0 ? 'center' : '';
+        var t = this._textarea.style;
+        t.width = '100%';
+        t.height = '100%';
+        t.font = info.font;
+        t.lineHeight = "".concat(info.fontSize + info.lineSpacing, "px");
+        t.textAlign = info.textAlign;
+        t.direction = info.rtl === true ? 'rtl' : 'ltr';
+        var spacing = this._options.wordWrapEnabled === true
+            ? getEditorLetterSpacing(info.font, info.fontSize, window.devicePixelRatio)
+            : undefined;
+        t.letterSpacing = spacing !== undefined ? "".concat(spacing, "px") : 'normal';
+    };
+    /** Update the DOM caret + selection rects from the textarea selection. */
+    TextEditorSessionImp.prototype._syncCaret = function () {
+        var e_1, _a;
+        var _b, _c;
+        if (this._closed) {
+            return;
+        }
+        var value = this._textarea.value;
+        var _d = this._options.layout(value), info = _d.info, lines = _d.lines;
+        var textWidth = Math.ceil(info.textRight - info.textLeft) + 1;
+        var lineHeight = info.fontSize + info.lineSpacing;
+        var start = getCaretPosition({
+            symbolPosition: this._textarea.selectionStart,
+            textWidth: textWidth,
+            lines: lines,
+            font: info.font,
+            lineHeight: info.fontSize,
+            lineSpacing: info.lineSpacing,
+            textAlign: info.textAlign,
+            rtl: info.rtl,
+            widthCache: sharedWidthCache
+        });
+        var end = getCaretPosition({
+            symbolPosition: this._textarea.selectionEnd,
+            textWidth: textWidth,
+            lines: lines,
+            font: info.font,
+            lineHeight: info.fontSize,
+            lineSpacing: info.lineSpacing,
+            textAlign: info.textAlign,
+            rtl: info.rtl,
+            widthCache: sharedWidthCache
+        });
+        // Selection highlights — DOM rects, zero canvas cost.
+        this._selHost.innerHTML = '';
+        if (this._textarea.selectionStart !== this._textarea.selectionEnd) {
+            var rects = getSelectionRects({
+                start: start,
+                end: end,
+                lines: lines,
+                font: info.font,
+                left: 0,
+                right: textWidth,
+                lineHeight: info.fontSize,
+                lineSpacing: info.lineSpacing,
+                textAlign: info.textAlign,
+                rtl: info.rtl,
+                widthCache: sharedWidthCache
+            });
+            try {
+                for (var rects_1 = __values(rects), rects_1_1 = rects_1.next(); !rects_1_1.done; rects_1_1 = rects_1.next()) {
+                    var r = rects_1_1.value;
+                    var node = createDom('div', {
+                        position: 'absolute',
+                        left: "".concat(r.x + EDITOR_PADDING, "px"),
+                        top: "".concat(r.y + EDITOR_PADDING, "px"),
+                        width: "".concat(r.width, "px"),
+                        height: "".concat(r.height, "px"),
+                        background: (_b = this._options.selectionColor) !== null && _b !== void 0 ? _b : 'rgba(41, 98, 255, 0.4)'
+                    });
+                    node.classList.add('sc-text-sel');
+                    this._selHost.appendChild(node);
+                }
+            }
+            catch (e_1_1) { e_1 = { error: e_1_1 }; }
+            finally {
+                try {
+                    if (rects_1_1 && !rects_1_1.done && (_a = rects_1.return)) _a.call(rects_1);
+                }
+                finally { if (e_1) throw e_1.error; }
+            }
+            this._caret.style.display = 'none';
+        }
+        else {
+            // Caret position is relative to the text box inside the wrapper's padding.
+            this._caret.style.display = '';
+            this._caret.style.left = "".concat(start.x + EDITOR_PADDING, "px");
+            this._caret.style.top = "".concat(start.y + EDITOR_PADDING, "px");
+            this._caret.style.height = "".concat(lineHeight, "px");
+            var dpr = window.devicePixelRatio;
+            this._caret.style.width = "".concat(Math.max(2 * Math.floor(dpr), 2) / dpr, "px");
+            this._caret.style.background = (_c = this._options.caretColor) !== null && _c !== void 0 ? _c : '#1e222d';
+        }
+    };
+    /** End the session — commits finalValue exactly once. */
+    TextEditorSessionImp.prototype.close = function (reason) {
+        if (reason === void 0) { reason = 'external'; }
+        if (this._closed) {
+            return;
+        }
+        this._closed = true;
+        var finalValue = this._textarea.value;
+        this._unmounts.forEach(function (unmount) {
+            unmount();
+        });
+        this._unmounts = [];
+        this._options.onClose(reason, finalValue);
+    };
+    return TextEditorSessionImp;
+}());
+
+/**
  *       ___           ___                   ___           ___           ___           ___           ___           ___           ___
  *      /\__\         /\__\      ___        /\__\         /\  \         /\  \         /\__\         /\  \         /\  \         /\  \
  *     /:/  /        /:/  /     /\  \      /::|  |       /::\  \       /::\  \       /:/  /        /::\  \       /::\  \        \:\  \
@@ -29687,4 +30640,4 @@ var utils = {
     checkCoordinateOnText: checkCoordinateOnText
 };
 
-export { ANCHOR_HALF_MOUSE, ANCHOR_HALF_TOUCH, ANCHOR_KEY_PREFIX, ANCHOR_MID_KEY, KCX_PERIOD, KTR_STEP_PERCENT, OVERLAY_FIGURE_KEY_PREFIX, OVERLAY_ID_PREFIX, SYNC_GROUP_COLORS, bindDrawingKeyboard, checkOverlayFigureEvent, computeResizeCursor, createAnchorFigures, createChartSync, createSelectionOutlineFigures, dispose, getCommonState, getDrawingInteractionState, getFigureClass, getOverlayClass, getSupportedFigures, getSupportedIndicators, getSupportedLocales, getSupportedOverlays, init, isAlign45Enabled, isSnap45Active, isVisibleOnInterval, registerFigure, registerIndicator, registerLocale, registerOverlay, registerStyles, registerXAxis, registerYAxis, setAlign45Enabled, snap45Coordinate, utils, version, withFigureCache, withPerfPipeline, withViewportCull };
+export { ANCHOR_HALF_MOUSE, ANCHOR_HALF_TOUCH, ANCHOR_KEY_PREFIX, ANCHOR_MID_KEY, KCX_PERIOD, KTR_STEP_PERCENT, OVERLAY_FIGURE_KEY_PREFIX, OVERLAY_ID_PREFIX, SYNC_GROUP_COLORS, bindDrawingKeyboard, checkOverlayFigureEvent, computeResizeCursor, createAnchorFigures, createChartSync, createSelectionOutlineFigures, createTextEditorSession, createTextWidthCache, dispose, getCaretPosition, getCommonState, getDrawingInteractionState, getEditorLetterSpacing, getFigureClass, getMinTextMetrics, getOverlayClass, getPaneDomLayer, getSelectionRects, getSupportedFigures, getSupportedIndicators, getSupportedLocales, getSupportedOverlays, init, isAlign45Enabled, isSnap45Active, isVisibleOnInterval, measureText, normalizedDevicePixelRatio, registerFigure, registerIndicator, registerLocale, registerOverlay, registerStyles, registerXAxis, registerYAxis, setAlign45Enabled, snap45Coordinate, utils, version, withFigureCache, withPerfPipeline, withViewportCull, wordWrap };

@@ -281,7 +281,17 @@ export {
   withViewportCull,
   withPerfPipeline,
   getCommonState,
-  isVisibleOnInterval
+  isVisibleOnInterval,
+  getPaneDomLayer,
+  createTextWidthCache,
+  measureText,
+  getMinTextMetrics,
+  wordWrap,
+  getCaretPosition,
+  getSelectionRects,
+  createTextEditorSession,
+  getEditorLetterSpacing,
+  normalizedDevicePixelRatio
 } from './drawings'
 
 export type {
@@ -293,5 +303,20 @@ export type {
   DrawingKeyboardHandlers,
   DrawingKeyboardOptions,
   FigureCacheOptions,
-  ViewportCullOptions
+  ViewportCullOptions,
+  PaneDomLayer,
+  DomLayerMountOptions,
+  TextWidthCache,
+  MinTextMetrics,
+  WrappedLine,
+  CaretPosition,
+  SelectionRect,
+  SelectionRectsOptions,
+  TextAlignOption,
+  TextLayoutOptions,
+  TextEditorSession,
+  TextEditorSessionOptions,
+  TextEditorCloseReason,
+  TextEditorInfo,
+  TextEditorLayout
 } from './drawings'

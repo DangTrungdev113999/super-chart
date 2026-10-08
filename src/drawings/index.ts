@@ -46,3 +46,32 @@ export {
   withPerfPipeline
 } from './interaction/perf'
 export type { FigureCacheOptions, ViewportCullOptions } from './interaction/perf'
+
+// ─── DOM layer (DP-1) ────────────────────────────────────────────────────────
+export { getPaneDomLayer } from './dom/domLayer'
+export type { PaneDomLayer, DomLayerMountOptions } from './dom/domLayer'
+
+// ─── Text engine (DP-2) ──────────────────────────────────────────────────────
+export { createTextWidthCache, measureText, getMinTextMetrics } from './text/measure'
+export type { TextWidthCache, MinTextMetrics } from './text/measure'
+export { wordWrap } from './text/wordWrap'
+export type { WrappedLine } from './text/wordWrap'
+export { getCaretPosition, getSelectionRects } from './text/textLayout'
+export type {
+  CaretPosition,
+  SelectionRect,
+  SelectionRectsOptions,
+  TextAlignOption,
+  TextLayoutOptions
+} from './text/textLayout'
+
+// ─── Text editor (DP-3) ──────────────────────────────────────────────────────
+export { createTextEditorSession } from './editor/textEditor'
+export type {
+  TextEditorSession,
+  TextEditorSessionOptions,
+  TextEditorCloseReason,
+  TextEditorInfo,
+  TextEditorLayout
+} from './editor/textEditor'
+export { getEditorLetterSpacing, normalizedDevicePixelRatio } from './editor/letterSpacing'

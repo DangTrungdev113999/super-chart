@@ -1722,6 +1722,261 @@ export declare function withViewportCull<E>(fn: OverlayCreateFiguresCallback<E>,
  * so off-screen figures never enter the cache output.
  */
 export declare function withPerfPipeline<E>(fn: OverlayCreateFiguresCallback<E>, options?: FigureCacheOptions<E> & ViewportCullOptions): OverlayCreateFiguresCallback<E>;
+export interface DomLayerMountOptions {
+	/**
+	 * Interactive children receive pointer-events:auto and swallow all chart
+	 * gesture events. Non-interactive children are display-only.
+	 */
+	interactive?: boolean;
+	/**
+	 * Decide per event whether to stopPropagation. Default: always stop when
+	 * interactive. The text editor uses this to let the opening click pass
+	 * through during its first ~500ms (TradingView's ResetClick window).
+	 */
+	isolate?: (e: Event) => boolean;
+	className?: string;
+	/** z-index inside the layer (default 0). */
+	zIndex?: number;
+}
+export interface PaneDomLayer {
+	getElement: () => HTMLElement;
+	/**
+	 * Mount a DOM element in the layer. Returns an unmount function.
+	 */
+	mount: (element: HTMLElement, options?: DomLayerMountOptions) => () => void;
+	detach: (element: HTMLElement) => void;
+	/**
+	 * Remove every mounted element (the layer itself stays).
+	 */
+	clear: () => void;
+	destroy: () => void;
+}
+/**
+ * Resolve (creating on first use) the DOM layer for a pane's main widget.
+ * Returns null when the pane does not exist — SSR-safe when chart is gone.
+ */
+export declare function getPaneDomLayer(chart: Chart, paneId: string): PaneDomLayer | null;
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * Text measurement engine (DP-2) — ported from TradingView's
+ * TextWidthCache + canvasUtils.measureText with one fix: TV's cache resets
+ * its entire buffer whenever the context font changes, which thrashes when
+ * a chart hosts multiple text fonts. Ours keeps a per-font cache.
+ */
+export interface MinTextMetrics {
+	width: number;
+	actualBoundingBoxAscent?: number;
+	actualBoundingBoxDescent?: number;
+	fontBoundingBoxAscent?: number;
+	fontBoundingBoxDescent?: number;
+}
+export declare function getMinTextMetrics(metrics: TextMetrics): MinTextMetrics;
+/**
+ * Per-font width cache. TV keys a single buffer by text and resets on font
+ * switch; we key caches by font so fonts coexist (mixed-font documents no
+ * longer evict each other).
+ */
+export interface TextWidthCache {
+	measureText: (context: CanvasRenderingContext2D, text: string, options?: {
+		mono?: boolean;
+	}) => number;
+	yMidCorrection: (context: CanvasRenderingContext2D, text: string) => number;
+	getMetrics: (context: CanvasRenderingContext2D, text: string) => MinTextMetrics;
+	reset: () => void;
+}
+export declare function createTextWidthCache(capacity?: number): TextWidthCache;
+/**
+ * Measure text against the shared measurement context.
+ * Pass a TextWidthCache to cache by (font, text).
+ */
+export declare function measureText(text: string, font: string, widthCache?: TextWidthCache): MinTextMetrics;
+/**
+ * TradingView's wordWrap algorithm (module 691695) — ported verbatim.
+ * Preserves explicit line breaks, wraps long lines by word tokens, splits
+ * overlong words by binary search, and marks trailing-whitespace chunks as
+ * hidden lines (skippable). Positions are UTF-16 code-unit indexes, matching
+ * textarea selectionStart/End semantics.
+ */
+export interface WrappedLine {
+	text: string;
+	/**
+	 * Hidden lines carry the whitespace tail of an overfull line — invisible
+	 * but still consume string positions (caret/selection math needs them).
+	 */
+	hidden: boolean;
+	/** Line produced by wrapping (not an explicit source line). */
+	wrappedLinePart: boolean;
+	/** Final part of a wrapped sequence — the newline belongs to it. */
+	wrappedLineEnd: boolean;
+}
+export declare function wordWrap(text: string, font: string, metricsCache?: TextWidthCache, skipHiddenLines?: boolean, wrapWidth?: number): WrappedLine[];
+/**
+ * Caret/selection geometry (module 824940) — ported to return CSS-pixel
+ * rectangles instead of drawing to canvas. The text editor renders these as
+ * DOM nodes on the pane DOM layer, so caret blinking and selection changes
+ * cost ZERO canvas repaints.
+ */
+export type TextAlignOption = "left" | "center" | "right" | "start" | "end";
+interface CaretPosition$1 {
+	/** x offset of the caret inside the text box (CSS px, pre-rotation). */
+	x: number;
+	/** y offset of the caret top inside the text box. */
+	y: number;
+	/** Index of the visible line the caret sits on. */
+	lineNumber: number;
+}
+export interface TextLayoutOptions {
+	/** String position (UTF-16 code units) to map, 0..text.length. */
+	symbolPosition: number;
+	/** Total text box width (CSS px) — lines are aligned inside it. */
+	textWidth: number;
+	/** wordWrap() output for the CURRENT text (hidden lines included). */
+	lines: WrappedLine[];
+	font: string;
+	/** Line height in CSS px. */
+	lineHeight: number;
+	lineSpacing?: number;
+	textAlign: TextAlignOption;
+	/** Right-to-left text direction. */
+	rtl?: boolean;
+	widthCache?: TextWidthCache;
+}
+/**
+ * Map a string position through wrapped and hidden line segments to caret
+ * coordinates. A caret at a wrap boundary advances to the next visible line.
+ */
+export declare function getCaretPosition(options: TextLayoutOptions): CaretPosition$1;
+export interface SelectionRect {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+}
+export interface SelectionRectsOptions {
+	/** Caret positions for both ends (from getCaretPosition). */
+	start: CaretPosition$1;
+	end: CaretPosition$1;
+	lines: WrappedLine[];
+	font: string;
+	/** Text box left edge x (CSS px). */
+	left: number;
+	/** Text box right edge x (CSS px). */
+	right: number;
+	lineHeight: number;
+	lineSpacing?: number;
+	textAlign: TextAlignOption;
+	rtl?: boolean;
+	widthCache?: TextWidthCache;
+}
+/**
+ * Selection rectangles per visible line — including the space width that an
+ * explicit newline contributes at a line end. Same math as drawSelection,
+ * returned as data so the editor can render DOM nodes.
+ */
+export declare function getSelectionRects(options: SelectionRectsOptions): SelectionRect[];
+/**
+ * In-place text editor (DP-3) — TradingView's invisible-textarea pattern:
+ * a real <textarea> mounted over the renderer-measured text box provides
+ * IME, clipboard, selection and a11y for free while staying opacity:0. The
+ * canvas keeps painting the text; the caret and selection highlights are
+ * DOM nodes on the pane layer so blinking costs zero canvas repaints.
+ *
+ * Close semantics: EVERY close path commits the session's final value
+ * (Escape included — the approved TradingView behavior). The caller
+ * receives (reason, finalValue) and decides empty-text removal / undo
+ * bookkeeping — a session is exactly one history unit.
+ */
+export type TextEditorCloseReason = "hotkey" | "blur" | "external";
+/**
+ * Renderer-measured geometry of the text under edit, in pane-local CSS px.
+ * Produced by the tool's own text renderer — never measured separately in
+ * the DOM (mismatch = caret drift, the #1 defect in ad hoc editors).
+ */
+export interface TextEditorInfo {
+	font: string;
+	fontSize: number;
+	textLeft: number;
+	textTop: number;
+	textRight: number;
+	textBottom: number;
+	textAlign: TextAlignOption;
+	/** Extra px between lines (lineHeight = fontSize + lineSpacing). */
+	lineSpacing: number;
+	centerRotation?: {
+		x: number;
+		y: number;
+		angle: number;
+	};
+	rtl?: boolean;
+}
+export interface TextEditorLayout {
+	info: TextEditorInfo;
+	/** wordWrap() output for the current value (hidden lines included). */
+	lines: WrappedLine[];
+}
+export interface TextEditorSessionOptions {
+	chart: Chart;
+	paneId: string;
+	value: string;
+	placeholder?: string;
+	maxLength?: number;
+	/** Single-line fields: Enter closes instead of inserting a break. */
+	forbidLineBreaks?: boolean;
+	/** Word-wrap enabled — drives the letter-spacing compensation table. */
+	wordWrapEnabled?: boolean;
+	/** Re-layout the text as the value changes (wrap may alter the box). */
+	layout: (value: string) => TextEditorLayout;
+	onClose: (reason: TextEditorCloseReason, finalValue: string) => void;
+	onSelectionChange?: (sel: {
+		start: number;
+		end: number;
+	}) => void;
+	/** Selection highlight color (default TradingView blue, ~40% alpha). */
+	selectionColor?: string;
+	/** Caret color — defaults to a dark tone matching chart text. */
+	caretColor?: string;
+}
+export interface TextEditorSession {
+	readonly value: string;
+	readonly closed: boolean;
+	/**
+	 * End the session — commits finalValue exactly once via onClose.
+	 */
+	close: (reason?: TextEditorCloseReason) => void;
+}
+export declare function createTextEditorSession(options: TextEditorSessionOptions): TextEditorSession;
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+export declare function normalizedDevicePixelRatio(dpr: number): number;
+/**
+ * Letter-spacing compensation for the invisible textarea — undefined means
+ * the font/dpr combo has no calibrated entry and 'normal' should be used
+ * (the original deliberately has no fallback).
+ */
+export declare function getEditorLetterSpacing(font: string, fontSize: number, dpr: number): number | undefined;
 /**
  * Chart version
  * @return {string}
@@ -1768,6 +2023,7 @@ export declare const utils: {
 };
 
 export {
+	CaretPosition$1 as CaretPosition,
 	LineStyle$1 as RegressionTrendLineStyle,
 	VisibilityRange as RegressionVisibilityRange,
 };

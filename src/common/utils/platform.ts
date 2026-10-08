@@ -25,3 +25,12 @@ export function isIOS (): boolean {
   }
   return /iPhone|iPad|iPod|iOS/.test(window.navigator.userAgent)
 }
+
+export function isMac (): boolean {
+  if (typeof window === 'undefined') {
+    return false
+  }
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- navigator.platform is the most reliable macOS signal; userAgent can be spoofed/reduced.
+  const platform = window.navigator.platform
+  return platform.includes('Mac') || window.navigator.userAgent.includes('Mac OS X')
+}
