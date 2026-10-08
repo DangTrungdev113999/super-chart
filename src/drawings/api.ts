@@ -22,7 +22,7 @@ import type { Overlay, OverlayCreate } from '../component/Overlay'
 import { getOverlayTemplate } from '../extension/overlay/index'
 
 import { createDrawingManager, type DrawingManager, type DrawingManagerOptions } from './manager'
-import { getDrawingCatalog, findCatalogItem, type DrawingToolGroup } from './catalog'
+import { getDrawingCatalog, findCatalogItem, findCatalogItemByHotkey, type DrawingToolGroup } from './catalog'
 import type { DrawingStore } from './persistence'
 import { serializeOverlay, serializedToOverlayCreate, type SerializedDrawing, type SerializedDrawingPoint } from './serialize'
 import { attachFloatingToolbar, type FloatingToolbar, type FloatingToolbarHooks } from './ui/floatingToolbar'
@@ -248,6 +248,14 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
           const create = serializedToOverlayCreate(clipboard)
           delete (create as { id?: string }).id
           manager.create(create)
+        }
+      },
+      onHotkey: (key) => {
+        // TradingView bare-letter tool shortcuts — only activate tools the
+        // catalog marks available (unimplemented entries stay inert).
+        const item = findCatalogItemByHotkey(key)
+        if (item !== null) {
+          manager.activate(item.overlayName)
         }
       }
     })

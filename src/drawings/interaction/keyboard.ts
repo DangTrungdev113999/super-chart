@@ -31,6 +31,12 @@ export interface DrawingKeyboardHandlers {
   onRedo?: () => void
   onCopy?: () => void
   onPaste?: () => void
+  /**
+   * Unmodified single-key press (letter/digit) — tool hotkeys. The handler
+   * decides whether the key maps to a tool; returning nothing keeps the
+   * event unhandled for the browser.
+   */
+  onHotkey?: (key: string) => void
 }
 
 export interface DrawingKeyboardOptions {
@@ -115,6 +121,11 @@ export function bindDrawingKeyboard (handlers: DrawingKeyboardHandlers, options?
     } else if ((e.key === 'Delete' || e.key === 'Backspace') && handlers.onDelete !== undefined) {
       e.preventDefault()
       handlers.onDelete()
+    } else if (e.key.length === 1 && handlers.onHotkey !== undefined) {
+      // Tool hotkeys (T/H/V/F/X…) — TradingView activates tools on bare
+      // letters; editable targets were already filtered above so typing is
+      // never intercepted.
+      handlers.onHotkey(e.key.toLowerCase())
     }
   }
 

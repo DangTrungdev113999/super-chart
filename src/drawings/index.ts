@@ -14,6 +14,9 @@
 
 import { registerFigure } from '../extension/figure/index'
 import richTextFigure from './figures/richText'
+// Side-effect: self-register all rebuilt drawing tools into the kernel
+// overlay registry (loads after extension/overlay via barrel order).
+import './tools/index'
 
 // The 'richText' figure registers at barrel import — tools referencing it
 // always resolve after `import 'super-chart'`.
@@ -105,10 +108,6 @@ export { getRichTextLayout, drawRichText, checkCoordinateOnRichText } from './fi
 export type { RichTextAttrs, RichTextStyle } from './figures/richText'
 
 // ─── Tool templates ──────────────────────────────────────────────────────────
-// Side-effect: self-register all rebuilt drawing tools into the kernel
-// overlay registry (loads after extension/overlay via barrel order).
-import './tools/index'
-
 export { default as textNoteTool } from './tools/text'
 export type { TextToolExtendData, TextToolStyle } from './tools/text'
 

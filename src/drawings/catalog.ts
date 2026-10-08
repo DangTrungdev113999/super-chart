@@ -382,6 +382,18 @@ export function findCatalogItem (id: string): DrawingToolItem | null {
   return null
 }
 
+/** Find a catalog item by keyboard hotkey — TradingView bare-letter shortcuts. */
+export function findCatalogItemByHotkey (key: string): DrawingToolItem | null {
+  const needle = key.toLowerCase()
+  for (const group of getDrawingCatalog()) {
+    for (const section of group.sections) {
+      const found = section.items.find(i => i.hotkey?.toLowerCase() === needle && i.available && !(i.nonTool ?? false))
+      if (found != null) return found
+    }
+  }
+  return null
+}
+
 /** Find a catalog item by kernel overlay name — reverse lookup for `list()`. */
 export function findCatalogItemByOverlay (overlayName: string): DrawingToolItem | null {
   for (const group of getDrawingCatalog()) {
