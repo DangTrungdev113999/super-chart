@@ -487,6 +487,7 @@ var OverlayImp = /** @class */ (function () {
         this.currentStep = OVERLAY_DRAW_STEP_START;
         this.lock = false;
         this.ghost = false;
+        this.transient = false;
         this.synced = false;
         this.visible = true;
         this.zLevel = 0;
@@ -27834,6 +27835,12 @@ var ChartImp = /** @class */ (function () {
     };
     ChartImp.prototype.getOverlays = function (filter) {
         return this._chartStore.getOverlaysByFilter(filter !== null && filter !== void 0 ? filter : {});
+    };
+    /**
+     * O(1) id lookup — backed by the store's id map (no pane scan).
+     */
+    ChartImp.prototype.getOverlayById = function (id) {
+        return this._chartStore.getOverlayById(id);
     };
     /**
      * Programmatic selection — same pipeline as a user click (hooks, change

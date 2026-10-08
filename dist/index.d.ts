@@ -807,6 +807,12 @@ export interface Overlay<E = unknown> extends OverlayEventCollection<E> {
 	 */
 	ghost: boolean;
 	/**
+	 * Transient overlays render and interact normally but are excluded from
+	 * persistence, undo history, and drawings.list() — e.g. the measure
+	 * ruler, which vanishes on deselect by design.
+	 */
+	transient?: boolean;
+	/**
 	 * Whether the overlay was mirrored onto this chart by a chart-sync layer
 	 * (as opposed to created by this chart's own user/persistence). Hosts can
 	 * use this to skip duplicate persistence/history bookkeeping for mirrors.
@@ -1019,6 +1025,7 @@ export interface Chart extends Store {
 	getIndicators: (filter?: IndicatorFilter) => Indicator[];
 	createOverlay: (value: string | OverlayCreate | Array<string | OverlayCreate>) => Nullable<string> | Array<Nullable<string>>;
 	getOverlays: (filter?: OverlayFilter) => Overlay[];
+	getOverlayById: (id: Nullable<string>) => Nullable<Overlay>;
 	selectOverlay: (id: Nullable<string>) => void;
 	setPaneOptions: (options: PaneOptions) => void;
 	getPaneOptions: (id?: string) => Nullable<PaneOptions> | PaneOptions[];
