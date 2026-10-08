@@ -548,11 +548,13 @@ var OverlayImp = /** @class */ (function () {
             extendData: this.extendData,
             stylesJson: stylesJson
         };
-        var id = overlay.id, name = overlay.name; overlay.currentStep; var points = overlay.points, styles = overlay.styles, extendData = overlay.extendData, skipDrawReplay = overlay.skipDrawReplay; 
+        var _b = overlay, id = _b.id, name = _b.name; _b.currentStep; var points = _b.points, styles = _b.styles, extendData = _b.extendData, skipDrawReplay = _b.skipDrawReplay; 
         // Kernel-owned members must never be merge-clobbered by a spread of
         // an overlay snapshot (regressed figuresRev poisons the figure cache;
-        // shadowed methods break the instance).
-        overlay.figuresRev; overlay.invalidateFigures; overlay.isDrawing; overlay.isStart; overlay.forceComplete; var others = __rest(overlay, ["id", "name", "currentStep", "points", "styles", "extendData", "skipDrawReplay", "figuresRev", "invalidateFigures", "isDrawing", "isStart", "forceComplete"]);
+        // shadowed methods break the instance; restored _prev* snapshots make
+        // shouldUpdate() compare against a foreign baseline and drop real
+        // changes).
+        _b.figuresRev; _b.invalidateFigures; _b.isDrawing; _b.isStart; _b.forceComplete; _b._prevOverlay; _b._prevPressedPoint; _b._prevPressedPoints; _b._prevZLevel; var others = __rest(_b, ["id", "name", "currentStep", "points", "styles", "extendData", "skipDrawReplay", "figuresRev", "invalidateFigures", "isDrawing", "isStart", "forceComplete", "_prevOverlay", "_prevPressedPoint", "_prevPressedPoints", "_prevZLevel"]);
         merge(this, others);
         // Handle extendData separately — always produce a mutable merged result
         // (frozen objects from Immer/store and their sub-objects cannot be mutated)
@@ -10047,6 +10049,1098 @@ function findCatalogItem(id) {
     }
     return null;
 }
+/** Find a catalog item by kernel overlay name — reverse lookup for `list()`. */
+function findCatalogItemByOverlay(overlayName) {
+    var e_3, _a, e_4, _b;
+    try {
+        for (var _c = __values(getDrawingCatalog()), _d = _c.next(); !_d.done; _d = _c.next()) {
+            var group = _d.value;
+            try {
+                for (var _e = (e_4 = void 0, __values(group.sections)), _f = _e.next(); !_f.done; _f = _e.next()) {
+                    var section = _f.value;
+                    var found = section.items.find(function (i) { return i.overlayName === overlayName; });
+                    if (found != null)
+                        return found;
+                }
+            }
+            catch (e_4_1) { e_4 = { error: e_4_1 }; }
+            finally {
+                try {
+                    if (_f && !_f.done && (_b = _e.return)) _b.call(_e);
+                }
+                finally { if (e_4) throw e_4.error; }
+            }
+        }
+    }
+    catch (e_3_1) { e_3 = { error: e_3_1 }; }
+    finally {
+        try {
+            if (_d && !_d.done && (_a = _c.return)) _a.call(_c);
+        }
+        finally { if (e_3) throw e_3.error; }
+    }
+    return null;
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+
+ * http://www.apache.org/licenses/LICENSE-2.0
+
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * Create dom
+ * @param tagName
+ * @param styles
+ * @return {*}
+ */
+function createDom(tagName, styles) {
+    var _a;
+    var dom = document.createElement(tagName);
+    var s = styles !== null && styles !== void 0 ? styles : {};
+    // eslint-disable-next-line guard-for-in -- ignore
+    for (var key in s) {
+        (dom.style)[key] = (_a = s[key]) !== null && _a !== void 0 ? _a : '';
+    }
+    return dom;
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var LAYER_ATTR = 'data-sc-dom-layer';
+var ISOLATED_EVENTS = [
+    'mousedown', 'mouseup', 'mousemove',
+    'click', 'dblclick', 'contextmenu',
+    'wheel',
+    'touchstart', 'touchmove', 'touchend', 'touchcancel',
+    'pointerdown', 'pointermove', 'pointerup', 'pointercancel'
+];
+var PaneDomLayerImp = /** @class */ (function () {
+    function PaneDomLayerImp(host) {
+        this._interactive = new Map();
+        this._destroyed = false;
+        this._element = createDom('div', {
+            position: 'absolute',
+            top: '0',
+            left: '0',
+            right: '0',
+            bottom: '0',
+            margin: '0',
+            padding: '0',
+            overflow: 'hidden',
+            pointerEvents: 'none',
+            // Above the widget's main + overlay canvases (z-index 2).
+            zIndex: '4',
+            boxSizing: 'border-box'
+        });
+        this._element.setAttribute(LAYER_ATTR, '');
+        host.appendChild(this._element);
+    }
+    PaneDomLayerImp.prototype.getElement = function () {
+        return this._element;
+    };
+    PaneDomLayerImp.prototype.mount = function (element, options) {
+        var _this = this;
+        var _a;
+        if (this._destroyed) {
+            return function () {
+                // layer gone — nothing to unmount.
+            };
+        }
+        if ((options === null || options === void 0 ? void 0 : options.className) !== undefined) {
+            element.classList.add(options.className);
+        }
+        if ((options === null || options === void 0 ? void 0 : options.zIndex) !== undefined) {
+            element.style.zIndex = String(options.zIndex);
+        }
+        if ((options === null || options === void 0 ? void 0 : options.interactive) === true) {
+            element.style.pointerEvents = 'auto';
+            var isolate_1 = (_a = options.isolate) !== null && _a !== void 0 ? _a : (function () { return true; });
+            var handler_1 = function (e) {
+                if (isolate_1(e)) {
+                    e.stopPropagation();
+                }
+            };
+            ISOLATED_EVENTS.forEach(function (type) {
+                element.addEventListener(type, handler_1);
+            });
+            this._interactive.set(element, handler_1);
+        }
+        this._element.appendChild(element);
+        return function () {
+            _this.detach(element);
+        };
+    };
+    PaneDomLayerImp.prototype.detach = function (element) {
+        var handler = this._interactive.get(element);
+        if (handler !== undefined) {
+            ISOLATED_EVENTS.forEach(function (type) {
+                element.removeEventListener(type, handler);
+            });
+            this._interactive.delete(element);
+            element.style.pointerEvents = '';
+        }
+        if (element.parentElement === this._element) {
+            this._element.removeChild(element);
+        }
+    };
+    PaneDomLayerImp.prototype.clear = function () {
+        var _this = this;
+        Array.from(this._interactive.keys()).forEach(function (element) {
+            _this.detach(element);
+        });
+        this._element.innerHTML = '';
+    };
+    PaneDomLayerImp.prototype.destroy = function () {
+        var _a;
+        this._destroyed = true;
+        this.clear();
+        (_a = this._element.parentElement) === null || _a === void 0 ? void 0 : _a.removeChild(this._element);
+    };
+    return PaneDomLayerImp;
+}());
+var layers = new WeakMap();
+/**
+ * Resolve (creating on first use) the DOM layer for a pane's main widget.
+ * Returns null when the pane does not exist — SSR-safe when chart is gone.
+ */
+function getPaneDomLayer(chart, paneId) {
+    var host = chart.getDom(paneId, 'main');
+    if (host === null) {
+        return null;
+    }
+    var layer = layers.get(host);
+    if (layer === undefined) {
+        layer = new PaneDomLayerImp(host);
+        layers.set(host, layer);
+    }
+    return layer;
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var SVG_OPEN = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">';
+var ICONS = {
+    cursor: "".concat(SVG_OPEN, "<path d=\"M9 4l11 12-5.5 1L17 22l-2.6 1.4L12 18l-3 3z\"/></svg>"),
+    cross: "".concat(SVG_OPEN, "<path d=\"M14 4v20M4 14h20\"/><circle cx=\"14\" cy=\"14\" r=\"3\"/></svg>"),
+    trendLine: "".concat(SVG_OPEN, "<path d=\"M5 22L23 6\"/><circle cx=\"5\" cy=\"22\" r=\"2\"/><circle cx=\"23\" cy=\"6\" r=\"2\"/></svg>"),
+    ray: "".concat(SVG_OPEN, "<path d=\"M6 21L25 8\"/><circle cx=\"6\" cy=\"21\" r=\"2\"/><path d=\"M20 10.5L25 8l-1.2 5\"/></svg>"),
+    extendedLine: "".concat(SVG_OPEN, "<path d=\"M3 24L25 4\" stroke-dasharray=\"2 3\"/><path d=\"M8 21L20 9\"/><circle cx=\"8\" cy=\"21\" r=\"2\"/><circle cx=\"20\" cy=\"9\" r=\"2\"/></svg>"),
+    horizontalLine: "".concat(SVG_OPEN, "<path d=\"M4 14h20\"/><path d=\"M11 10l3 4-3 4\" opacity=\"0.6\"/></svg>"),
+    horizontalRay: "".concat(SVG_OPEN, "<path d=\"M6 14h18\"/><circle cx=\"6\" cy=\"14\" r=\"2\"/></svg>"),
+    verticalLine: "".concat(SVG_OPEN, "<path d=\"M14 4v20\"/></svg>"),
+    segment: "".concat(SVG_OPEN, "<path d=\"M8 20L20 8\"/><circle cx=\"8\" cy=\"20\" r=\"2\"/><circle cx=\"20\" cy=\"8\" r=\"2\"/></svg>"),
+    parallelChannel: "".concat(SVG_OPEN, "<path d=\"M5 24L21 8\"/><path d=\"M9 26L25 10\" opacity=\"0.7\"/><circle cx=\"5\" cy=\"24\" r=\"1.8\"/><circle cx=\"21\" cy=\"8\" r=\"1.8\"/><circle cx=\"25\" cy=\"10\" r=\"1.8\"/></svg>"),
+    priceChannel: "".concat(SVG_OPEN, "<path d=\"M5 22L13 14\"/><path d=\"M5 10h20\" opacity=\"0.7\"/><path d=\"M5 26h20\" opacity=\"0.7\"/><circle cx=\"5\" cy=\"22\" r=\"1.8\"/><circle cx=\"13\" cy=\"14\" r=\"1.8\"/></svg>"),
+    flatTopBottom: "".concat(SVG_OPEN, "<path d=\"M4 9h20\"/><path d=\"M4 19h20\" opacity=\"0.6\"/><path d=\"M9 9v10M19 9v10\" opacity=\"0.5\"/></svg>"),
+    disjointChannel: "".concat(SVG_OPEN, "<path d=\"M6 23L22 7\"/><path d=\"M10 25L26 9\"/><path d=\"M6 17L14 9\" opacity=\"0.55\"/><path d=\"M10 25L26 9\" opacity=\"0.75\"/></svg>"),
+    pitchfork: "".concat(SVG_OPEN, "<path d=\"M5 24L13 8\"/><path d=\"M9 25L21 4\"/><path d=\"M13 26L25 6\"/><circle cx=\"5\" cy=\"24\" r=\"1.8\"/><circle cx=\"13\" cy=\"8\" r=\"1.8\"/><circle cx=\"21\" cy=\"4\" r=\"1.8\"/></svg>"),
+    fibRetracement: "".concat(SVG_OPEN, "<path d=\"M5 7L23 21\"/><path d=\"M4 9h20M4 13h20M4 17h20M4 21h20\" opacity=\"0.6\"/></svg>"),
+    fibTimeZone: "".concat(SVG_OPEN, "<path d=\"M6 22L22 6\"/><path d=\"M8 4v20M14 4v20M22 4v20\" opacity=\"0.6\"/></svg>"),
+    brush: "".concat(SVG_OPEN, "<path d=\"M18 5l5 5L10 23l-6 1 1-6z\"/><path d=\"M15 8l5 5\"/></svg>"),
+    highlighter: "".concat(SVG_OPEN, "<path d=\"M6 20L20 6l3 3L9 23z\"/><path d=\"M4 24h20\" opacity=\"0.6\"/></svg>"),
+    rect: "".concat(SVG_OPEN, "<rect x=\"6\" y=\"8\" width=\"16\" height=\"12\" rx=\"1\"/></svg>"),
+    rotatedRect: "".concat(SVG_OPEN, "<rect x=\"7\" y=\"9\" width=\"14\" height=\"10\" rx=\"1\" transform=\"rotate(-18 14 14)\"/></svg>"),
+    circle: "".concat(SVG_OPEN, "<circle cx=\"14\" cy=\"14\" r=\"9\"/><circle cx=\"14\" cy=\"14\" r=\"1.5\"/></svg>"),
+    ellipse: "".concat(SVG_OPEN, "<ellipse cx=\"14\" cy=\"14\" rx=\"10\" ry=\"6\"/></svg>"),
+    triangle: "".concat(SVG_OPEN, "<path d=\"M14 6L24 22H4z\"/></svg>"),
+    arc: "".concat(SVG_OPEN, "<path d=\"M6 22a10 10 0 0 1 16 0\"/><circle cx=\"6\" cy=\"22\" r=\"1.6\"/><circle cx=\"22\" cy=\"22\" r=\"1.6\"/></svg>"),
+    curve: "".concat(SVG_OPEN, "<path d=\"M5 20Q14 4 23 20\"/></svg>"),
+    path: "".concat(SVG_OPEN, "<path d=\"M5 22L10 12l5 6 4-9 4 10\"/><circle cx=\"5\" cy=\"22\" r=\"1.5\"/><circle cx=\"23\" cy=\"19\" r=\"1.5\"/></svg>"),
+    polyline: "".concat(SVG_OPEN, "<path d=\"M5 21L11 11l6 8 6-11\"/><circle cx=\"5\" cy=\"21\" r=\"1.5\"/><circle cx=\"11\" cy=\"11\" r=\"1.5\"/><circle cx=\"17\" cy=\"19\" r=\"1.5\"/></svg>"),
+    arrow: "".concat(SVG_OPEN, "<path d=\"M6 22L21 7\"/><path d=\"M13 8l8-1-1 8\"/></svg>"),
+    text: "".concat(SVG_OPEN, "<path d=\"M8 7h12M14 7v14M11 21h6\"/></svg>"),
+    anchoredText: "".concat(SVG_OPEN, "<path d=\"M8 7h12M14 7v12\" opacity=\"0.8\"/><circle cx=\"14\" cy=\"23\" r=\"2\"/></svg>"),
+    note: "".concat(SVG_OPEN, "<rect x=\"6\" y=\"6\" width=\"16\" height=\"13\" rx=\"2\"/><path d=\"M10 19l-2 5 6-5\"/></svg>"),
+    callout: "".concat(SVG_OPEN, "<path d=\"M20 5a6 6 0 0 1 0 12h-9l-5 4V11a6 6 0 0 1 6-6z\"/></svg>"),
+    comment: "".concat(SVG_OPEN, "<rect x=\"5\" y=\"6\" width=\"18\" height=\"12\" rx=\"2\"/><path d=\"M9 11h10M9 14h6\"/></svg>"),
+    priceLabel: "".concat(SVG_OPEN, "<path d=\"M4 14h14l6-4v8l-6 4z\" transform=\"rotate(90 14 14)\"/></svg>"),
+    flag: "".concat(SVG_OPEN, "<path d=\"M8 4v20\"/><path d=\"M8 5h12l-3 4 3 4H8\"/></svg>"),
+    measure: "".concat(SVG_OPEN, "<path d=\"M6 8h16v8H6z\"/><path d=\"M10 8v3M14 8v4M18 8v3\"/></svg>"),
+    dateRange: "".concat(SVG_OPEN, "<rect x=\"5\" y=\"7\" width=\"18\" height=\"15\" rx=\"2\"/><path d=\"M5 11h18M10 4v5M18 4v5\"/></svg>"),
+    priceRange: "".concat(SVG_OPEN, "<path d=\"M7 5v18M7 8h14M7 14h14M7 20h14\" opacity=\"0.8\"/></svg>"),
+    forecast: "".concat(SVG_OPEN, "<path d=\"M5 20L13 12l4 4 6-9\" opacity=\"0.9\"/><path d=\"M13 23h10\" stroke-dasharray=\"2 3\"/></svg>"),
+    longPosition: "".concat(SVG_OPEN, "<rect x=\"5\" y=\"9\" width=\"18\" height=\"10\" rx=\"1\"/><path d=\"M14 19v5M11 21.5L14 24l3-2.5\"/></svg>"),
+    shortPosition: "".concat(SVG_OPEN, "<rect x=\"5\" y=\"9\" width=\"18\" height=\"10\" rx=\"1\"/><path d=\"M14 9V4M11 6.5L14 4l3 2.5\"/></svg>"),
+    elliottImpulse: "".concat(SVG_OPEN, "<path d=\"M4 22l4-10 4 6 4-10 4 8 4-6\"/><circle cx=\"4\" cy=\"22\" r=\"1.4\"/><circle cx=\"12\" cy=\"18\" r=\"1.4\"/><circle cx=\"20\" cy=\"26\" r=\"1.4\" opacity=\"0.6\"/></svg>"),
+    elliottCorrection: "".concat(SVG_OPEN, "<path d=\"M5 18l5-8 4 10 5-6\" stroke-dasharray=\"1 0\"/><circle cx=\"5\" cy=\"18\" r=\"1.4\"/><circle cx=\"10\" cy=\"10\" r=\"1.4\"/><circle cx=\"14\" cy=\"20\" r=\"1.4\"/><circle cx=\"19\" cy=\"14\" r=\"1.4\"/></svg>"),
+    xabcd: "".concat(SVG_OPEN, "<path d=\"M5 10l5 10 5-12 5 12 3-8\"/><circle cx=\"5\" cy=\"10\" r=\"1.4\"/><circle cx=\"10\" cy=\"20\" r=\"1.4\"/><circle cx=\"15\" cy=\"8\" r=\"1.4\"/><circle cx=\"20\" cy=\"20\" r=\"1.4\"/></svg>"),
+    eraser: "".concat(SVG_OPEN, "<path d=\"M16 5l7 7-11 11H7l-3-3z\"/><path d=\"M11 20h13\"/></svg>"),
+    magnet: "".concat(SVG_OPEN, "<path d=\"M8 4v8a6 6 0 0 0 12 0V4\"/><path d=\"M8 4h5v6H8zM15 4h5v6h-5z\"/></svg>"),
+    lock: "".concat(SVG_OPEN, "<rect x=\"7\" y=\"12\" width=\"14\" height=\"10\" rx=\"2\"/><path d=\"M10 12V8a4 4 0 0 1 8 0v4\"/></svg>"),
+    hide: "".concat(SVG_OPEN, "<path d=\"M4 14s4-6 10-6 10 6 10 6-4 6-10 6S4 14 4 14z\"/><path d=\"M5 5l18 18\"/></svg>"),
+    remove: "".concat(SVG_OPEN, "<path d=\"M6 8h16M11 8V5h6v3M9 8l1 14h8l1-14\"/></svg>"),
+    settings: "".concat(SVG_OPEN, "<circle cx=\"14\" cy=\"14\" r=\"3\"/><path d=\"M14 4v3M14 21v3M4 14h3M21 14h3M6.9 6.9l2.1 2.1M19 19l2.1 2.1M21.1 6.9L19 9M9 19l-2.1 2.1\"/></svg>"),
+    tool: "".concat(SVG_OPEN, "<path d=\"M17 4a5 5 0 0 0-6.6 6.6L5 16l6 6 5.4-5.4A5 5 0 0 0 24 11l-4 4-4-1-1-4 4-4a5 5 0 0 0-2-2z\"/></svg>")
+};
+/** Inline SVG markup for an icon id — generic 'tool' glyph as fallback. */
+function getDrawingIcon(iconId) {
+    if (iconId !== undefined && iconId in ICONS) {
+        return ICONS[iconId];
+    }
+    return ICONS.tool;
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var states = new WeakMap();
+function getDrawingInteractionState(chart) {
+    var state = states.get(chart);
+    if (state === undefined) {
+        state = { align45: false };
+        states.set(chart, state);
+    }
+    return state;
+}
+function setAlign45Enabled(chart, enabled) {
+    getDrawingInteractionState(chart).align45 = enabled;
+}
+function isAlign45Enabled(chart) {
+    return getDrawingInteractionState(chart).align45;
+}
+/**
+ * Whether a move should snap to 45° increments — Shift held during the
+ * gesture, or the persistent toolbar toggle.
+ */
+function isSnap45Active(chart, event) {
+    return (event === null || event === void 0 ? void 0 : event.shiftKey) === true || isAlign45Enabled(chart);
+}
+/**
+ * Snap `to` onto the nearest 45° ray from `from`, preserving distance.
+ * Operates in pixel space — convert Point↔Coordinate at the call site.
+ */
+function snap45Coordinate(to, from) {
+    var dx = to.x - from.x;
+    var dy = to.y - from.y;
+    var distance = Math.sqrt(dx * dx + dy * dy);
+    if (distance === 0) {
+        return to;
+    }
+    var angle = Math.atan2(dy, dx);
+    var snapped = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+    return {
+        x: from.x + distance * Math.cos(snapped),
+        y: from.y + distance * Math.sin(snapped)
+    };
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * CSS-in-TS for the drawings UI — injected once per document, prefixed
+ * `sc-drw-`. No .css file, no shadow DOM, no custom elements: the bundle
+ * stays UMD-safe and multiple charts on one page share a single sheet.
+ */
+var STYLE_ID$1 = 'sc-drawings-styles';
+var CSS = "\n.sc-drw-toolbar {\n  position: absolute;\n  top: 0;\n  left: 0;\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  padding: 2px 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  line-height: 1;\n  user-select: none;\n  white-space: nowrap;\n  will-change: transform;\n}\n.sc-drw-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 26px;\n  height: 26px;\n  padding: 0;\n  margin: 0;\n  border: none;\n  border-radius: 3px;\n  background: transparent;\n  color: #d1d4dc;\n  cursor: pointer;\n}\n.sc-drw-btn:hover { background: #2a2e39; color: #ffffff; }\n.sc-drw-btn:active { background: #363c4e; }\n.sc-drw-btn[data-on=\"true\"] { color: #2962ff; }\n.sc-drw-btn[data-on=\"true\"]:hover { color: #4c7dff; }\n.sc-drw-btn svg { display: block; width: 16px; height: 16px; }\n.sc-drw-btn--wide { width: auto; padding: 0 6px; font-size: 11px; }\n.sc-drw-grip {\n  cursor: grab;\n  color: #5d6372;\n  width: 14px;\n}\n.sc-drw-grip:active { cursor: grabbing; }\n.sc-drw-sep {\n  width: 1px;\n  height: 18px;\n  margin: 0 2px;\n  background: #2a2e39;\n}\n.sc-drw-swatch {\n  width: 14px;\n  height: 14px;\n  border-radius: 2px;\n  border: 1px solid rgba(255, 255, 255, 0.25);\n}\n.sc-drw-menu {\n  position: absolute;\n  top: 0;\n  left: 0;\n  min-width: 120px;\n  padding: 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  z-index: 10;\n}\n.sc-drw-menu-item {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  width: 100%;\n  padding: 5px 8px;\n  border: none;\n  border-radius: 3px;\n  background: transparent;\n  color: inherit;\n  font: inherit;\n  text-align: left;\n  cursor: pointer;\n}\n.sc-drw-menu-item:hover { background: #2a2e39; }\n.sc-drw-menu-item[data-on=\"true\"] { color: #4c7dff; }\n.sc-drw-menu-item svg { width: 14px; height: 14px; flex: none; }\n.sc-drw-menu-label {\n  padding: 4px 8px 2px;\n  color: #787b86;\n  font-size: 10px;\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n}\n.sc-drw-palette {\n  display: grid;\n  grid-template-columns: repeat(7, 18px);\n  gap: 4px;\n  padding: 4px;\n}\n.sc-drw-palette-cell {\n  width: 18px;\n  height: 18px;\n  padding: 0;\n  border: 1px solid rgba(255, 255, 255, 0.12);\n  border-radius: 2px;\n  cursor: pointer;\n}\n.sc-drw-palette-cell:hover { transform: scale(1.15); border-color: #ffffff; }\n";
+var injected = false;
+/** Inject the drawings UI stylesheet — idempotent, SSR-safe. */
+function injectDrawingStyles() {
+    if (injected || typeof document === 'undefined') {
+        return;
+    }
+    if (document.getElementById(STYLE_ID$1) !== null) {
+        injected = true;
+        return;
+    }
+    var style = document.createElement('style');
+    style.id = STYLE_ID$1;
+    style.textContent = CSS;
+    document.head.appendChild(style);
+    injected = true;
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * Floating quick-settings toolbar (DP-6b). Lives on the pane DOM layer and
+ * renders the selected tool's `toolbarRecipe` from the catalog — the same
+ * per-tool-family property-map model TradingView uses.
+ *
+ * Controls are self-describing: a host renders no buttons itself; the
+ * recipe decides which swatches/dropdowns/toggles appear, and actions
+ * (clone/remove/lock/hide/more-menu) are wired here once for every tool.
+ */
+/** TV-style preset palette — colors that read on any chart theme. */
+var PALETTE = [
+    '#787b86', '#9e9e9e', '#ffffff', '#000000',
+    '#2962ff', '#00bcd4', '#089981', '#2dc08e',
+    '#ffeb3b', '#ff9800', '#f23645', '#e91e63',
+    '#9c27b0', '#673ab7'
+];
+var LINE_WIDTHS = [1, 2, 3, 4];
+var LINE_STYLES = [
+    { value: 'solid', title: 'Solid' },
+    { value: 'dashed', title: 'Dashed' },
+    { value: 'dotted', title: 'Dotted' }
+];
+var FONT_SIZES = [10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 40];
+var TEXT_ALIGNS = [
+    { value: 'left', title: 'Align left' },
+    { value: 'center', title: 'Align center' },
+    { value: 'right', title: 'Align right' }
+];
+var DEFAULT_RECIPE = [
+    { kind: 'color', role: 'line' },
+    { kind: 'lock' }, { kind: 'visibility' }, { kind: 'clone' },
+    { kind: 'settings' }, { kind: 'remove' }, { kind: 'more' }
+];
+function attachFloatingToolbar(chart, manager, hooks) {
+    injectDrawingStyles();
+    var element = null;
+    var unmount = null;
+    var layer = null;
+    var current = null;
+    var menuEl = null;
+    var menuUnmount = null;
+    var manualOffset = null;
+    var dragState = null;
+    // Toolbar position in pane px — transform-based, so we track it ourselves
+    // (offsetLeft/offsetTop stay 0 under translate3d positioning).
+    var pos = { x: 0, y: 0 };
+    var destroyed = false;
+    // ── helpers ─────────────────────────────────────────────────────────────
+    function btn(iconId, title, onClick, on) {
+        var b = createDom('button');
+        b.className = 'sc-drw-btn';
+        b.title = title;
+        b.setAttribute('aria-label', title);
+        if (on === true) {
+            b.setAttribute('data-on', 'true');
+        }
+        b.innerHTML = getDrawingIcon(iconId);
+        b.addEventListener('click', function (e) {
+            e.stopPropagation();
+            onClick();
+        });
+        return b;
+    }
+    function sep() {
+        var d = createDom('div');
+        d.className = 'sc-drw-sep';
+        return d;
+    }
+    function closeMenu() {
+        menuUnmount === null || menuUnmount === void 0 ? void 0 : menuUnmount();
+        menuUnmount = null;
+        menuEl = null;
+    }
+    function openMenu(anchorEl, build) {
+        if (menuEl !== null) {
+            closeMenu();
+            return;
+        }
+        if (layer === null || element === null) {
+            return;
+        }
+        closeMenu();
+        var menu = createDom('div');
+        menu.className = 'sc-drw-menu';
+        build(menu);
+        // Position below the toolbar, aligned to the anchor button.
+        var tbRect = element.getBoundingClientRect();
+        var bRect = anchorEl.getBoundingClientRect();
+        menu.style.transform = "translate3d(".concat(bRect.left - tbRect.left, "px, ").concat(element.offsetHeight + 6, "px, 0)");
+        menuEl = menu;
+        element.appendChild(menu);
+        menuUnmount = function () {
+            var _a;
+            (_a = menuEl === null || menuEl === void 0 ? void 0 : menuEl.parentElement) === null || _a === void 0 ? void 0 : _a.removeChild(menuEl);
+            menuEl = null;
+        };
+    }
+    function styleMenuItem(title, active, onClick, iconId) {
+        var b = createDom('button');
+        b.className = 'sc-drw-menu-item';
+        if (active) {
+            b.setAttribute('data-on', 'true');
+        }
+        if (iconId !== undefined) {
+            b.innerHTML = "".concat(getDrawingIcon(iconId), "<span>").concat(title, "</span>");
+        }
+        else {
+            b.textContent = title;
+        }
+        b.addEventListener('click', function (e) {
+            e.stopPropagation();
+            closeMenu();
+            onClick();
+        });
+        return b;
+    }
+    // ── control renderers ───────────────────────────────────────────────────
+    function patchStyles(path, value) {
+        if (current === null) {
+            return;
+        }
+        var styles = {};
+        var node = styles;
+        path.slice(0, -1).forEach(function (key) {
+            var next = {};
+            node[key] = next;
+            node = next;
+        });
+        node[path[path.length - 1]] = value;
+        manager.update(current.id, { styles: styles });
+    }
+    function currentStyleValue(path) {
+        var e_1, _a;
+        var styles = current === null || current === void 0 ? void 0 : current.styles;
+        var node = styles;
+        try {
+            for (var path_1 = __values(path), path_1_1 = path_1.next(); !path_1_1.done; path_1_1 = path_1.next()) {
+                var key = path_1_1.value;
+                if (node === null || typeof node !== 'object') {
+                    return undefined;
+                }
+                node = node[key];
+            }
+        }
+        catch (e_1_1) { e_1 = { error: e_1_1 }; }
+        finally {
+            try {
+                if (path_1_1 && !path_1_1.done && (_a = path_1.return)) _a.call(path_1);
+            }
+            finally { if (e_1) throw e_1.error; }
+        }
+        return node;
+    }
+    function colorControl(role) {
+        var paths = {
+            line: ['line', 'color'],
+            fill: ['polygon', 'color'],
+            text: ['text', 'color'],
+            background: ['rect', 'color']
+        };
+        var path = paths[role];
+        var swatch = createDom('span');
+        swatch.className = 'sc-drw-swatch';
+        var paint = function () {
+            var v = currentStyleValue(path);
+            swatch.style.background = typeof v === 'string' ? v : '#2962ff';
+        };
+        paint();
+        var b = createDom('button');
+        b.className = 'sc-drw-btn';
+        b.title = "".concat(role, " color");
+        b.appendChild(swatch);
+        b.addEventListener('click', function (e) {
+            e.stopPropagation();
+            openMenu(b, function (menu) {
+                var grid = createDom('div');
+                grid.className = 'sc-drw-palette';
+                PALETTE.forEach(function (color) {
+                    var cell = createDom('button');
+                    cell.className = 'sc-drw-palette-cell';
+                    cell.style.background = color;
+                    cell.title = color;
+                    cell.addEventListener('click', function (ev) {
+                        ev.stopPropagation();
+                        closeMenu();
+                        patchStyles(path, color);
+                    });
+                    grid.appendChild(cell);
+                });
+                menu.appendChild(grid);
+            });
+        });
+        return b;
+    }
+    function dropdownButton(iconId, title, items) {
+        var b = btn(iconId, title, function () {
+            openMenu(b, function (menu) {
+                items.forEach(function (item) {
+                    menu.appendChild(styleMenuItem(item.title, item.active, item.onClick));
+                });
+            });
+        });
+        return b;
+    }
+    function lineStyleControl() {
+        return dropdownButton('trendLine', 'Line style', LINE_STYLES.map(function (s) { return ({
+            title: s.title,
+            active: currentStyleValue(['line', 'style']) === s.value,
+            onClick: function () {
+                patchStyles(['line', 'style'], s.value);
+            }
+        }); }));
+    }
+    function widthControl() {
+        return dropdownButton('trendLine', 'Line width', LINE_WIDTHS.map(function (w) { return ({
+            title: "".concat(w, "px"),
+            active: currentStyleValue(['line', 'size']) === w,
+            onClick: function () {
+                patchStyles(['line', 'size'], w);
+            }
+        }); }));
+    }
+    function fontSizeControl() {
+        return dropdownButton('text', 'Text size', FONT_SIZES.map(function (s) { return ({
+            title: "".concat(s, "px"),
+            active: currentStyleValue(['text', 'size']) === s,
+            onClick: function () {
+                patchStyles(['text', 'size'], s);
+            }
+        }); }));
+    }
+    function textStyleControl() {
+        var b = btn('text', 'Text style', function () {
+            openMenu(b, function (menu) {
+                var bold = currentStyleValue(['text', 'weight']) === 'bold';
+                var italic = currentStyleValue(['text', 'style']) === 'italic';
+                menu.appendChild(styleMenuItem('Bold', bold, function () {
+                    patchStyles(['text', 'weight'], bold ? 'normal' : 'bold');
+                }));
+                menu.appendChild(styleMenuItem('Italic', italic, function () {
+                    patchStyles(['text', 'style'], italic ? 'normal' : 'italic');
+                }));
+                menu.appendChild(styleMenuItem('Size…', false, function () {
+                    openMenu(b, function (sub) {
+                        FONT_SIZES.forEach(function (s) {
+                            sub.appendChild(styleMenuItem("".concat(s, "px"), currentStyleValue(['text', 'size']) === s, function () {
+                                patchStyles(['text', 'size'], s);
+                            }));
+                        });
+                    });
+                }));
+            });
+        });
+        return b;
+    }
+    function textAlignControl() {
+        var currentAlign = function () {
+            var v = currentStyleValue(['text', 'align']);
+            return typeof v === 'string' ? v : 'center';
+        };
+        return btn('text', 'Text align', function () {
+            var order = TEXT_ALIGNS.map(function (a) { return a.value; });
+            var idx = order.indexOf(currentAlign());
+            var next = order[(idx + 1) % order.length];
+            patchStyles(['text', 'align'], next);
+        });
+    }
+    function geometryControl(options) {
+        var titles = { rect: 'Rectangle', rotated: 'Rotated rectangle', ellipse: 'Ellipse' };
+        var b = btn('rect', 'Shape', function () {
+            openMenu(b, function (menu) {
+                options.forEach(function (opt) {
+                    menu.appendChild(styleMenuItem(titles[opt], false, function () {
+                        if (current !== null) {
+                            var ext = current.extendData;
+                            var next = typeof ext === 'object' && ext !== null ? __assign(__assign({}, ext), { geometry: opt }) : { geometry: opt };
+                            manager.update(current.id, { extendData: next });
+                        }
+                    }));
+                });
+            });
+        });
+        return b;
+    }
+    function moreMenu() {
+        var b = btn('settings', 'More', function () {
+            openMenu(b, function (menu) {
+                var _a;
+                if (current === null) {
+                    return;
+                }
+                var overlay = current;
+                var label = createDom('div');
+                label.className = 'sc-drw-menu-label';
+                label.textContent = 'Order';
+                menu.appendChild(label);
+                menu.appendChild(styleMenuItem('Bring to front', false, function () {
+                    manager.update(overlay.id, { zLevel: overlay.zLevel + 1000 });
+                }));
+                menu.appendChild(styleMenuItem('Send to back', false, function () {
+                    manager.update(overlay.id, { zLevel: overlay.zLevel - 1000 });
+                }));
+                var label2 = createDom('div');
+                label2.className = 'sc-drw-menu-label';
+                label2.textContent = 'Actions';
+                menu.appendChild(label2);
+                menu.appendChild(styleMenuItem(!overlay.visible ? 'Show' : 'Hide', false, function () {
+                    manager.update(overlay.id, { visible: !overlay.visible });
+                }, 'hide'));
+                menu.appendChild(styleMenuItem('Clone', false, function () {
+                    cloneOverlay(overlay);
+                }, 'rect'));
+                menu.appendChild(styleMenuItem(overlay.lock ? 'Unlock' : 'Lock', overlay.lock, function () {
+                    manager.update(overlay.id, { lock: !overlay.lock });
+                }, 'lock'));
+                (_a = hooks === null || hooks === void 0 ? void 0 : hooks.additionalActions) === null || _a === void 0 ? void 0 : _a.call(hooks, overlay).forEach(function (action) {
+                    menu.appendChild(styleMenuItem(action.title, false, function () {
+                        action.onClick(overlay);
+                    }, action.iconId));
+                });
+            });
+        });
+        return b;
+    }
+    function cloneOverlay(overlay) {
+        var serialized = serializeOverlay$1(overlay);
+        if (serialized === null) {
+            return;
+        }
+        var create = serializedToOverlayCreate(serialized);
+        delete create.id;
+        // Nudge the clone so it doesn't z-fight the original.
+        var bars = chart.getDataList();
+        var oneBar = bars.length > 1 ? bars[1].timestamp - bars[0].timestamp : 0;
+        if (isArray(create.points)) {
+            create.points = create.points.map(function (p) { return (__assign(__assign({}, p), { timestamp: p.timestamp !== undefined ? p.timestamp + oneBar : p.timestamp, dataIndex: p.dataIndex !== undefined ? p.dataIndex + 1 : p.dataIndex })); });
+        }
+        manager.create(create);
+    }
+    // ── toolbar build ───────────────────────────────────────────────────────
+    function controlEl(control) {
+        if (current === null) {
+            return null;
+        }
+        var overlay = current;
+        switch (control.kind) {
+            case 'color':
+                return colorControl(control.role);
+            case 'style':
+                return control.role === 'line' ? lineStyleControl() : textStyleControl();
+            case 'width':
+                return widthControl();
+            case 'text':
+                return fontSizeControl();
+            case 'textAlign':
+                return textAlignControl();
+            case 'geometry':
+                return geometryControl(control.options);
+            case 'levels':
+                return btn('settings', 'Levels', function () {
+                    var _a;
+                    (_a = hooks === null || hooks === void 0 ? void 0 : hooks.onSettings) === null || _a === void 0 ? void 0 : _a.call(hooks, overlay);
+                });
+            case 'snap45':
+                return btn('magnet', 'Snap to 45°', function () {
+                    setAlign45Enabled(chart, !isAlign45Enabled(chart));
+                    rerender();
+                }, isAlign45Enabled(chart));
+            case 'anchor':
+                return btn('anchoredText', 'Anchor', function () {
+                    var ext = overlay.extendData;
+                    var anchored = (ext === null || ext === void 0 ? void 0 : ext.anchored) === true;
+                    manager.update(overlay.id, { extendData: __assign(__assign({}, ext), { anchored: !anchored }) });
+                });
+            case 'alert':
+                if ((hooks === null || hooks === void 0 ? void 0 : hooks.onAlert) === undefined) {
+                    return null;
+                }
+                return btn('flag', 'Alert', function () {
+                    var _a;
+                    (_a = hooks.onAlert) === null || _a === void 0 ? void 0 : _a.call(hooks, overlay);
+                });
+            case 'lock':
+                return btn('lock', overlay.lock ? 'Unlock' : 'Lock', function () {
+                    manager.update(overlay.id, { lock: !overlay.lock });
+                    rerender();
+                }, overlay.lock);
+            case 'visibility':
+                return btn('hide', !overlay.visible ? 'Show' : 'Hide', function () {
+                    manager.update(overlay.id, { visible: !overlay.visible });
+                    rerender();
+                }, !overlay.visible);
+            case 'clone':
+                return btn('rect', 'Clone', function () {
+                    cloneOverlay(overlay);
+                });
+            case 'settings':
+                if ((hooks === null || hooks === void 0 ? void 0 : hooks.onSettings) === undefined) {
+                    return null;
+                }
+                return btn('settings', 'Settings', function () {
+                    var _a;
+                    (_a = hooks.onSettings) === null || _a === void 0 ? void 0 : _a.call(hooks, overlay);
+                });
+            case 'remove':
+                return btn('remove', 'Remove', function () {
+                    manager.remove(overlay.id);
+                });
+            case 'more':
+                return moreMenu();
+        }
+    }
+    function recipeFor(overlay) {
+        var _a, _b;
+        // In-progress freehand: only a Cancel control (TV swaps Remove for it).
+        if (overlay.isDrawing()) {
+            return [{ kind: 'remove' }];
+        }
+        return (_b = (_a = findCatalogItemByOverlay(overlay.name)) === null || _a === void 0 ? void 0 : _a.toolbarRecipe) !== null && _b !== void 0 ? _b : DEFAULT_RECIPE;
+    }
+    function build() {
+        if (element === null || current === null) {
+            return;
+        }
+        element.innerHTML = '';
+        var grip = createDom('div');
+        grip.className = 'sc-drw-btn sc-drw-grip';
+        grip.title = 'Drag toolbar';
+        grip.innerHTML = '<svg viewBox="0 0 8 20" width="8" height="20" fill="currentColor"><circle cx="2.5" cy="4" r="1.2"/><circle cx="5.5" cy="4" r="1.2"/><circle cx="2.5" cy="10" r="1.2"/><circle cx="5.5" cy="10" r="1.2"/><circle cx="2.5" cy="16" r="1.2"/><circle cx="5.5" cy="16" r="1.2"/></svg>';
+        grip.addEventListener('mousedown', function (e) {
+            if (element === null) {
+                return;
+            }
+            e.stopPropagation();
+            e.preventDefault();
+            dragState = {
+                startX: e.clientX,
+                startY: e.clientY,
+                baseX: pos.x,
+                baseY: pos.y
+            };
+        });
+        element.appendChild(grip);
+        var recipe = recipeFor(current);
+        var needSep = false;
+        recipe.forEach(function (control) {
+            var el = controlEl(control);
+            if (el === null) {
+                return;
+            }
+            if (needSep) {
+                element === null || element === void 0 ? void 0 : element.appendChild(sep());
+                needSep = false;
+            }
+            element === null || element === void 0 ? void 0 : element.appendChild(el);
+            if (control.kind === 'color' || control.kind === 'width' || control.kind === 'levels' || control.kind === 'text') {
+                needSep = true;
+            }
+        });
+    }
+    // ── positioning ─────────────────────────────────────────────────────────
+    function overlayBounds() {
+        if (current === null) {
+            return null;
+        }
+        var pixels = chart.convertToPixel(current.points, { paneId: current.paneId });
+        var list = isArray(pixels) ? pixels : [pixels];
+        var x1 = Number.POSITIVE_INFINITY;
+        var y1 = Number.POSITIVE_INFINITY;
+        var x2 = Number.NEGATIVE_INFINITY;
+        var y2 = Number.NEGATIVE_INFINITY;
+        list.forEach(function (c) {
+            if (c.x !== undefined && c.y !== undefined) {
+                x1 = Math.min(x1, c.x);
+                y1 = Math.min(y1, c.y);
+                x2 = Math.max(x2, c.x);
+                y2 = Math.max(y2, c.y);
+            }
+        });
+        if (!Number.isFinite(x1) || !Number.isFinite(y1)) {
+            return null;
+        }
+        return { x1: x1, y1: y1, x2: x2, y2: y2 };
+    }
+    function reposition() {
+        if (element === null || current === null || layer === null) {
+            return;
+        }
+        if (dragState !== null) {
+            return; // user is dragging the toolbar itself
+        }
+        var bounds = overlayBounds();
+        var host = layer.getElement();
+        var pw = host.clientWidth;
+        var ph = host.clientHeight;
+        var tw = element.offsetWidth;
+        var th = element.offsetHeight;
+        var x = 8;
+        var y = 8;
+        if (manualOffset !== null && bounds !== null) {
+            x = bounds.x1 + (bounds.x2 - bounds.x1) / 2 - tw / 2 + manualOffset.dx;
+            y = bounds.y1 - th - 8 + manualOffset.dy;
+        }
+        else if (bounds !== null) {
+            x = bounds.x1 + (bounds.x2 - bounds.x1) / 2 - tw / 2;
+            y = bounds.y1 - th - 8;
+            if (y < 4) {
+                y = bounds.y2 + 8;
+            }
+        }
+        else {
+            x = 8;
+            y = 8;
+        }
+        x = Math.max(4, Math.min(x, Math.max(4, pw - tw - 4)));
+        y = Math.max(4, Math.min(y, Math.max(4, ph - th - 4)));
+        pos = { x: Math.round(x), y: Math.round(y) };
+        element.style.transform = "translate3d(".concat(pos.x, "px, ").concat(pos.y, "px, 0)");
+    }
+    function onDragMove(e) {
+        if (dragState === null || element === null) {
+            return;
+        }
+        var dx = e.clientX - dragState.startX;
+        var dy = e.clientY - dragState.startY;
+        pos = { x: Math.round(dragState.baseX + dx), y: Math.round(dragState.baseY + dy) };
+        element.style.transform = "translate3d(".concat(pos.x, "px, ").concat(pos.y, "px, 0)");
+        var bounds = overlayBounds();
+        if (bounds !== null) {
+            var tw = element.offsetWidth;
+            var th = element.offsetHeight;
+            var anchorX = bounds.x1 + (bounds.x2 - bounds.x1) / 2 - tw / 2;
+            var anchorY = bounds.y1 - th - 8 < 4 ? bounds.y2 + 8 : bounds.y1 - th - 8;
+            manualOffset = { dx: pos.x - anchorX, dy: pos.y - anchorY };
+        }
+    }
+    function onDragEnd() {
+        dragState = null;
+    }
+    // ── lifecycle ───────────────────────────────────────────────────────────
+    function show(overlay) {
+        if (destroyed) {
+            return;
+        }
+        hide();
+        var nextLayer = getPaneDomLayer(chart, overlay.paneId);
+        if (nextLayer === null) {
+            return;
+        }
+        layer = nextLayer;
+        current = overlay;
+        manualOffset = null;
+        element = createDom('div');
+        element.className = 'sc-drw-toolbar';
+        unmount = layer.mount(element, { interactive: true });
+        build();
+        reposition();
+    }
+    function hide() {
+        closeMenu();
+        unmount === null || unmount === void 0 ? void 0 : unmount();
+        unmount = null;
+        element = null;
+        current = null;
+        manualOffset = null;
+    }
+    function rerender() {
+        build();
+        reposition();
+    }
+    var onSelect = function (payload) {
+        if (payload.overlay !== undefined) {
+            show(payload.overlay);
+        }
+    };
+    var onDeselect = function () {
+        hide();
+    };
+    var onEditStart = function () {
+        hide();
+    };
+    var onEditEnd = function (payload) {
+        if (payload.overlay !== undefined) {
+            show(payload.overlay);
+        }
+    };
+    var onChange = function (payload) {
+        var _a;
+        if (current !== null && ((_a = payload.overlay) === null || _a === void 0 ? void 0 : _a.id) === current.id) {
+            rerender();
+        }
+        else {
+            reposition();
+        }
+    };
+    var onPanOrZoom = function () {
+        reposition();
+    };
+    var unsubs = [
+        manager.on('select', onSelect),
+        manager.on('deselect', onDeselect),
+        manager.on('editStart', onEditStart),
+        manager.on('editEnd', onEditEnd),
+        manager.on('change', onChange)
+    ];
+    chart.subscribeAction('onZoom', onPanOrZoom);
+    chart.subscribeAction('onScroll', onPanOrZoom);
+    chart.subscribeAction('onVisibleRangeChange', onPanOrZoom);
+    if (typeof document !== 'undefined') {
+        document.addEventListener('mousemove', onDragMove);
+        document.addEventListener('mouseup', onDragEnd);
+    }
+    return {
+        show: show,
+        hide: hide,
+        destroy: function () {
+            destroyed = true;
+            hide();
+            unsubs.forEach(function (unsub) {
+                unsub();
+            });
+            chart.unsubscribeAction('onZoom', onPanOrZoom);
+            chart.unsubscribeAction('onScroll', onPanOrZoom);
+            chart.unsubscribeAction('onVisibleRangeChange', onPanOrZoom);
+            if (typeof document !== 'undefined') {
+                document.removeEventListener('mousemove', onDragMove);
+                document.removeEventListener('mouseup', onDragEnd);
+            }
+        }
+    };
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+function isEditableTarget(target) {
+    if (!(target instanceof Element)) {
+        return false;
+    }
+    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) {
+        return true;
+    }
+    if (target instanceof HTMLElement && target.isContentEditable) {
+        return true;
+    }
+    return target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]') !== null;
+}
+/**
+ * Bind the shared keyboard layer. Returns an unbind function.
+ * Guards: editable DOM targets and IME composition never reach handlers.
+ */
+function bindDrawingKeyboard(handlers, options) {
+    var _a;
+    var target = (_a = options === null || options === void 0 ? void 0 : options.target) !== null && _a !== void 0 ? _a : (typeof document !== 'undefined' ? document : undefined);
+    if (target === undefined) {
+        return function () {
+            // SSR — nothing bound, nothing to unbind.
+        };
+    }
+    var onKeyDown = function (e) {
+        var _a, _b;
+        if (!(e instanceof KeyboardEvent)) {
+            return;
+        }
+        // Never intercept typing — inputs, textareas, contenteditable, IME.
+        // Shadow DOM retargets e.target to the host — composedPath()[0] is the
+        // real target inside the shadow root.
+        var realTarget = (_a = (typeof e.composedPath === 'function' ? e.composedPath()[0] : undefined)) !== null && _a !== void 0 ? _a : e.target;
+        if (isEditableTarget(realTarget) || e.isComposing) {
+            return;
+        }
+        if (((_b = options === null || options === void 0 ? void 0 : options.isActive) === null || _b === void 0 ? void 0 : _b.call(options)) === false) {
+            return;
+        }
+        var mod = e.ctrlKey || e.metaKey;
+        if (mod) {
+            var key = e.key.toLowerCase();
+            if (key === 'z') {
+                // Only swallow the keybinding when a handler claims it — otherwise
+                // let the host/browser keep its own undo.
+                if (e.shiftKey && handlers.onRedo !== undefined) {
+                    e.preventDefault();
+                    handlers.onRedo();
+                }
+                else if (!e.shiftKey && handlers.onUndo !== undefined) {
+                    e.preventDefault();
+                    handlers.onUndo();
+                }
+            }
+            else if (key === 'c' && !e.shiftKey && handlers.onCopy !== undefined) {
+                e.preventDefault();
+                handlers.onCopy();
+            }
+            else if (key === 'v' && !e.shiftKey && handlers.onPaste !== undefined) {
+                e.preventDefault();
+                handlers.onPaste();
+            }
+            else if (key === 'y' && !e.shiftKey && handlers.onRedo !== undefined) {
+                // Windows redo convention alongside Cmd+Shift+Z.
+                e.preventDefault();
+                handlers.onRedo();
+            }
+            return;
+        }
+        if (e.key === 'Escape' && handlers.onEscape !== undefined) {
+            handlers.onEscape();
+        }
+        else if ((e.key === 'Delete' || e.key === 'Backspace') && handlers.onDelete !== undefined) {
+            e.preventDefault();
+            handlers.onDelete();
+        }
+    };
+    target.addEventListener('keydown', onKeyDown);
+    return function () {
+        target.removeEventListener('keydown', onKeyDown);
+    };
+}
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -10100,6 +11194,65 @@ function expectedAnchors(name) {
 function createDrawingsApi(chart, options) {
     var _a;
     var manager = createDrawingManager(chart, __assign(__assign({}, options), { store: (_a = options === null || options === void 0 ? void 0 : options.store) !== null && _a !== void 0 ? _a : undefined }));
+    var toolbarOption = options === null || options === void 0 ? void 0 : options.toolbar;
+    var toolbar = toolbarOption === false
+        ? null
+        : attachFloatingToolbar(chart, manager, typeof toolbarOption === 'object' ? toolbarOption : undefined);
+    var selectedId = null;
+    var unbindSelection = [
+        manager.on('select', function (p) {
+            var _a, _b;
+            selectedId = (_b = (_a = p.overlay) === null || _a === void 0 ? void 0 : _a.id) !== null && _b !== void 0 ? _b : null;
+        }),
+        manager.on('deselect', function () {
+            selectedId = null;
+        })
+    ];
+    function selectedOverlay() {
+        return selectedId !== null ? chart.getOverlayById(selectedId) : null;
+    }
+    function cancelInProgress() {
+        var inProgress = chart.getOverlays().find(function (o) { return o.isDrawing(); });
+        if (inProgress === undefined) {
+            return false;
+        }
+        return chart.removeOverlay({ id: inProgress.id });
+    }
+    var clipboard = null;
+    var unbindKeyboard = (options === null || options === void 0 ? void 0 : options.keyboard) === false
+        ? null
+        : bindDrawingKeyboard({
+            onEscape: function () {
+                if (!cancelInProgress()) {
+                    manager.deselect();
+                }
+            },
+            onDelete: function () {
+                var selected = selectedOverlay();
+                if (selected !== null && !selected.lock) {
+                    manager.remove(selected.id);
+                }
+            },
+            onUndo: function () {
+                manager.undo();
+            },
+            onRedo: function () {
+                manager.redo();
+            },
+            onCopy: function () {
+                var selected = selectedOverlay();
+                if (selected !== null) {
+                    clipboard = serializeOverlay$1(selected);
+                }
+            },
+            onPaste: function () {
+                if (clipboard !== null) {
+                    var create = serializedToOverlayCreate(clipboard);
+                    delete create.id;
+                    manager.create(create);
+                }
+            }
+        });
     function resolveToolName(tool) {
         var _a, _b;
         return (_b = (_a = findCatalogItem(tool)) === null || _a === void 0 ? void 0 : _a.overlayName) !== null && _b !== void 0 ? _b : tool;
@@ -10278,6 +11431,14 @@ function createDrawingsApi(chart, options) {
             if ('store' in opts) {
                 manager.attachStore((_a = opts.store) !== null && _a !== void 0 ? _a : null);
             }
+        }, destroy: function () {
+            unbindKeyboard === null || unbindKeyboard === void 0 ? void 0 : unbindKeyboard();
+            unbindSelection.forEach(function (unsub) {
+                unsub();
+            });
+            toolbar === null || toolbar === void 0 ? void 0 : toolbar.destroy();
+            clipboard = null;
+            manager.destroy();
         } });
 }
 
@@ -10406,36 +11567,6 @@ function createId(prefix) {
     }
     prevIdTimestamp = timestamp;
     return "".concat(prefix !== null && prefix !== void 0 ? prefix : '').concat(timestamp, "_").concat(baseId);
-}
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
-
- * http://www.apache.org/licenses/LICENSE-2.0
-
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-/**
- * Create dom
- * @param tagName
- * @param styles
- * @return {*}
- */
-function createDom(tagName, styles) {
-    var _a;
-    var dom = document.createElement(tagName);
-    var s = styles !== null && styles !== void 0 ? styles : {};
-    // eslint-disable-next-line guard-for-in -- ignore
-    for (var key in s) {
-        (dom.style)[key] = (_a = s[key]) !== null && _a !== void 0 ? _a : '';
-    }
-    return dom;
 }
 
 /**
@@ -20087,6 +21218,23 @@ var StoreImp = /** @class */ (function () {
                     figure: null
                 };
             }
+            // Hover/select slots must not keep pointing at a dead overlay — the
+            // next setHoverOverlayInfo would fire onMouseLeave + zLevel restore on
+            // a removed instance, and click-info would keep reporting a phantom
+            // selection. Deselect goes through selectOverlay so the deselect
+            // event + onDeselected hook still fire in order.
+            if (_this._hoverOverlayInfo.overlay === overlay) {
+                _this._hoverOverlayInfo = {
+                    paneId: '',
+                    overlay: null,
+                    figureType: 'none',
+                    figureIndex: -1,
+                    figure: null
+                };
+            }
+            if (_this._clickOverlayInfo.overlay === overlay) {
+                _this.selectOverlay(null);
+            }
             var index = paneOverlays.findIndex(function (o) { return o.id === overlay.id; });
             if (index === -1) {
                 try {
@@ -22668,15 +23816,15 @@ var OverlayView = /** @class */ (function (_super) {
             }
             var progressOverlayPaneId = progressOverlayInfo.paneId;
             if (overlay.isStart()) {
-                chartStore.updateProgressOverlayInfo(paneId);
+                chartStore.updateProgressOverlayInfo(paneId, true);
                 progressOverlayPaneId = paneId;
             }
             if (progressOverlayPaneId !== paneId) {
                 return false;
             }
             overlay.eventMoveForDrawing(_this._coordinateToPoint(overlay, event), event);
-            overlay.nextStep();
             (_b = overlay.onDrawing) === null || _b === void 0 ? void 0 : _b.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
+            overlay.nextStep();
             chartStore.executeAction('onOverlayChange', { type: 'progress', overlay: overlay });
             if (!overlay.isDrawing()) {
                 // A finite-step freehand finished on the first point.
@@ -22694,27 +23842,37 @@ var OverlayView = /** @class */ (function (_super) {
             freehandLastCoord = { x: event.x, y: event.y };
             return true;
         }).registerEvent('mouseUpEvent', function (event) {
-            var _a, _b;
-            var _c = chartStore.getPressedOverlayInfo(), overlay = _c.overlay, figure = _c.figure, figureType = _c.figureType;
+            var _a, _b, _c, _d;
+            var _e = chartStore.getPressedOverlayInfo(), overlay = _e.overlay, figure = _e.figure, figureType = _e.figureType;
             var consumed = false;
             if (overlay !== null) {
-                if (overlay.freehand && overlay.isDrawing() && figureType === 'none') {
-                    // Freehand stroke end — complete and commit the overlay. A
-                    // press-release with zero travel leaves a single-point stroke
-                    // that renders nothing — cancel it like a degenerate dblclick.
-                    overlay.forceComplete();
-                    if (overlay.points.length < 2) {
-                        chartStore.removeOverlay({ id: overlay.id });
+                if (overlay.freehand && figureType === 'none') {
+                    if (overlay.isDrawing()) {
+                        // Freehand stroke end — write the release point into the pending
+                        // slot so the stroke tail isn't lost, then complete and commit.
+                        // A press-release with zero travel leaves a single-point stroke
+                        // that renders nothing — cancel it like a degenerate dblclick.
+                        var rdx = event.x - ((_a = freehandLastCoord === null || freehandLastCoord === void 0 ? void 0 : freehandLastCoord.x) !== null && _a !== void 0 ? _a : event.x);
+                        var rdy = event.y - ((_b = freehandLastCoord === null || freehandLastCoord === void 0 ? void 0 : freehandLastCoord.y) !== null && _b !== void 0 ? _b : event.y);
+                        if (rdx !== 0 || rdy !== 0) {
+                            overlay.eventMoveForDrawing(_this._coordinateToPoint(overlay, event), event);
+                        }
+                        overlay.forceComplete();
+                        if (overlay.points.length < 2) {
+                            chartStore.removeOverlay({ id: overlay.id });
+                        }
+                        else {
+                            chartStore.progressOverlayComplete();
+                            (_c = overlay.onDrawEnd) === null || _c === void 0 ? void 0 : _c.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
+                        }
                     }
-                    else {
-                        chartStore.progressOverlayComplete();
-                        (_a = overlay.onDrawEnd) === null || _a === void 0 ? void 0 : _a.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
-                    }
+                    // A stroke that finished mid-gesture only needs the gesture to
+                    // end here — the commit already happened in pressedMouseMove.
                     consumed = true;
                 }
                 else {
                     if (checkOverlayFigureEvent('onPressedMoveEnd', figure)) {
-                        (_b = overlay.onPressedMoveEnd) === null || _b === void 0 ? void 0 : _b.call(overlay, __assign({ chart: chart, overlay: overlay, figure: figure !== null && figure !== void 0 ? figure : undefined }, event));
+                        (_d = overlay.onPressedMoveEnd) === null || _d === void 0 ? void 0 : _d.call(overlay, __assign({ chart: chart, overlay: overlay, figure: figure !== null && figure !== void 0 ? figure : undefined }, event));
                     }
                     // Gesture commit boundary — pairs with 'editStart' emitted on press.
                     chartStore.executeAction('onOverlayChange', { type: 'editEnd', overlay: overlay });
@@ -22733,34 +23891,33 @@ var OverlayView = /** @class */ (function (_super) {
             var _a, _b, _c, _d, _e, _f, _g, _h;
             var _j = chartStore.getPressedOverlayInfo(), overlay = _j.overlay, figureType = _j.figureType, figureIndex = _j.figureIndex, figure = _j.figure;
             if (overlay !== null) {
-                if (overlay.freehand && overlay.isDrawing() && figureType === 'none') {
-                    // Freehand stroke — append a point once the pointer travels past
-                    // the decimation distance, then advance the write slot.
-                    var minDist = overlay.freehandMinDistance;
-                    var dx = event.x - ((_a = freehandLastCoord === null || freehandLastCoord === void 0 ? void 0 : freehandLastCoord.x) !== null && _a !== void 0 ? _a : event.x);
-                    var dy = event.y - ((_b = freehandLastCoord === null || freehandLastCoord === void 0 ? void 0 : freehandLastCoord.y) !== null && _b !== void 0 ? _b : event.y);
-                    if (dx * dx + dy * dy >= minDist * minDist) {
-                        overlay.eventMoveForDrawing(_this._coordinateToPoint(overlay, event), event);
-                        overlay.nextStep();
-                        (_c = overlay.onDrawing) === null || _c === void 0 ? void 0 : _c.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
-                        chartStore.executeAction('onOverlayChange', { type: 'progress', overlay: overlay });
-                        freehandLastCoord = { x: event.x, y: event.y };
-                        if (!overlay.isDrawing()) {
-                            // A finite-step freehand tool finished mid-stroke — release
-                            // the pressed slot so later moves can't misroute into
-                            // eventPressedOtherMove (stale _prevPressedPoint teleport).
-                            chartStore.progressOverlayComplete();
-                            (_d = overlay.onDrawEnd) === null || _d === void 0 ? void 0 : _d.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
-                            chartStore.setPressedOverlayInfo({
-                                paneId: paneId,
-                                overlay: null,
-                                figureType: 'none',
-                                figureIndex: -1,
-                                figure: null
-                            });
-                            freehandLastCoord = null;
+                if (overlay.freehand && figureType === 'none') {
+                    if (overlay.isDrawing()) {
+                        // Freehand stroke — append a point once the pointer travels past
+                        // the decimation distance, then advance the write slot.
+                        var minDist = overlay.freehandMinDistance;
+                        var dx = event.x - ((_a = freehandLastCoord === null || freehandLastCoord === void 0 ? void 0 : freehandLastCoord.x) !== null && _a !== void 0 ? _a : event.x);
+                        var dy = event.y - ((_b = freehandLastCoord === null || freehandLastCoord === void 0 ? void 0 : freehandLastCoord.y) !== null && _b !== void 0 ? _b : event.y);
+                        if (dx * dx + dy * dy >= minDist * minDist) {
+                            overlay.eventMoveForDrawing(_this._coordinateToPoint(overlay, event), event);
+                            (_c = overlay.onDrawing) === null || _c === void 0 ? void 0 : _c.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
+                            overlay.nextStep();
+                            chartStore.executeAction('onOverlayChange', { type: 'progress', overlay: overlay });
+                            freehandLastCoord = { x: event.x, y: event.y };
+                            if (!overlay.isDrawing()) {
+                                // A finite-step freehand tool finished mid-stroke. Commit
+                                // it, but KEEP the pressed slot — clearing it would let the
+                                // rest of this drag fall through to chart scrolling (the
+                                // scroll would then compute from the original mousedown
+                                // coordinate). Mouseup ends the gesture instead.
+                                chartStore.progressOverlayComplete();
+                                (_d = overlay.onDrawEnd) === null || _d === void 0 ? void 0 : _d.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
+                                freehandLastCoord = null;
+                            }
                         }
                     }
+                    // Swallow moves after completion too — the gesture belongs to the
+                    // drawing until release, finished or not.
                     _this.getWidget().setForceCursor('crosshair');
                     return true;
                 }
@@ -22886,7 +24043,12 @@ var OverlayView = /** @class */ (function (_super) {
                         visible: overlay.visible,
                         mode: overlay.mode,
                         modeSensitivity: overlay.modeSensitivity,
-                        zLevel: overlay.zLevel
+                        zLevel: overlay.zLevel,
+                        // A clone already carries all committed points — replaying the
+                        // per-step draw simulation on them is wasted work and lets a
+                        // template's performEventMoveForDrawing run its side effects
+                        // (derived point computation) twice over the same data.
+                        skipDrawReplay: true
                     }], [false]);
                 var cloneOverlay = chartStore.getOverlayById((_a = ids[0]) !== null && _a !== void 0 ? _a : null);
                 if (cloneOverlay === null) {
@@ -22901,7 +24063,17 @@ var OverlayView = /** @class */ (function (_super) {
                 dragOverlay = cloneOverlay;
             }
             dragOverlay.startPressedMove(_this._coordinateToPoint(dragOverlay, event));
-            (_b = dragOverlay.onPressedMoveStart) === null || _b === void 0 ? void 0 : _b.call(dragOverlay, __assign({ chart: pane.getChart(), overlay: dragOverlay, figure: figure }, event));
+            try {
+                (_b = dragOverlay.onPressedMoveStart) === null || _b === void 0 ? void 0 : _b.call(dragOverlay, __assign({ chart: pane.getChart(), overlay: dragOverlay, figure: figure }, event));
+            }
+            catch (_c) {
+                // A host hook that throws (or removed the overlay mid-call) must not
+                // leave a press-armed clone orphaned in the store.
+                if (dragOverlay !== overlay) {
+                    chartStore.removeOverlay({ id: dragOverlay.id });
+                }
+                return false;
+            }
             chartStore.setPressedOverlayInfo({ paneId: paneId, overlay: dragOverlay, figureType: figureType, figureIndex: figureIndex, figure: figure });
             // Gesture commit boundary — everything between editStart/editEnd is
             // one undo/persistence unit (drag gestures emit many 'progress').
@@ -27210,6 +28382,34 @@ var EventHandlerImp = /** @class */ (function () {
             }
         }
     };
+    /**
+     * An OS-level touchcancel (notification shade, gesture takeover, browser
+     * intervention) kills the gesture without a touchend. Without cleanup the
+     * active touch id stays set — the NEXT touchstart returns early and the
+     * chart goes deaf to touch — and the root move/end listeners leak. The
+     * in-flight gesture (pressed overlay, freehand stroke) still needs a
+     * release to close out, so we forward the cancel as touchEndEvent — but
+     * never synthesize tap/click from an interruption.
+     */
+    EventHandlerImp.prototype._touchCancelHandler = function (touchCancelEvent) {
+        var _a;
+        var touch = this._touchWithId(touchCancelEvent.changedTouches, this._activeTouchId);
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- ignore
+        touch !== null && touch !== void 0 ? touch : (touch = (_a = touchCancelEvent.changedTouches[0]) !== null && _a !== void 0 ? _a : null);
+        this._activeTouchId = null;
+        this._lastTouchEventTimeStamp = this._eventTimeStamp(touchCancelEvent);
+        this._clearLongTapTimeout();
+        this._touchMoveStartCoordinate = null;
+        this._cancelTap = true;
+        if (this._unsubscribeRootTouchEvents !== null) {
+            this._unsubscribeRootTouchEvents();
+            this._unsubscribeRootTouchEvents = null;
+        }
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- changedTouches[0] can be undefined at runtime
+        if (touch !== null) {
+            this._processEvent(this._makeCompatEvent(touchCancelEvent, touch), this._handler.touchEndEvent);
+        }
+    };
     EventHandlerImp.prototype._clearLongTapTimeout = function () {
         if (this._longTapTimeoutId === null) {
             return;
@@ -27313,7 +28513,7 @@ var EventHandlerImp = /** @class */ (function () {
         this._target.addEventListener('mouseenter', this._mouseEnterHandler.bind(this));
         // Do not show context menu when something went wrong
         // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-        this._target.addEventListener('touchcancel', this._clearLongTapTimeout.bind(this));
+        this._target.addEventListener('touchcancel', this._touchCancelHandler.bind(this));
         {
             var doc_1 = this._target.ownerDocument;
             var outsideHandler_1 = function (event) {
@@ -27921,8 +29121,13 @@ var Event = /** @class */ (function () {
         var widget = this._findWidgetByEvent(e).widget;
         // Released outside every pane/widget — still deliver the mouseup to the
         // widget the gesture started on, or pressed overlay state (freehand
-        // stroke, figure drag editStart/editEnd pair) dangles forever.
-        var target = widget !== null && widget !== void 0 ? widget : this._mouseDownWidget;
+        // stroke, figure drag editStart/editEnd pair) dangles forever. A pressed
+        // overlay ALWAYS releases on its owning widget — separators and axis
+        // widgets under the pointer have no overlay view to close the gesture.
+        var pressedOverlay = this._chart.getChartStore().getPressedOverlayInfo().overlay;
+        var target = pressedOverlay !== null && this._mouseDownWidget !== null
+            ? this._mouseDownWidget
+            : widget !== null && widget !== void 0 ? widget : this._mouseDownWidget;
         var consumed = false;
         if (target !== null) {
             var event_4 = this._makeWidgetEvent(e, target);
@@ -28084,22 +29289,30 @@ var Event = /** @class */ (function () {
         return false;
     };
     Event.prototype.touchMoveEvent = function (e) {
-        var _a, _b, _c;
-        var _d = this._findWidgetByEvent(e), pane = _d.pane, widget = _d.widget;
-        if (widget !== null) {
+        var _a, _b, _c, _d, _e;
+        if (this._mouseDownWidget !== null && this._mouseDownWidget.getName() === WidgetNameConstants.SEPARATOR) {
+            return this._mouseDownWidget.dispatchEvent('pressedMouseMoveEvent', e);
+        }
+        var _f = this._findWidgetByEvent(e), pane = _f.pane, widget = _f.widget;
+        // Same identity gate as pressedMouseMoveEvent — a touch gesture is
+        // widget-local: without it a freehand stroke sliding across a pane
+        // boundary writes points in the wrong pane's coordinate space.
+        if (widget !== null &&
+            ((_a = this._mouseDownWidget) === null || _a === void 0 ? void 0 : _a.getPane().getId()) === (pane === null || pane === void 0 ? void 0 : pane.getId()) &&
+            ((_b = this._mouseDownWidget) === null || _b === void 0 ? void 0 : _b.getName()) === widget.getName()) {
             var event_9 = this._makeWidgetEvent(e, widget);
             var name_8 = widget.getName();
             var chartStore = this._chart.getChartStore();
             switch (name_8) {
                 case WidgetNameConstants.MAIN: {
                     if (widget.dispatchEvent('pressedMouseMoveEvent', event_9)) {
-                        (_a = event_9.preventDefault) === null || _a === void 0 ? void 0 : _a.call(event_9);
+                        (_c = event_9.preventDefault) === null || _c === void 0 ? void 0 : _c.call(event_9);
                         chartStore.setCrosshair(undefined, { notInvalidate: true });
                         this._chart.updatePane(1 /* UpdateLevel.Overlay */);
                         return true;
                     }
                     if (this._touchCoordinate !== null) {
-                        (_b = event_9.preventDefault) === null || _b === void 0 ? void 0 : _b.call(event_9);
+                        (_d = event_9.preventDefault) === null || _d === void 0 ? void 0 : _d.call(event_9);
                         chartStore.setCrosshair({ x: event_9.x, y: event_9.y, paneId: pane === null || pane === void 0 ? void 0 : pane.getId() });
                     }
                     else {
@@ -28108,7 +29321,7 @@ var Event = /** @class */ (function () {
                     return true;
                 }
                 case WidgetNameConstants.X_AXIS: {
-                    (_c = event_9.preventDefault) === null || _c === void 0 ? void 0 : _c.call(event_9);
+                    (_e = event_9.preventDefault) === null || _e === void 0 ? void 0 : _e.call(event_9);
                     return this._processXAxisScrollingEvent(widget, event_9);
                 }
                 case WidgetNameConstants.Y_AXIS: {
@@ -28122,8 +29335,13 @@ var Event = /** @class */ (function () {
         var _this = this;
         var widget = this._findWidgetByEvent(e).widget;
         // Same fallback as mouseUpEvent — touchend off-chart must still close
-        // the gesture on the widget it started on.
-        var target = widget !== null && widget !== void 0 ? widget : this._mouseDownWidget;
+        // the gesture on the widget it started on; a pressed overlay always
+        // releases on its owning widget (separators/axes have no overlay view).
+        var pressedOverlay = this._chart.getChartStore().getPressedOverlayInfo().overlay;
+        var target = pressedOverlay !== null && this._mouseDownWidget !== null
+            ? this._mouseDownWidget
+            : widget !== null && widget !== void 0 ? widget : this._mouseDownWidget;
+        var consumed = false;
         if (target !== null) {
             var event_10 = this._makeWidgetEvent(e, target);
             var name_9 = target.getName();
@@ -28155,25 +29373,31 @@ var Event = /** @class */ (function () {
                             flingScroll_1();
                         }
                     }
-                    return true;
+                    consumed = true;
+                    break;
                 }
+                case WidgetNameConstants.SEPARATOR:
                 case WidgetNameConstants.X_AXIS:
                 case WidgetNameConstants.Y_AXIS: {
-                    var consumed = target.dispatchEvent('mouseUpEvent', event_10);
+                    consumed = target.dispatchEvent('mouseUpEvent', event_10);
                     if (consumed) {
                         this._chart.updatePane(1 /* UpdateLevel.Overlay */);
                     }
+                    break;
                 }
             }
-            this._startScrollCoordinate = null;
-            this._prevYAxisRange = null;
-            this._xAxisStartScaleCoordinate = null;
-            this._xAxisStartScaleDistance = 0;
-            this._xAxisScale = 1;
-            this._yAxisStartScaleDistance = 0;
         }
+        // Cleanup must run on EVERY exit path — an early return that skips it
+        // strands _startScrollCoordinate (phantom fling on the next tap) and
+        // _mouseDownWidget (release-fallback pointing at a stale widget).
+        this._startScrollCoordinate = null;
+        this._prevYAxisRange = null;
+        this._xAxisStartScaleCoordinate = null;
+        this._xAxisStartScaleDistance = 0;
+        this._xAxisScale = 1;
+        this._yAxisStartScaleDistance = 0;
         this._mouseDownWidget = null;
-        return false;
+        return consumed;
     };
     Event.prototype.tapEvent = function (e) {
         var _a = this._findWidgetByEvent(e), pane = _a.pane, widget = _a.widget;
@@ -31345,7 +32569,9 @@ function createAnchorFigures(params) {
     var borderColor = (_b = styles === null || styles === void 0 ? void 0 : styles.borderColor) !== null && _b !== void 0 ? _b : '#1592E6';
     var backColor = (_c = styles === null || styles === void 0 ? void 0 : styles.backColor) !== null && _c !== void 0 ? _c : '#ffffff';
     var borderSize = (_d = styles === null || styles === void 0 ? void 0 : styles.borderSize) !== null && _d !== void 0 ? _d : 1.5;
-    var indexes = pointIndexes !== null && pointIndexes !== void 0 ? pointIndexes : coordinates.map(function (_, i) { return i; });
+    // Filter out-of-range indexes up front — a template passing bad
+    // pointIndexes must not crash on a destructured undefined coordinate.
+    var indexes = (pointIndexes !== null && pointIndexes !== void 0 ? pointIndexes : coordinates.map(function (_, i) { return i; })).filter(function (i) { return i >= 0 && i < coordinates.length; });
     var figures = [];
     var lastIndex = coordinates.length - 1;
     try {
@@ -31472,156 +32698,6 @@ function computeResizeCursor(from, to) {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var states = new WeakMap();
-function getDrawingInteractionState(chart) {
-    var state = states.get(chart);
-    if (state === undefined) {
-        state = { align45: false };
-        states.set(chart, state);
-    }
-    return state;
-}
-function setAlign45Enabled(chart, enabled) {
-    getDrawingInteractionState(chart).align45 = enabled;
-}
-function isAlign45Enabled(chart) {
-    return getDrawingInteractionState(chart).align45;
-}
-/**
- * Whether a move should snap to 45° increments — Shift held during the
- * gesture, or the persistent toolbar toggle.
- */
-function isSnap45Active(chart, event) {
-    return (event === null || event === void 0 ? void 0 : event.shiftKey) === true || isAlign45Enabled(chart);
-}
-/**
- * Snap `to` onto the nearest 45° ray from `from`, preserving distance.
- * Operates in pixel space — convert Point↔Coordinate at the call site.
- */
-function snap45Coordinate(to, from) {
-    var dx = to.x - from.x;
-    var dy = to.y - from.y;
-    var distance = Math.sqrt(dx * dx + dy * dy);
-    if (distance === 0) {
-        return to;
-    }
-    var angle = Math.atan2(dy, dx);
-    var snapped = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
-    return {
-        x: from.x + distance * Math.cos(snapped),
-        y: from.y + distance * Math.sin(snapped)
-    };
-}
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-function isEditableTarget(target) {
-    if (!(target instanceof Element)) {
-        return false;
-    }
-    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) {
-        return true;
-    }
-    if (target instanceof HTMLElement && target.isContentEditable) {
-        return true;
-    }
-    return target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]') !== null;
-}
-/**
- * Bind the shared keyboard layer. Returns an unbind function.
- * Guards: editable DOM targets and IME composition never reach handlers.
- */
-function bindDrawingKeyboard(handlers, options) {
-    var _a;
-    var target = (_a = options === null || options === void 0 ? void 0 : options.target) !== null && _a !== void 0 ? _a : (typeof document !== 'undefined' ? document : undefined);
-    if (target === undefined) {
-        return function () {
-            // SSR — nothing bound, nothing to unbind.
-        };
-    }
-    var onKeyDown = function (e) {
-        var _a, _b;
-        if (!(e instanceof KeyboardEvent)) {
-            return;
-        }
-        // Never intercept typing — inputs, textareas, contenteditable, IME.
-        // Shadow DOM retargets e.target to the host — composedPath()[0] is the
-        // real target inside the shadow root.
-        var realTarget = (_a = (typeof e.composedPath === 'function' ? e.composedPath()[0] : undefined)) !== null && _a !== void 0 ? _a : e.target;
-        if (isEditableTarget(realTarget) || e.isComposing) {
-            return;
-        }
-        if (((_b = options === null || options === void 0 ? void 0 : options.isActive) === null || _b === void 0 ? void 0 : _b.call(options)) === false) {
-            return;
-        }
-        var mod = e.ctrlKey || e.metaKey;
-        if (mod) {
-            var key = e.key.toLowerCase();
-            if (key === 'z') {
-                // Only swallow the keybinding when a handler claims it — otherwise
-                // let the host/browser keep its own undo.
-                if (e.shiftKey && handlers.onRedo !== undefined) {
-                    e.preventDefault();
-                    handlers.onRedo();
-                }
-                else if (!e.shiftKey && handlers.onUndo !== undefined) {
-                    e.preventDefault();
-                    handlers.onUndo();
-                }
-            }
-            else if (key === 'c' && handlers.onCopy !== undefined) {
-                e.preventDefault();
-                handlers.onCopy();
-            }
-            else if (key === 'v' && handlers.onPaste !== undefined) {
-                e.preventDefault();
-                handlers.onPaste();
-            }
-            else if (key === 'y' && handlers.onRedo !== undefined) {
-                // Windows redo convention alongside Cmd+Shift+Z.
-                e.preventDefault();
-                handlers.onRedo();
-            }
-            return;
-        }
-        if (e.key === 'Escape' && handlers.onEscape !== undefined) {
-            handlers.onEscape();
-        }
-        else if ((e.key === 'Delete' || e.key === 'Backspace') && handlers.onDelete !== undefined) {
-            e.preventDefault();
-            handlers.onDelete();
-        }
-    };
-    target.addEventListener('keydown', onKeyDown);
-    return function () {
-        target.removeEventListener('keydown', onKeyDown);
-    };
-}
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 var cache = new WeakMap();
 function coordsSignature(coordinates) {
     var e_1, _a;
@@ -31651,14 +32727,15 @@ function coordsSignature(coordinates) {
  */
 function withFigureCache(fn, options) {
     return function (params) {
-        var _a, _b;
+        var _a, _b, _c;
         var signature = coordsSignature(params.coordinates) +
             "|r".concat(params.overlay.figuresRev) +
             "|s".concat(params.isSelected === true ? 1 : 0, "h").concat(params.isHovered === true ? 1 : 0) +
             "|l".concat(params.overlay.lock ? 1 : 0) +
             "|b".concat(params.bounding.width, "x").concat(params.bounding.height) +
             "|c".concat(params.overlay.currentStep) +
-            "|k".concat((_b = (_a = options === null || options === void 0 ? void 0 : options.extraKey) === null || _a === void 0 ? void 0 : _a.call(options, params)) !== null && _b !== void 0 ? _b : '');
+            "|h".concat((_a = params.hoveredFigureKey) !== null && _a !== void 0 ? _a : '') +
+            "|k".concat((_c = (_b = options === null || options === void 0 ? void 0 : options.extraKey) === null || _b === void 0 ? void 0 : _b.call(options, params)) !== null && _c !== void 0 ? _c : '');
         var entry = cache.get(params.overlay);
         if (entry !== undefined && entry.signature === signature) {
             return entry.figures;
@@ -31698,129 +32775,6 @@ function withViewportCull(fn, options) {
  */
 function withPerfPipeline(fn, options) {
     return withFigureCache(withViewportCull(fn, options), options);
-}
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-var LAYER_ATTR = 'data-sc-dom-layer';
-var ISOLATED_EVENTS = [
-    'mousedown', 'mouseup', 'mousemove',
-    'click', 'dblclick', 'contextmenu',
-    'wheel',
-    'touchstart', 'touchmove', 'touchend', 'touchcancel',
-    'pointerdown', 'pointermove', 'pointerup', 'pointercancel'
-];
-var PaneDomLayerImp = /** @class */ (function () {
-    function PaneDomLayerImp(host) {
-        this._interactive = new Map();
-        this._destroyed = false;
-        this._element = createDom('div', {
-            position: 'absolute',
-            top: '0',
-            left: '0',
-            right: '0',
-            bottom: '0',
-            margin: '0',
-            padding: '0',
-            overflow: 'hidden',
-            pointerEvents: 'none',
-            // Above the widget's main + overlay canvases (z-index 2).
-            zIndex: '4',
-            boxSizing: 'border-box'
-        });
-        this._element.setAttribute(LAYER_ATTR, '');
-        host.appendChild(this._element);
-    }
-    PaneDomLayerImp.prototype.getElement = function () {
-        return this._element;
-    };
-    PaneDomLayerImp.prototype.mount = function (element, options) {
-        var _this = this;
-        var _a;
-        if (this._destroyed) {
-            return function () {
-                // layer gone — nothing to unmount.
-            };
-        }
-        if ((options === null || options === void 0 ? void 0 : options.className) !== undefined) {
-            element.classList.add(options.className);
-        }
-        if ((options === null || options === void 0 ? void 0 : options.zIndex) !== undefined) {
-            element.style.zIndex = String(options.zIndex);
-        }
-        if ((options === null || options === void 0 ? void 0 : options.interactive) === true) {
-            element.style.pointerEvents = 'auto';
-            var isolate_1 = (_a = options.isolate) !== null && _a !== void 0 ? _a : (function () { return true; });
-            var handler_1 = function (e) {
-                if (isolate_1(e)) {
-                    e.stopPropagation();
-                }
-            };
-            ISOLATED_EVENTS.forEach(function (type) {
-                element.addEventListener(type, handler_1);
-            });
-            this._interactive.set(element, handler_1);
-        }
-        this._element.appendChild(element);
-        return function () {
-            _this.detach(element);
-        };
-    };
-    PaneDomLayerImp.prototype.detach = function (element) {
-        var handler = this._interactive.get(element);
-        if (handler !== undefined) {
-            ISOLATED_EVENTS.forEach(function (type) {
-                element.removeEventListener(type, handler);
-            });
-            this._interactive.delete(element);
-            element.style.pointerEvents = '';
-        }
-        if (element.parentElement === this._element) {
-            this._element.removeChild(element);
-        }
-    };
-    PaneDomLayerImp.prototype.clear = function () {
-        var _this = this;
-        Array.from(this._interactive.keys()).forEach(function (element) {
-            _this.detach(element);
-        });
-        this._element.innerHTML = '';
-    };
-    PaneDomLayerImp.prototype.destroy = function () {
-        var _a;
-        this._destroyed = true;
-        this.clear();
-        (_a = this._element.parentElement) === null || _a === void 0 ? void 0 : _a.removeChild(this._element);
-    };
-    return PaneDomLayerImp;
-}());
-var layers = new WeakMap();
-/**
- * Resolve (creating on first use) the DOM layer for a pane's main widget.
- * Returns null when the pane does not exist — SSR-safe when chart is gone.
- */
-function getPaneDomLayer(chart, paneId) {
-    var host = chart.getDom(paneId, 'main');
-    if (host === null) {
-        return null;
-    }
-    var layer = layers.get(host);
-    if (layer === undefined) {
-        layer = new PaneDomLayerImp(host);
-        layers.set(host, layer);
-    }
-    return layer;
 }
 
 /**

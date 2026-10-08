@@ -1587,6 +1587,23 @@ export default class StoreImp implements Store {
           figure: null
         }
       }
+      // Hover/select slots must not keep pointing at a dead overlay — the
+      // next setHoverOverlayInfo would fire onMouseLeave + zLevel restore on
+      // a removed instance, and click-info would keep reporting a phantom
+      // selection. Deselect goes through selectOverlay so the deselect
+      // event + onDeselected hook still fire in order.
+      if (this._hoverOverlayInfo.overlay === overlay) {
+        this._hoverOverlayInfo = {
+          paneId: '',
+          overlay: null,
+          figureType: 'none',
+          figureIndex: -1,
+          figure: null
+        }
+      }
+      if (this._clickOverlayInfo.overlay === overlay) {
+        this.selectOverlay(null)
+      }
       let index = paneOverlays.findIndex(o => o.id === overlay.id)
       if (index === -1) {
         // overlay.paneId may have drifted from the map key (host-side field

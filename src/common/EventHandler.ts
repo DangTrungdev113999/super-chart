@@ -579,6 +579,34 @@ export default class EventHandlerImp {
     }
   }
 
+  /**
+   * An OS-level touchcancel (notification shade, gesture takeover, browser
+   * intervention) kills the gesture without a touchend. Without cleanup the
+   * active touch id stays set — the NEXT touchstart returns early and the
+   * chart goes deaf to touch — and the root move/end listeners leak. The
+   * in-flight gesture (pressed overlay, freehand stroke) still needs a
+   * release to close out, so we forward the cancel as touchEndEvent — but
+   * never synthesize tap/click from an interruption.
+   */
+  private _touchCancelHandler (touchCancelEvent: TouchEvent): void {
+    let touch = this._touchWithId(touchCancelEvent.changedTouches, this._activeTouchId)
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- ignore
+    touch ??= touchCancelEvent.changedTouches[0] ?? null
+    this._activeTouchId = null
+    this._lastTouchEventTimeStamp = this._eventTimeStamp(touchCancelEvent)
+    this._clearLongTapTimeout()
+    this._touchMoveStartCoordinate = null
+    this._cancelTap = true
+    if (this._unsubscribeRootTouchEvents !== null) {
+      this._unsubscribeRootTouchEvents()
+      this._unsubscribeRootTouchEvents = null
+    }
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- changedTouches[0] can be undefined at runtime
+    if (touch !== null) {
+      this._processEvent(this._makeCompatEvent(touchCancelEvent, touch), this._handler.touchEndEvent)
+    }
+  }
+
   private _clearLongTapTimeout (): void {
     if (this._longTapTimeoutId === null) {
       return
@@ -709,7 +737,7 @@ export default class EventHandlerImp {
 
     // Do not show context menu when something went wrong
     // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-    this._target.addEventListener('touchcancel', this._clearLongTapTimeout.bind(this))
+    this._target.addEventListener('touchcancel', this._touchCancelHandler.bind(this))
 
     {
       const doc = this._target.ownerDocument

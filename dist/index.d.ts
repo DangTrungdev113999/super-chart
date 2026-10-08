@@ -1031,6 +1031,72 @@ export interface DrawingStore {
 	/** Identity switch (login/logout) — server adapters re-key rows. */
 	setIdentity?: (identity: string | null) => void;
 }
+/**
+ * DrawingManager — OBSERVE + shadow state.
+ *
+ * The manager does NOT own the overlay list: the chart store remains the
+ * source of truth for rendering and hit-testing. The manager subscribes
+ * to `onOverlayChange`, keeps a serialized shadow map of every committed
+ * drawing, and turns commit boundaries (drawEnd / editEnd / remove) into
+ * undo commands + debounced persistence writes.
+ *
+ * Non-drawings — sync mirrors (synced), in-flight ghosts (ghost), armed
+ * in-progress tools, and templates flagged `transient` — are tracked for
+ * correctness but never persisted or undone.
+ */
+export type DrawingsEventType = "select" | "deselect" | "toolChange" | "change" | "editStart" | "editEnd";
+export type DrawingsEventCallback = (payload: {
+	overlay?: Overlay;
+	tool?: string | null;
+}) => void;
+export interface DrawingManager {
+	/** Arm a drawing tool — subsequent clicks collect its points. */
+	activate: (name: string, opts?: {
+		continuous?: boolean;
+		extendData?: unknown;
+		points?: OverlayCreate["points"];
+	}) => Nullable<string>;
+	deactivate: () => void;
+	activeTool: () => string | null;
+	/** Programmatic create — already-finished overlays (AI / restore paths). */
+	create: (spec: OverlayCreate) => Nullable<string>;
+	update: (id: string, patch: Partial<Pick<OverlayCreate, "points" | "styles" | "extendData" | "lock" | "visible" | "mode" | "modeSensitivity" | "zLevel">>) => boolean;
+	remove: (id: string) => boolean;
+	list: () => SerializedDrawing[];
+	get: (id: string) => Nullable<Overlay>;
+	select: (id: Nullable<string>) => void;
+	deselect: () => void;
+	undo: () => boolean;
+	redo: () => boolean;
+	canUndo: () => boolean;
+	canRedo: () => boolean;
+	attachStore: (store: DrawingStore | null) => void;
+	flush: () => Promise<void>;
+	/**
+	 * Bulk-apply suppression — wrap restore/sync batch writes so the flood
+	 * of 'create'/'update' events doesn't push undo commands or persist
+	 * entries the caller already owns.
+	 */
+	beginApply: () => void;
+	endApply: () => void;
+	on: (type: DrawingsEventType, cb: DrawingsEventCallback) => () => void;
+	destroy: () => void;
+}
+export interface ToolbarSourceAction {
+	title: string;
+	iconId?: string;
+	onClick: (overlay: Overlay) => void;
+}
+export interface FloatingToolbarHooks {
+	/** Settings gear — DP-6c dialog or host-side panel. */
+	onSettings?: (overlay: Overlay) => void;
+	/** Alert action hook — host wires its alerting UI. */
+	onAlert?: (overlay: Overlay) => void;
+	/** Text edit shortcut — host/lib opens the text editor. */
+	onTextEdit?: (overlay: Overlay) => void;
+	/** Per-tool action injection (TV's source-actions slot). */
+	additionalActions?: (overlay: Overlay) => ToolbarSourceAction[];
+}
 export type FormatDateType = "tooltip" | "crosshair" | "xAxis";
 export interface FormatDateParams {
 	dateTimeFormat: Intl.DateTimeFormat;
@@ -1092,8 +1158,10 @@ export interface ZoomAnchor {
 export interface DrawingsOptions {
 	/** Persistence adapter — omit for in-memory-only drawings. */
 	store?: DrawingStore | null;
-	/** Set false to disable the built-in floating toolbar (DP-6b). */
-	toolbar?: boolean;
+	/** Floating toolbar: `false` disables, object supplies hooks. */
+	toolbar?: boolean | FloatingToolbarHooks;
+	/** Shared drawing keyboard layer — `false` disables (default on). */
+	keyboard?: boolean;
 	/** Persistence partition override — defaults to chart symbol. */
 	scope?: () => DrawingScope;
 	/** Tool names that render but are never listed/persisted/undone. */
@@ -1114,57 +1182,6 @@ export interface Options {
 	layout?: LayoutChild[];
 	/** Drawing subsystem configuration — see `chart.drawings`. */
 	drawings?: DrawingsOptions;
-}
-/**
- * DrawingManager — OBSERVE + shadow state.
- *
- * The manager does NOT own the overlay list: the chart store remains the
- * source of truth for rendering and hit-testing. The manager subscribes
- * to `onOverlayChange`, keeps a serialized shadow map of every committed
- * drawing, and turns commit boundaries (drawEnd / editEnd / remove) into
- * undo commands + debounced persistence writes.
- *
- * Non-drawings — sync mirrors (synced), in-flight ghosts (ghost), armed
- * in-progress tools, and templates flagged `transient` — are tracked for
- * correctness but never persisted or undone.
- */
-export type DrawingsEventType = "select" | "deselect" | "toolChange" | "change" | "editStart" | "editEnd";
-export type DrawingsEventCallback = (payload: {
-	overlay?: Overlay;
-	tool?: string | null;
-}) => void;
-export interface DrawingManager {
-	/** Arm a drawing tool — subsequent clicks collect its points. */
-	activate: (name: string, opts?: {
-		continuous?: boolean;
-		extendData?: unknown;
-		points?: OverlayCreate["points"];
-	}) => Nullable<string>;
-	deactivate: () => void;
-	activeTool: () => string | null;
-	/** Programmatic create — already-finished overlays (AI / restore paths). */
-	create: (spec: OverlayCreate) => Nullable<string>;
-	update: (id: string, patch: Partial<Pick<OverlayCreate, "points" | "styles" | "extendData" | "lock" | "visible" | "mode" | "modeSensitivity" | "zLevel">>) => boolean;
-	remove: (id: string) => boolean;
-	list: () => SerializedDrawing[];
-	get: (id: string) => Nullable<Overlay>;
-	select: (id: Nullable<string>) => void;
-	deselect: () => void;
-	undo: () => boolean;
-	redo: () => boolean;
-	canUndo: () => boolean;
-	canRedo: () => boolean;
-	attachStore: (store: DrawingStore | null) => void;
-	flush: () => Promise<void>;
-	/**
-	 * Bulk-apply suppression — wrap restore/sync batch writes so the flood
-	 * of 'create'/'update' events doesn't push undo commands or persist
-	 * entries the caller already owns.
-	 */
-	beginApply: () => void;
-	endApply: () => void;
-	on: (type: DrawingsEventType, cb: DrawingsEventCallback) => () => void;
-	destroy: () => void;
 }
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");

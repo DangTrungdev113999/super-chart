@@ -78,6 +78,7 @@ export function withFigureCache<E> (
       `|l${params.overlay.lock ? 1 : 0}` +
       `|b${params.bounding.width}x${params.bounding.height}` +
       `|c${params.overlay.currentStep}` +
+      `|h${params.hoveredFigureKey ?? ''}` +
       `|k${options?.extraKey?.(params) ?? ''}`
 
     const entry = cache.get(params.overlay)

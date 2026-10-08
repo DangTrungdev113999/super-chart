@@ -96,13 +96,13 @@ export function bindDrawingKeyboard (handlers: DrawingKeyboardHandlers, options?
           e.preventDefault()
           handlers.onUndo()
         }
-      } else if (key === 'c' && handlers.onCopy !== undefined) {
+      } else if (key === 'c' && !e.shiftKey && handlers.onCopy !== undefined) {
         e.preventDefault()
         handlers.onCopy()
-      } else if (key === 'v' && handlers.onPaste !== undefined) {
+      } else if (key === 'v' && !e.shiftKey && handlers.onPaste !== undefined) {
         e.preventDefault()
         handlers.onPaste()
-      } else if (key === 'y' && handlers.onRedo !== undefined) {
+      } else if (key === 'y' && !e.shiftKey && handlers.onRedo !== undefined) {
         // Windows redo convention alongside Cmd+Shift+Z.
         e.preventDefault()
         handlers.onRedo()

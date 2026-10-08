@@ -399,8 +399,13 @@ export default class Event implements EventHandler {
     const { widget } = this._findWidgetByEvent(e)
     // Released outside every pane/widget — still deliver the mouseup to the
     // widget the gesture started on, or pressed overlay state (freehand
-    // stroke, figure drag editStart/editEnd pair) dangles forever.
-    const target = widget ?? this._mouseDownWidget
+    // stroke, figure drag editStart/editEnd pair) dangles forever. A pressed
+    // overlay ALWAYS releases on its owning widget — separators and axis
+    // widgets under the pointer have no overlay view to close the gesture.
+    const pressedOverlay = this._chart.getChartStore().getPressedOverlayInfo().overlay
+    const target = pressedOverlay !== null && this._mouseDownWidget !== null
+      ? this._mouseDownWidget
+      : widget ?? this._mouseDownWidget
     let consumed = false
     if (target !== null) {
       const event = this._makeWidgetEvent(e, target)
@@ -566,8 +571,18 @@ export default class Event implements EventHandler {
   }
 
   touchMoveEvent (e: MouseTouchEvent): boolean {
+    if (this._mouseDownWidget !== null && this._mouseDownWidget.getName() === WidgetNameConstants.SEPARATOR) {
+      return this._mouseDownWidget.dispatchEvent('pressedMouseMoveEvent', e)
+    }
     const { pane, widget } = this._findWidgetByEvent(e)
-    if (widget !== null) {
+    // Same identity gate as pressedMouseMoveEvent — a touch gesture is
+    // widget-local: without it a freehand stroke sliding across a pane
+    // boundary writes points in the wrong pane's coordinate space.
+    if (
+      widget !== null &&
+      this._mouseDownWidget?.getPane().getId() === pane?.getId() &&
+      this._mouseDownWidget?.getName() === widget.getName()
+    ) {
       const event = this._makeWidgetEvent(e, widget)
       const name = widget.getName()
       const chartStore = this._chart.getChartStore()
@@ -602,8 +617,13 @@ export default class Event implements EventHandler {
   touchEndEvent (e: MouseTouchEvent): boolean {
     const { widget } = this._findWidgetByEvent(e)
     // Same fallback as mouseUpEvent — touchend off-chart must still close
-    // the gesture on the widget it started on.
-    const target = widget ?? this._mouseDownWidget
+    // the gesture on the widget it started on; a pressed overlay always
+    // releases on its owning widget (separators/axes have no overlay view).
+    const pressedOverlay = this._chart.getChartStore().getPressedOverlayInfo().overlay
+    const target = pressedOverlay !== null && this._mouseDownWidget !== null
+      ? this._mouseDownWidget
+      : widget ?? this._mouseDownWidget
+    let consumed = false
     if (target !== null) {
       const event = this._makeWidgetEvent(e, target)
       const name = target.getName()
@@ -634,25 +654,31 @@ export default class Event implements EventHandler {
               flingScroll()
             }
           }
-          return true
+          consumed = true
+          break
         }
+        case WidgetNameConstants.SEPARATOR:
         case WidgetNameConstants.X_AXIS:
         case WidgetNameConstants.Y_AXIS: {
-          const consumed = target.dispatchEvent('mouseUpEvent', event)
+          consumed = target.dispatchEvent('mouseUpEvent', event)
           if (consumed) {
             this._chart.updatePane(UpdateLevel.Overlay)
           }
+          break
         }
       }
-      this._startScrollCoordinate = null
-      this._prevYAxisRange = null
-      this._xAxisStartScaleCoordinate = null
-      this._xAxisStartScaleDistance = 0
-      this._xAxisScale = 1
-      this._yAxisStartScaleDistance = 0
     }
+    // Cleanup must run on EVERY exit path — an early return that skips it
+    // strands _startScrollCoordinate (phantom fling on the next tap) and
+    // _mouseDownWidget (release-fallback pointing at a stale widget).
+    this._startScrollCoordinate = null
+    this._prevYAxisRange = null
+    this._xAxisStartScaleCoordinate = null
+    this._xAxisStartScaleDistance = 0
+    this._xAxisScale = 1
+    this._yAxisStartScaleDistance = 0
     this._mouseDownWidget = null
-    return false
+    return consumed
   }
 
   tapEvent (e: MouseTouchEvent): boolean {

@@ -515,14 +515,25 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
       skipDrawReplay,
       // Kernel-owned members must never be merge-clobbered by a spread of
       // an overlay snapshot (regressed figuresRev poisons the figure cache;
-      // shadowed methods break the instance).
+      // shadowed methods break the instance; restored _prev* snapshots make
+      // shouldUpdate() compare against a foreign baseline and drop real
+      // changes).
       figuresRev: _fr,
       invalidateFigures: _inf,
       isDrawing: _d,
       isStart: _s,
       forceComplete: _fc,
+      _prevOverlay: _po,
+      _prevPressedPoint: _pp,
+      _prevPressedPoints: _pps,
+      _prevZLevel: _pz,
       ...others
-    } = overlay
+    } = overlay as Partial<Overlay<E>> & {
+      _prevOverlay?: unknown
+      _prevPressedPoint?: unknown
+      _prevPressedPoints?: unknown
+      _prevZLevel?: unknown
+    }
 
     merge(this, others)
 

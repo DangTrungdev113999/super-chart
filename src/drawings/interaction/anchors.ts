@@ -129,7 +129,9 @@ export function createAnchorFigures (params: AnchorFiguresParams): OverlayFigure
   const backColor = styles?.backColor ?? '#ffffff'
   const borderSize = styles?.borderSize ?? 1.5
 
-  const indexes = pointIndexes ?? coordinates.map((_, i) => i)
+  // Filter out-of-range indexes up front — a template passing bad
+  // pointIndexes must not crash on a destructured undefined coordinate.
+  const indexes = (pointIndexes ?? coordinates.map((_, i) => i)).filter(i => i >= 0 && i < coordinates.length)
   const figures: OverlayFigure[] = []
   const lastIndex = coordinates.length - 1
 

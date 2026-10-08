@@ -204,15 +204,15 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
       }
       let progressOverlayPaneId = progressOverlayInfo.paneId
       if (overlay.isStart()) {
-        chartStore.updateProgressOverlayInfo(paneId)
+        chartStore.updateProgressOverlayInfo(paneId, true)
         progressOverlayPaneId = paneId
       }
       if (progressOverlayPaneId !== paneId) {
         return false
       }
       overlay.eventMoveForDrawing(this._coordinateToPoint(overlay, event), event)
-      overlay.nextStep()
       overlay.onDrawing?.({ chart, overlay, ...event })
+      overlay.nextStep()
       chartStore.executeAction('onOverlayChange', { type: 'progress', overlay })
       if (!overlay.isDrawing()) {
         // A finite-step freehand finished on the first point.
@@ -233,17 +233,27 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
       const { overlay, figure, figureType } = chartStore.getPressedOverlayInfo()
       let consumed = false
       if (overlay !== null) {
-        if (overlay.freehand && overlay.isDrawing() && figureType === 'none') {
-          // Freehand stroke end — complete and commit the overlay. A
-          // press-release with zero travel leaves a single-point stroke
-          // that renders nothing — cancel it like a degenerate dblclick.
-          overlay.forceComplete()
-          if (overlay.points.length < 2) {
-            chartStore.removeOverlay({ id: overlay.id })
-          } else {
-            chartStore.progressOverlayComplete()
-            overlay.onDrawEnd?.({ chart, overlay, ...event })
+        if (overlay.freehand && figureType === 'none') {
+          if (overlay.isDrawing()) {
+            // Freehand stroke end — write the release point into the pending
+            // slot so the stroke tail isn't lost, then complete and commit.
+            // A press-release with zero travel leaves a single-point stroke
+            // that renders nothing — cancel it like a degenerate dblclick.
+            const rdx = event.x - (freehandLastCoord?.x ?? event.x)
+            const rdy = event.y - (freehandLastCoord?.y ?? event.y)
+            if (rdx !== 0 || rdy !== 0) {
+              overlay.eventMoveForDrawing(this._coordinateToPoint(overlay, event), event)
+            }
+            overlay.forceComplete()
+            if (overlay.points.length < 2) {
+              chartStore.removeOverlay({ id: overlay.id })
+            } else {
+              chartStore.progressOverlayComplete()
+              overlay.onDrawEnd?.({ chart, overlay, ...event })
+            }
           }
+          // A stroke that finished mid-gesture only needs the gesture to
+          // end here — the commit already happened in pressedMouseMove.
           consumed = true
         } else {
           if (checkOverlayFigureEvent('onPressedMoveEnd', figure)) {
@@ -265,34 +275,33 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
     }).registerEvent('pressedMouseMoveEvent', event => {
       const { overlay, figureType, figureIndex, figure } = chartStore.getPressedOverlayInfo()
       if (overlay !== null) {
-        if (overlay.freehand && overlay.isDrawing() && figureType === 'none') {
-          // Freehand stroke — append a point once the pointer travels past
-          // the decimation distance, then advance the write slot.
-          const minDist = overlay.freehandMinDistance
-          const dx = event.x - (freehandLastCoord?.x ?? event.x)
-          const dy = event.y - (freehandLastCoord?.y ?? event.y)
-          if (dx * dx + dy * dy >= minDist * minDist) {
-            overlay.eventMoveForDrawing(this._coordinateToPoint(overlay, event), event)
-            overlay.nextStep()
-            overlay.onDrawing?.({ chart, overlay, ...event })
-            chartStore.executeAction('onOverlayChange', { type: 'progress', overlay })
-            freehandLastCoord = { x: event.x, y: event.y }
-            if (!overlay.isDrawing()) {
-              // A finite-step freehand tool finished mid-stroke — release
-              // the pressed slot so later moves can't misroute into
-              // eventPressedOtherMove (stale _prevPressedPoint teleport).
-              chartStore.progressOverlayComplete()
-              overlay.onDrawEnd?.({ chart, overlay, ...event })
-              chartStore.setPressedOverlayInfo({
-                paneId,
-                overlay: null,
-                figureType: 'none',
-                figureIndex: -1,
-                figure: null
-              })
-              freehandLastCoord = null
+        if (overlay.freehand && figureType === 'none') {
+          if (overlay.isDrawing()) {
+            // Freehand stroke — append a point once the pointer travels past
+            // the decimation distance, then advance the write slot.
+            const minDist = overlay.freehandMinDistance
+            const dx = event.x - (freehandLastCoord?.x ?? event.x)
+            const dy = event.y - (freehandLastCoord?.y ?? event.y)
+            if (dx * dx + dy * dy >= minDist * minDist) {
+              overlay.eventMoveForDrawing(this._coordinateToPoint(overlay, event), event)
+              overlay.onDrawing?.({ chart, overlay, ...event })
+              overlay.nextStep()
+              chartStore.executeAction('onOverlayChange', { type: 'progress', overlay })
+              freehandLastCoord = { x: event.x, y: event.y }
+              if (!overlay.isDrawing()) {
+                // A finite-step freehand tool finished mid-stroke. Commit
+                // it, but KEEP the pressed slot — clearing it would let the
+                // rest of this drag fall through to chart scrolling (the
+                // scroll would then compute from the original mousedown
+                // coordinate). Mouseup ends the gesture instead.
+                chartStore.progressOverlayComplete()
+                overlay.onDrawEnd?.({ chart, overlay, ...event })
+                freehandLastCoord = null
+              }
             }
           }
+          // Swallow moves after completion too — the gesture belongs to the
+          // drawing until release, finished or not.
           this.getWidget().setForceCursor('crosshair')
           return true
         }
@@ -426,7 +435,12 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
           visible: overlay.visible,
           mode: overlay.mode,
           modeSensitivity: overlay.modeSensitivity,
-          zLevel: overlay.zLevel
+          zLevel: overlay.zLevel,
+          // A clone already carries all committed points — replaying the
+          // per-step draw simulation on them is wasted work and lets a
+          // template's performEventMoveForDrawing run its side effects
+          // (derived point computation) twice over the same data.
+          skipDrawReplay: true
         }], [false])
         const cloneOverlay = chartStore.getOverlayById(ids[0] ?? null)
         if (cloneOverlay === null) {
@@ -441,7 +455,16 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
         dragOverlay = cloneOverlay
       }
       dragOverlay.startPressedMove(this._coordinateToPoint(dragOverlay, event))
-      dragOverlay.onPressedMoveStart?.({ chart: pane.getChart(), overlay: dragOverlay, figure, ...event })
+      try {
+        dragOverlay.onPressedMoveStart?.({ chart: pane.getChart(), overlay: dragOverlay, figure, ...event })
+      } catch {
+        // A host hook that throws (or removed the overlay mid-call) must not
+        // leave a press-armed clone orphaned in the store.
+        if (dragOverlay !== overlay) {
+          chartStore.removeOverlay({ id: dragOverlay.id })
+        }
+        return false
+      }
       chartStore.setPressedOverlayInfo({ paneId, overlay: dragOverlay, figureType, figureIndex, figure })
       // Gesture commit boundary — everything between editStart/editEnd is
       // one undo/persistence unit (drag gestures emit many 'progress').
