@@ -49,7 +49,7 @@ const dateRange: OverlayTemplate<DateRangeExtendData> = {
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,
 
-  createPointFigures: ({ chart, coordinates, overlay, isSelected, isHovered }) => {
+  createPointFigures: ({ chart, coordinates, overlay, isSelected, isHovered, isTouch }) => {
     if (coordinates.length < 2) {
       return []
     }
@@ -134,6 +134,7 @@ const dateRange: OverlayTemplate<DateRangeExtendData> = {
       coordinates,
       isSelected,
       isHovered,
+      isTouch,
       isDrawing: overlay.isDrawing(),
       lock: overlay.lock,
       keyPrefix: 'anchor_'

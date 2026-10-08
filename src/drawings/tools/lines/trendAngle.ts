@@ -84,6 +84,7 @@ function measureAngle (overlay: Overlay<TrendAngleExtendData>, params: OverlayPe
 const trendAngle: OverlayTemplate<TrendAngleExtendData> = {
   name: 'trendAngle',
   totalStep: 3,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

@@ -24,8 +24,11 @@ import type { TextBoxData } from '../../text/textBox'
 import {
   baseTextBoxData,
   commitText,
+  liveTextOf,
   openAnnotationEditor,
   pointToCoordinate,
+  resolvedHorzTextAlign,
+  resolvedTextStyles,
   richTextFigureStyle,
   textEditorHooks,
   type AnnotationTextStyle
@@ -54,7 +57,7 @@ const DEFAULT_TAIL_HEIGHT = 10
 const DEFAULT_TAIL_WIDTH = 6
 
 function getCommentStyles (overlay: Overlay<CommentExtendData>): CommentStyle {
-  return ((overlay.styles?.[STYLE_KEY] ?? {}) as CommentStyle)
+  return resolvedTextStyles(overlay, STYLE_KEY) as CommentStyle
 }
 
 function getText (overlay: Overlay<CommentExtendData>): string {
@@ -62,7 +65,7 @@ function getText (overlay: Overlay<CommentExtendData>): string {
   if (isString(extendData)) {
     return extendData
   }
-  return extendData?.text ?? ''
+  return liveTextOf(overlay) ?? extendData?.text ?? ''
 }
 
 function getBoxData (overlay: Overlay<CommentExtendData>): TextBoxData {
@@ -71,7 +74,7 @@ function getBoxData (overlay: Overlay<CommentExtendData>): TextBoxData {
     ...baseTextBoxData(getText(overlay), styles),
     horzAlign: 'center',
     vertAlign: 'bottom',
-    horzTextAlign: 'center',
+    horzTextAlign: resolvedHorzTextAlign(overlay, 'center'),
     offsetY: styles.tailHeight ?? DEFAULT_TAIL_HEIGHT
   }
 }
@@ -105,7 +108,7 @@ const comment: OverlayTemplate<CommentExtendData> = {
       boxPaddingVert: 8
     }
   },
-  createPointFigures: ({ overlay, coordinates, isSelected, isHovered }) => {
+  createPointFigures: ({ overlay, coordinates, isSelected, isHovered, isTouch }) => {
     if (coordinates.length === 0) {
       return []
     }
@@ -151,6 +154,7 @@ const comment: OverlayTemplate<CommentExtendData> = {
       coordinates,
       isSelected,
       isHovered,
+      isTouch,
       isDrawing: overlay.isDrawing(),
       lock: overlay.lock,
       keyPrefix: 'anchor_'

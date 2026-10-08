@@ -253,6 +253,7 @@ function toPixelPoints (
 const regressionTrend: OverlayTemplate<RegressionTrendExtendData> = {
   name: 'regressionTrend',
   totalStep: 3,
+  cullable: false,
   figureCacheDataRev: true,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,

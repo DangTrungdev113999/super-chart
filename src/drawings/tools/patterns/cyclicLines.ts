@@ -42,6 +42,7 @@ const MAX_CYCLE_LINES = 512
 const cyclicLines: OverlayTemplate<PatternExtendData> = {
   name: 'cyclicLines',
   totalStep: 3,
+  cullable: false,
   figureCacheDataRev: true,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
@@ -78,22 +79,21 @@ const cyclicLines: OverlayTemplate<PatternExtendData> = {
       if (isNumber(p0.dataIndex) && isNumber(p1.dataIndex) && isValid(xAxis)) {
         const step = p1.dataIndex - p0.dataIndex
         if (step !== 0) {
-          const range = chart.getVisibleRange()
-          const to = isValid(range) ? range.to : Number.MAX_SAFE_INTEGER
-          const from = isValid(range) ? range.from : 0
+          // March in dataIndex space but bound by PIXELS — visibleRange is
+          // clamped to loaded data and would stop the march at the last
+          // real bar, dropping lines that belong in the empty future
+          // margin (dataIndexToCoordinate extrapolates fine there).
           for (
             let index = p0.dataIndex;
-            step > 0 ? index <= to : index >= from;
+            xs.length < MAX_CYCLE_LINES;
             index += step
           ) {
-            if (xs.length >= MAX_CYCLE_LINES) {
+            const x = xAxis.convertToPixel(index)
+            if (step > 0 ? x > bounding.width + pad : x < -pad) {
               break
             }
-            const x = xAxis.convertToPixel(index)
-            if (x >= -pad && x <= bounding.width + pad) {
+            if (x >= -pad) {
               xs.push(x)
-            } else if (step > 0 ? x > bounding.width + pad : x < -pad) {
-              break
             }
           }
         }

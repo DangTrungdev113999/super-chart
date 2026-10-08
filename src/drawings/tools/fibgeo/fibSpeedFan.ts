@@ -55,6 +55,7 @@ const DEFAULT_LEVELS: FibLevelData[] = [
 const fibSpeedFan: OverlayTemplate<FibSpeedFanExtendData> = {
   name: 'fibSpeedFan',
   totalStep: 3,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,
@@ -67,7 +68,7 @@ const fibSpeedFan: OverlayTemplate<FibSpeedFanExtendData> = {
     showBox: true,
     showLabels: true
   },
-  createPointFigures: withPerfPipeline(({ overlay, coordinates, bounding, isSelected, isHovered }) => {
+  createPointFigures: withPerfPipeline(({ overlay, coordinates, bounding, isSelected, isHovered, isTouch }) => {
     const extendData = (overlay.extendData as FibSpeedFanExtendData | undefined) ?? {}
     const figures: OverlayFigure[] = []
     if (coordinates.length >= 2) {
@@ -127,6 +128,7 @@ const fibSpeedFan: OverlayTemplate<FibSpeedFanExtendData> = {
       coordinates,
       isSelected,
       isHovered,
+      isTouch,
       isDrawing: overlay.isDrawing(),
       lock: overlay.lock,
       keyPrefix: 'anchor_',

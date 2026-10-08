@@ -48,6 +48,7 @@ export interface RayLineExtendData extends LineExtendData {}
 const rayLine: OverlayTemplate<RayLineExtendData> = {
   name: 'rayLine',
   totalStep: 3,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

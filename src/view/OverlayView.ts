@@ -110,9 +110,18 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
           overlay.nextStep()
           chartStore.executeAction('onOverlayChange', { type: 'progress', overlay })
           if (!overlay.isDrawing()) {
-            chartStore.progressOverlayComplete()
+            // onDrawEnd BEFORE complete — the hook's writes (measure/
+            // barsPattern extendData) must land in the committed snapshot,
+            // and a hook that removes the overlay must not complete it.
             overlay.onDrawEnd?.({ chart, overlay, ...event })
+            chartStore.progressOverlayComplete()
           }
+        }
+        // onDrawEnd may have removed the overlay (measure, degenerate
+        // polyline) — dispatching the figure click on a dead overlay would
+        // select it and arm _clickOverlayInfo with a zombie.
+        if (chartStore.getOverlayById(overlay.id) === null) {
+          return true
         }
         return this._figureMouseClickEvent(
           overlay,
@@ -158,9 +167,14 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
             return true
           }
           if (!overlay.isDrawing()) {
-            chartStore.progressOverlayComplete()
             overlay.onDrawEnd?.({ chart, overlay, ...event })
+            chartStore.progressOverlayComplete()
           }
+        }
+        // Same dead-overlay guard as the click path — onDrawEnd may have
+        // removed the overlay before this dispatch.
+        if (chartStore.getOverlayById(overlay.id) === null) {
+          return true
         }
         const index = overlay.points.length - 1
         return this._figureMouseClickEvent(
@@ -220,8 +234,8 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
       chartStore.executeAction('onOverlayChange', { type: 'progress', overlay })
       if (!overlay.isDrawing()) {
         // A finite-step freehand finished on the first point.
-        chartStore.progressOverlayComplete()
         overlay.onDrawEnd?.({ chart, overlay, ...event })
+        chartStore.progressOverlayComplete()
         return true
       }
       chartStore.setPressedOverlayInfo({
@@ -252,8 +266,8 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
             if (overlay.points.length < 2) {
               chartStore.removeOverlay({ id: overlay.id })
             } else {
-              chartStore.progressOverlayComplete()
               overlay.onDrawEnd?.({ chart, overlay, ...event })
+              chartStore.progressOverlayComplete()
             }
           }
           // A stroke that finished mid-gesture only needs the gesture to
@@ -298,8 +312,8 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
                 // rest of this drag fall through to chart scrolling (the
                 // scroll would then compute from the original mousedown
                 // coordinate). Mouseup ends the gesture instead.
-                chartStore.progressOverlayComplete()
                 overlay.onDrawEnd?.({ chart, overlay, ...event })
+                chartStore.progressOverlayComplete()
                 freehandLastCoord = null
               }
             }
@@ -641,10 +655,24 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
     }
   }
 
+  /**
+   * Whether this view can render anything for the overlay — the main view
+   * needs createPointFigures or the default point figure; axis views
+   * override with their own callback/default flags. Skipping here avoids
+   * converting every point (O(N) per frame) for overlays that can never
+   * produce output on this widget.
+   */
+  protected canDrawOverlay (overlay: OverlayImp): boolean {
+    return overlay.createPointFigures != null || overlay.needDefaultPointFigure
+  }
+
   private _drawOverlay (
     ctx: CanvasRenderingContext2D,
     overlay: OverlayImp
   ): void {
+    if (!this.canDrawOverlay(overlay)) {
+      return
+    }
     const { points } = overlay
     const pane = this.getWidget().getPane()
     const chart = pane.getChart()
@@ -668,6 +696,26 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
       return coordinate
     })
     if (coordinates.length > 0) {
+      // Viewport cull: bounded tools (cullable !== false) whose anchors all
+      // sit outside the padded widget bounds produce no visible figure and
+      // no reachable event target — skip figure creation + drawing. Tools
+      // that can paint into the viewport with offscreen anchors (extended
+      // lines, channels, pitchforks, time-level fibs, anchored text) opt
+      // out via `cullable: false`.
+      if (overlay.cullable !== false) {
+        const { width, height } = this.getWidget().getBounding()
+        const pad = Math.max(width, height)
+        let allOutside = true
+        for (const c of coordinates) {
+          if (c.x >= -pad && c.x <= width + pad && c.y >= -pad && c.y <= height + pad) {
+            allOutside = false
+            break
+          }
+        }
+        if (allOutside) {
+          return
+        }
+      }
       // eslint-disable-next-line @typescript-eslint/ban-ts-comment -- ignore
       // @ts-expect-error
       const figures = [].concat(this.getFigures(overlay, coordinates))

@@ -56,6 +56,7 @@ const AXIS_PILL_COLOR = '#2962FF'
 const circle: OverlayTemplate<ShapeExtendData> = {
   name: 'circle',
   totalStep: 3,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

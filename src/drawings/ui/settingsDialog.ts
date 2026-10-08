@@ -111,11 +111,16 @@ export function attachSettingsDialog (chart: Chart, manager: DrawingManager): Se
         if (Object.keys(patch).length > 0) {
           manager.update(current.id, patch)
         }
+        // DELETE the draft keys — assigning undefined keeps them enumerable,
+        // so the next commit emits {key: undefined} and merge() writes
+        // clone(undefined) over live styles/extendData — deleting them.
         for (const k of Object.keys(styles)) {
-          styles[k] = undefined
+          // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- draft keys are dynamic style-group names; assigning undefined keeps them enumerable and the next commit would emit {key: undefined}
+          delete styles[k]
         }
         for (const k of Object.keys(extendData)) {
-          extendData[k] = undefined
+          // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- same reason: dynamic extendData keys must be removed, not set to undefined
+          delete extendData[k]
         }
         pointsPatch.clear()
       }
@@ -252,9 +257,15 @@ export function attachSettingsDialog (chart: Chart, manager: DrawingManager): Se
       return wrap
     }
     // Each row edits a clone of the whole array — removal/reorder can't
-    // leak through a per-index merge.
+    // leak through a per-index merge. Re-read via field.get() every write:
+    // after the first commit the overlay holds a NEW array and the captured
+    // `levels` is stale — mapping it would silently drop earlier edits.
     const writeRow = (index: number, patch: Record<string, unknown>): void => {
-      const next = (levels as Array<Record<string, unknown>>).map((level, i) =>
+      const live = field.get?.()
+      if (!isArray(live)) {
+        return
+      }
+      const next = (live as Array<Record<string, unknown>>).map((level, i) =>
         i === index ? { ...level, ...patch } : level
       )
       field.set?.(next)
@@ -388,8 +399,26 @@ export function attachSettingsDialog (chart: Chart, manager: DrawingManager): Se
 
   function onDocumentKeyDown (e: KeyboardEvent): void {
     if (e.key === 'Escape') {
+      // Swallow the key — otherwise the shared drawing keyboard layer also
+      // sees it and deselects the overlay / cancels the armed tool on top
+      // of the dialog closing.
+      e.stopPropagation()
+      e.preventDefault()
       close()
     }
+  }
+
+  function clampPos (): void {
+    if (layer === null) {
+      return
+    }
+    const host = layer.getElement()
+    const w = element?.offsetWidth ?? 240
+    const h = element?.offsetHeight ?? 200
+    // Clamp inside the pane — an unclamped drag parks the dialog off-layer
+    // (overflow:hidden) where it can never be grabbed again.
+    pos.x = Math.max(0, Math.min(pos.x, Math.max(0, host.clientWidth - w)))
+    pos.y = Math.max(0, Math.min(pos.y, Math.max(0, host.clientHeight - h)))
   }
 
   function onDragMove (e: MouseEvent): void {
@@ -400,6 +429,7 @@ export function attachSettingsDialog (chart: Chart, manager: DrawingManager): Se
       x: dragState.baseX + (e.clientX - dragState.startX),
       y: dragState.baseY + (e.clientY - dragState.startY)
     }
+    clampPos()
     element.style.transform = `translate3d(${pos.x}px, ${pos.y}px, 0)`
   }
 
@@ -407,10 +437,11 @@ export function attachSettingsDialog (chart: Chart, manager: DrawingManager): Se
     dragState = null
   }
 
-  const onOverlayChange = (payload: { overlay?: Overlay }): void => {
-    // 'change' covers remove/update/create — close only when the open
-    // overlay is actually gone, not on the updates this dialog commits.
-    if (current !== null && payload.overlay?.id === current.id && chart.getOverlayById(current.id) === null) {
+  const onOverlayChange = (): void => {
+    // 'change' covers remove/update/create/undo/redo/restore — close
+    // whenever the open overlay is gone, regardless of which path removed
+    // it (undo and scope wipes carry no overlay in the payload).
+    if (current !== null && chart.getOverlayById(current.id) === null) {
       close()
     }
   }
@@ -427,6 +458,8 @@ export function attachSettingsDialog (chart: Chart, manager: DrawingManager): Se
     document.addEventListener('keydown', onDocumentKeyDown, true)
     document.addEventListener('mousemove', onDragMove)
     document.addEventListener('mouseup', onDragEnd)
+    // Mouseup outside the window never dispatches — blur ends the drag.
+    window.addEventListener('blur', onDragEnd)
     unsubRemove = manager.on('change', onOverlayChange)
   }
 
@@ -439,6 +472,7 @@ export function attachSettingsDialog (chart: Chart, manager: DrawingManager): Se
     document.removeEventListener('keydown', onDocumentKeyDown, true)
     document.removeEventListener('mousemove', onDragMove)
     document.removeEventListener('mouseup', onDragEnd)
+    window.removeEventListener('blur', onDragEnd)
     unsubRemove?.()
     unsubRemove = null
   }
@@ -496,9 +530,16 @@ export function attachSettingsDialog (chart: Chart, manager: DrawingManager): Se
     body.className = 'sc-drw-dialog-body'
     element.appendChild(body)
 
-    unmount = layer.mount(element)
+    // interactive: without it the layer leaves pointerEvents:none on the
+    // container — every input is unreachable AND the document mousedown
+    // handler sees each click as "outside" → auto-close on first click.
+    unmount = layer.mount(element, { interactive: true })
     bindDocListeners()
     renderBody()
+    // pos persists across opens — a pane resize could leave it parked
+    // off-layer, so re-clamp now that the element has a real size.
+    clampPos()
+    element.style.transform = `translate3d(${pos.x}px, ${pos.y}px, 0)`
   }
 
   function close (): void {

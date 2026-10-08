@@ -47,6 +47,7 @@ export interface StraightLineExtendData extends LineExtendData {}
 const straightLine: OverlayTemplate<StraightLineExtendData> = {
   name: 'straightLine',
   totalStep: 3,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

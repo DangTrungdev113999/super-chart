@@ -27,6 +27,7 @@ import type { DrawingStore } from './persistence'
 import { serializeOverlay, serializedToOverlayCreate, type SerializedDrawing, type SerializedDrawingPoint } from './serialize'
 import { attachFloatingToolbar, type FloatingToolbar, type FloatingToolbarHooks } from './ui/floatingToolbar'
 import { attachSettingsDialog, type SettingsDialog } from './ui/settingsDialog'
+import { closeTextEditorSessions } from './editor/overlayTextEditor'
 import { bindDrawingKeyboard } from './interaction/keyboard'
 
 /**
@@ -213,6 +214,24 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
     if (inProgress === undefined) {
       return false
     }
+    // Esc on an unlimited-step tool with enough points COMPLETES the drawing
+    // (same semantics as double-click finish) — removing it would discard
+    // an otherwise valid path/polyline stroke.
+    if (inProgress.totalStep >= Number.MAX_SAFE_INTEGER && inProgress.points.length >= 2) {
+      inProgress.forceComplete()
+      const chartStore = (chart as unknown as {
+        getChartStore: () => {
+          getProgressOverlayInfo: () => Nullable<{ overlay: Overlay }>
+          progressOverlayComplete: () => void
+        }
+      }).getChartStore()
+      const progressInfo = chartStore.getProgressOverlayInfo()
+      if (progressInfo?.overlay === inProgress) {
+        chartStore.progressOverlayComplete()
+      }
+      inProgress.onDrawEnd?.({ chart, overlay: inProgress })
+      return true
+    }
     return chart.removeOverlay({ id: inProgress.id })
   }
 
@@ -229,7 +248,9 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
         const selected = selectedOverlay()
         if (selected !== null && !selected.lock) {
           manager.remove(selected.id)
+          return true
         }
+        return false
       },
       onUndo: () => {
         manager.undo()
@@ -239,16 +260,20 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
       },
       onCopy: () => {
         const selected = selectedOverlay()
-        if (selected !== null) {
-          clipboard = serializeOverlay(selected)
+        if (selected === null) {
+          return false
         }
+        clipboard = serializeOverlay(selected)
+        return true
       },
       onPaste: () => {
-        if (clipboard !== null) {
-          const create = serializedToOverlayCreate(clipboard)
-          delete (create as { id?: string }).id
-          manager.create(create)
+        if (clipboard === null) {
+          return false
         }
+        const create = serializedToOverlayCreate(clipboard)
+        delete (create as { id?: string }).id
+        manager.create(create)
+        return true
       },
       onHotkey: (key) => {
         // TradingView bare-letter tool shortcuts — only activate tools the
@@ -488,6 +513,7 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
       unbindSelection.forEach(unsub => {
         unsub()
       })
+      closeTextEditorSessions(chart)
       toolbar?.destroy()
       settingsDialog.destroy()
       clipboard = null

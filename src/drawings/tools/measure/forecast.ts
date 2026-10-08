@@ -289,6 +289,7 @@ function formatViDatePill (timestamp: number | undefined): string {
 const forecast: OverlayTemplate<ForecastExtendData> = {
   name: 'forecast',
   totalStep: 3,
+  cullable: false,
   figureCacheDataRev: true,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,

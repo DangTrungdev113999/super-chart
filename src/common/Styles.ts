@@ -38,9 +38,9 @@ export interface Offset {
 }
 
 /**
- * line type
+ * line type — 'dotted' is a drawings-toolbar style rendered via dashedValue.
  */
-export type LineType = 'dashed' | 'solid'
+export type LineType = 'dashed' | 'dotted' | 'solid'
 
 export interface LineStyle {
   style: LineType

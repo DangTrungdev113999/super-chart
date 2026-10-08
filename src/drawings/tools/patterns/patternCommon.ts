@@ -13,6 +13,7 @@
  */
 
 import type Coordinate from '../../../common/Coordinate'
+import type { LineType } from '../../../common/Styles'
 import type Point from '../../../common/Point'
 import type { Chart } from '../../../Chart'
 import type {
@@ -94,7 +95,7 @@ export function patternStrokeOf (
   ext: PatternExtendData,
   fallbackColor?: string,
   fallbackSize?: number
-): { color: string, size: number, style: 'solid' | 'dashed', dashedValue: number[] } {
+): { color: string, size: number, style: LineType, dashedValue: number[] } {
   const stroke = lineStyleOverrides(overlay, chart, ext)
   if (
     isValid(fallbackColor) &&

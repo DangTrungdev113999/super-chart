@@ -144,7 +144,10 @@ export function drawLine (ctx: CanvasRenderingContext2D, attrs: LineAttrs | Line
   const { style = 'solid', smooth = false, size = 1, color = 'currentColor', dashedValue = [2, 2] } = styles
   ctx.lineWidth = size
   ctx.strokeStyle = color
-  if (style === 'dashed') {
+  if (style === 'dashed' || style === 'dotted') {
+    // 'dotted' arrives from the drawings toolbar/schema — no dedicated dot
+    // rendering exists, so reuse dashedValue (schema supplies a tighter
+    // [2,4]-ish dash that reads as dots at typical sizes).
     ctx.setLineDash(dashedValue)
   } else {
     ctx.setLineDash([])

@@ -68,10 +68,14 @@ export interface TextEditorSessionOptions {
   maxLength?: number
   /** Single-line fields: Enter closes instead of inserting a break. */
   forbidLineBreaks?: boolean
+  /** Insert a tab character on Tab (TSV-style editors) instead of blurring. */
+  allowTab?: boolean
   /** Word-wrap enabled — drives the letter-spacing compensation table. */
   wordWrapEnabled?: boolean
   /** Re-layout the text as the value changes (wrap may alter the box). */
   layout: (value: string) => TextEditorLayout
+  /** Live-value hook — called on every input before relayout. */
+  onInput?: (value: string) => void
   onClose: (reason: TextEditorCloseReason, finalValue: string) => void
   onSelectionChange?: (sel: { start: number, end: number }) => void
   /** Selection highlight color (default TradingView blue, ~40% alpha). */
@@ -208,6 +212,7 @@ class TextEditorSessionImp implements TextEditorSession {
 
   private _bindEvents (): void {
     const onChange = (): void => {
+      this._options.onInput?.(this._textarea.value)
       this._emitSelection()
       this._relayout()
       this._syncCaret()
@@ -217,6 +222,17 @@ class TextEditorSessionImp implements TextEditorSession {
       if (e.key === 'Escape' || (this._options.forbidLineBreaks === true && e.key === 'Enter')) {
         e.preventDefault()
         this.close('hotkey')
+        return
+      }
+      // TSV-style editors: Tab inserts the cell separator instead of
+      // moving focus (which would blur → close → commit prematurely).
+      if (e.key === 'Tab' && this._options.allowTab === true) {
+        e.preventDefault()
+        const t = this._textarea
+        const start = t.selectionStart
+        const end = t.selectionEnd
+        t.setRangeText('\t', start, end, 'end')
+        onChange()
       }
     }
     const onBlur = (): void => {

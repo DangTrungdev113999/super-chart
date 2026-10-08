@@ -38,6 +38,7 @@ export interface CrossLineExtendData extends LineExtendData {}
 const crossLine: OverlayTemplate<CrossLineExtendData> = {
   name: 'crossLine',
   totalStep: 2,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

@@ -56,6 +56,7 @@ const DEFAULT_LEVELS: FibLevelData[] = [
 const fibSpeedArcs: OverlayTemplate<FibSpeedArcsExtendData> = {
   name: 'fibSpeedArcs',
   totalStep: 3,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,
@@ -68,7 +69,7 @@ const fibSpeedArcs: OverlayTemplate<FibSpeedArcsExtendData> = {
     trendlineVisible: true,
     showLabels: true
   },
-  createPointFigures: withPerfPipeline(({ overlay, coordinates, isSelected, isHovered }) => {
+  createPointFigures: withPerfPipeline(({ overlay, coordinates, isSelected, isHovered, isTouch }) => {
     const extendData = (overlay.extendData as FibSpeedArcsExtendData | undefined) ?? {}
     const figures: OverlayFigure[] = []
     if (coordinates.length >= 2) {
@@ -121,6 +122,7 @@ const fibSpeedArcs: OverlayTemplate<FibSpeedArcsExtendData> = {
       coordinates,
       isSelected,
       isHovered,
+      isTouch,
       isDrawing: overlay.isDrawing(),
       lock: overlay.lock,
       keyPrefix: 'anchor_',

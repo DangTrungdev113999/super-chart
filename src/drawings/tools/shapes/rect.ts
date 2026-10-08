@@ -63,6 +63,7 @@ const OPPOSITE_CORNER: Record<string, { x: 'right' | 'left', y: 'bottom' | 'top'
 const rect: OverlayTemplate<ShapeExtendData> = {
   name: 'rect',
   totalStep: 3,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

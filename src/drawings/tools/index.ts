@@ -29,6 +29,7 @@ import callout from './annotations/callout'
 import comment from './annotations/comment'
 import flagMark from './annotations/flagMark'
 import simpleTag from './annotations/note'
+import priceNote from './annotations/priceNote'
 import priceLabel from './annotations/priceLabel'
 import signpost from './annotations/signpost'
 import table from './annotations/table'
@@ -165,6 +166,7 @@ const drawingTools = [
   comment,
   flagMark,
   simpleTag,
+  priceNote,
   priceLabel,
   signpost,
   table,

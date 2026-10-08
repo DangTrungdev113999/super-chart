@@ -87,6 +87,7 @@ function getPeriodMinutes (periodType: string, periodSpan: number): number {
 const infoLine: OverlayTemplate<InfoLineExtendData> = {
   name: 'infoLine',
   totalStep: 3,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

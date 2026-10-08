@@ -72,6 +72,7 @@ export interface ParallelChannelExtendData extends ChannelExtendData {}
 const parallelStraightLine: OverlayTemplate<ParallelChannelExtendData> = {
   name: 'parallelStraightLine',
   totalStep: 4,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

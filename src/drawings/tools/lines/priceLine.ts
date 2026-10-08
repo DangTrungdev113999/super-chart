@@ -39,6 +39,7 @@ export interface PriceLineExtendData extends LineExtendData {}
 const priceLine: OverlayTemplate<PriceLineExtendData> = {
   name: 'priceLine',
   totalStep: 2,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

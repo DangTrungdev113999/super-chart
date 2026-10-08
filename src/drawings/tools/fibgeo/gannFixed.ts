@@ -92,6 +92,7 @@ function directionSigns (direction: GannFixedExtendData['direction']): { dx: num
 const gannFixed: OverlayTemplate<GannFixedExtendData> = {
   name: 'gannFixed',
   totalStep: 2,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

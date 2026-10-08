@@ -24,7 +24,10 @@ import type { TextBoxData } from '../../text/textBox'
 import {
   baseTextBoxData,
   commitText,
+  liveTextOf,
   openAnnotationEditor,
+  resolvedHorzTextAlign,
+  resolvedTextStyles,
   richTextFigureStyle,
   textEditorHooks,
   type AnnotationTextStyle
@@ -45,7 +48,7 @@ export interface NoteExtendData {
 const STYLE_KEY = 'note'
 
 function getNoteStyles (overlay: Overlay<NoteExtendData>): AnnotationTextStyle {
-  return ((overlay.styles?.[STYLE_KEY] ?? {}) as AnnotationTextStyle)
+  return resolvedTextStyles(overlay, STYLE_KEY)
 }
 
 function getText (overlay: Overlay<NoteExtendData>): string {
@@ -54,7 +57,7 @@ function getText (overlay: Overlay<NoteExtendData>): string {
   if (isString(extendData)) {
     return extendData
   }
-  return extendData?.text ?? ''
+  return liveTextOf(overlay) ?? extendData?.text ?? ''
 }
 
 function getBoxData (overlay: Overlay<NoteExtendData>): TextBoxData {
@@ -63,7 +66,7 @@ function getBoxData (overlay: Overlay<NoteExtendData>): TextBoxData {
     ...baseTextBoxData(getText(overlay), styles),
     horzAlign: 'center',
     vertAlign: 'middle',
-    horzTextAlign: 'center'
+    horzTextAlign: resolvedHorzTextAlign(overlay, 'center')
   }
 }
 
@@ -97,7 +100,7 @@ const simpleTag: OverlayTemplate<NoteExtendData> = {
       boxPaddingVert: 4
     }
   },
-  createPointFigures: ({ overlay, coordinates, isSelected, isHovered }) => {
+  createPointFigures: ({ overlay, coordinates, isSelected, isHovered, isTouch }) => {
     if (coordinates.length === 0) {
       return []
     }
@@ -126,6 +129,7 @@ const simpleTag: OverlayTemplate<NoteExtendData> = {
       coordinates,
       isSelected,
       isHovered,
+      isTouch,
       isDrawing: overlay.isDrawing(),
       lock: overlay.lock,
       keyPrefix: 'anchor_'

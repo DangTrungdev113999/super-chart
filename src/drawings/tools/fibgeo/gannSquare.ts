@@ -53,6 +53,7 @@ export interface GannSquareExtendData {
 const gannSquare: OverlayTemplate<GannSquareExtendData> = {
   name: 'gannSquare',
   totalStep: 3,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,
@@ -66,7 +67,7 @@ const gannSquare: OverlayTemplate<GannSquareExtendData> = {
     showDiagonals: true,
     showFans: true
   },
-  createPointFigures: withPerfPipeline(({ overlay, coordinates, isSelected, isHovered }) => {
+  createPointFigures: withPerfPipeline(({ overlay, coordinates, isSelected, isHovered, isTouch }) => {
     const ext: GannSquareExtendData = isValid(overlay.extendData) ? overlay.extendData : {}
     const figures: OverlayFigure[] = []
     if (coordinates.length >= 2) {
@@ -95,6 +96,7 @@ const gannSquare: OverlayTemplate<GannSquareExtendData> = {
       coordinates,
       isSelected,
       isHovered,
+      isTouch,
       isDrawing: overlay.isDrawing(),
       lock: overlay.lock,
       keyPrefix: 'anchor_',

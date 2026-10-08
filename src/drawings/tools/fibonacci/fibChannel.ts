@@ -72,10 +72,11 @@ function extendSegment (start: Coordinate, end: Coordinate, extendLeft: boolean,
 const fibChannel: OverlayTemplate<FibChannelExtendData> = {
   name: 'fibChannel',
   totalStep: 4,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,
-  createPointFigures: ({ chart, overlay, coordinates, bounding, yAxis, isSelected, isHovered }) => {
+  createPointFigures: ({ chart, overlay, coordinates, bounding, yAxis, isSelected, isHovered, isTouch }) => {
     const figures: OverlayFigure[] = []
     if (coordinates.length < 2) {
       return figures
@@ -109,6 +110,7 @@ const fibChannel: OverlayTemplate<FibChannelExtendData> = {
         coordinates,
         isSelected,
         isHovered,
+        isTouch,
         isDrawing: overlay.isDrawing(),
         lock: overlay.lock,
         keyPrefix: 'anchor_'
@@ -203,6 +205,7 @@ const fibChannel: OverlayTemplate<FibChannelExtendData> = {
       coordinates,
       isSelected,
       isHovered,
+      isTouch,
       isDrawing: overlay.isDrawing(),
       lock: overlay.lock,
       keyPrefix: 'anchor_'

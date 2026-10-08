@@ -39,6 +39,7 @@ export interface VertStraightLineExtendData extends LineExtendData {}
 const verticalStraightLine: OverlayTemplate<VertStraightLineExtendData> = {
   name: 'verticalStraightLine',
   totalStep: 2,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

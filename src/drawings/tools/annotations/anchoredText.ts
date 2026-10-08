@@ -29,7 +29,10 @@ import {
   baseTextBoxData,
   commitText,
   openAnnotationEditor,
+  resolvedHorzTextAlign,
+  resolvedTextStyles,
   richTextFigureStyle,
+  liveTextOf,
   textEditorHooks
 } from './common'
 
@@ -60,21 +63,21 @@ export interface AnchoredTextExtendData extends TextToolExtendData {
 }
 
 function getStyles (overlay: Overlay<AnchoredTextExtendData>): TextToolStyle {
-  // anchoredText shares the text tool's style shape; fall back to the
-  // legacy 'textNote' key so overlays styled for 'text' render identically.
-  return ((overlay.styles?.anchoredText ?? overlay.styles?.textNote ?? overlay.styles ?? {}) as TextToolStyle)
+  // anchoredText shares the text tool's style shape; resolvedTextStyles
+  // merges styles.textNote + styles.anchoredText + the generic text.* writes.
+  return resolvedTextStyles(overlay, 'anchoredText') as TextToolStyle
 }
 
 function getBoxData (overlay: Overlay<AnchoredTextExtendData>): TextBoxData {
   const extendData = (overlay.extendData as AnchoredTextExtendData | undefined) ?? {}
   const styles = getStyles(overlay)
   return {
-    ...baseTextBoxData(extendData.text, styles),
+    ...baseTextBoxData(liveTextOf(overlay) ?? extendData.text, styles),
     wordWrapWidth: extendData.wordWrapWidth,
     maxHeight: extendData.maxHeight,
     horzAlign: extendData.horzAlign ?? 'left',
     vertAlign: extendData.vertAlign ?? 'top',
-    horzTextAlign: extendData.horzTextAlign,
+    horzTextAlign: resolvedHorzTextAlign(overlay, 'left'),
     angle: extendData.angle,
     boxWidth: extendData.boxWidth,
     boxHeight: extendData.boxHeight,
@@ -93,38 +96,53 @@ function pointSnapshotEquals (point: Partial<Point>, data: AnchoredTextExtendDat
 }
 
 /**
- * Resolve the box origin in pane pixels. Side effect: when the data point
- * moved since the last capture (a user drag) the fraction + snapshot are
- * rewritten in place so the box follows the cursor — invalidateFigures()
- * marks the figure cache dirty for the next pass.
+ * Resolve the box origin in WIDGET-LOCAL pixels — figure coordinates are
+ * 0-based inside the main-widget canvas, so the stored fraction applies
+ * to bounding.width/height directly (bounding.left/top are the widget's
+ * pane-space offset and do NOT belong in canvas math). When the data
+ * point moved since the last capture (a drag in flight) the box follows
+ * the live coordinate; onPressedMoveEnd re-captures the fraction.
  */
 function resolveScreenPosition (
   overlay: Overlay<AnchoredTextExtendData>,
   coordinate: Coordinate,
-  bounding: { left: number, top: number, width: number, height: number }
+  bounding: { width: number, height: number }
 ): Coordinate {
   const data = (overlay.extendData as AnchoredTextExtendData | undefined) ?? {}
   const point = overlay.points[0] ?? {}
   const haveFraction = data.anchorXPercent !== undefined && data.anchorYPercent !== undefined
   if (haveFraction && pointSnapshotEquals(point, data)) {
     return {
-      x: bounding.left + bounding.width * (data.anchorXPercent ?? 0),
-      y: bounding.top + bounding.height * (data.anchorYPercent ?? 0)
+      x: bounding.width * (data.anchorXPercent ?? 0),
+      y: bounding.height * (data.anchorYPercent ?? 0)
     }
   }
-  const xPercent = bounding.width > 0 ? clamp01((coordinate.x - bounding.left) / bounding.width) : 0.5
-  const yPercent = bounding.height > 0 ? clamp01((coordinate.y - bounding.top) / bounding.height) : 0.5
-  if (!isValid(overlay.extendData)) {
-    overlay.extendData = { anchored: true }
-  }
-  const extendData = overlay.extendData
-  extendData.anchorXPercent = xPercent
-  extendData.anchorYPercent = yPercent
-  extendData.anchorTimestamp = point.timestamp
-  extendData.anchorDataIndex = point.dataIndex
-  extendData.anchorValue = point.value
-  overlay.invalidateFigures()
   return { x: coordinate.x, y: coordinate.y }
+}
+
+/**
+ * Persist the screen fraction + point snapshot through overrideOverlay —
+ * this is what actually lands in serialization (in-place extendData
+ * writes inside the figure callback never reach persistence). Called on
+ * drawEnd and whenever a point/body drag ends.
+ */
+function captureScreenFraction (chart: Chart, overlay: Overlay<AnchoredTextExtendData>): void {
+  const size = chart.getSize(overlay.paneId, 'main')
+  if (size === null || size.width <= 0 || size.height <= 0) {
+    return
+  }
+  const point = overlay.points[0] ?? {}
+  const coordinate = chart.convertToPixel(point, { paneId: overlay.paneId }) as Partial<Coordinate>
+  const ext: AnchoredTextExtendData = isValid(overlay.extendData) && typeof overlay.extendData === 'object'
+    ? { ...overlay.extendData }
+    : {}
+  ext.anchored = true
+  ext.anchorXPercent = clamp01((coordinate.x ?? 0) / size.width)
+  ext.anchorYPercent = clamp01((coordinate.y ?? 0) / size.height)
+  ext.anchorTimestamp = point.timestamp
+  ext.anchorDataIndex = point.dataIndex
+  ext.anchorValue = point.value
+  chart.overrideOverlay({ id: overlay.id, paneId: overlay.paneId, extendData: ext })
 }
 
 function openEditor (chart: Chart, overlay: Overlay<AnchoredTextExtendData>): void {
@@ -135,7 +153,9 @@ function openEditor (chart: Chart, overlay: Overlay<AnchoredTextExtendData>): vo
     overlay,
     data: () => getBoxData(overlay),
     // The editor must cover the RENDERED box (screen-fraction position),
-    // not the data point — they diverge once the chart scrolls.
+    // not the data point — they diverge once the chart scrolls. The DOM
+    // layer lives inside the main-widget host, so fractions apply to the
+    // widget size directly (no left/top offset).
     anchor: () => {
       const size = chart.getSize(overlay.paneId, 'main')
       const extendData = (overlay.extendData as AnchoredTextExtendData | undefined) ?? {}
@@ -145,8 +165,8 @@ function openEditor (chart: Chart, overlay: Overlay<AnchoredTextExtendData>): vo
         extendData.anchorYPercent !== undefined
       ) {
         return {
-          x: size.left + size.width * extendData.anchorXPercent,
-          y: size.top + size.height * extendData.anchorYPercent
+          x: size.width * extendData.anchorXPercent,
+          y: size.height * extendData.anchorYPercent
         }
       }
       const coordinate = chart.convertToPixel(overlay.points[0] ?? {}, { paneId: overlay.paneId }) as Partial<Coordinate>
@@ -163,10 +183,11 @@ function openEditor (chart: Chart, overlay: Overlay<AnchoredTextExtendData>): vo
 const anchoredText: OverlayTemplate<AnchoredTextExtendData> = {
   name: 'anchoredText',
   totalStep: 2,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,
-  createPointFigures: ({ overlay, coordinates, bounding, isSelected, isHovered }) => {
+  createPointFigures: ({ overlay, coordinates, bounding, isSelected, isHovered, isTouch }) => {
     if (coordinates.length === 0) {
       return []
     }
@@ -198,6 +219,7 @@ const anchoredText: OverlayTemplate<AnchoredTextExtendData> = {
       coordinates: [handle],
       isSelected,
       isHovered,
+      isTouch,
       isDrawing: overlay.isDrawing(),
       lock: overlay.lock,
       shape: 'circle',
@@ -206,7 +228,14 @@ const anchoredText: OverlayTemplate<AnchoredTextExtendData> = {
     }))
     return figures
   },
-  ...textEditorHooks(openEditor)
+  onDrawEnd: (e) => {
+    captureScreenFraction(e.chart, e.overlay)
+    textEditorHooks(openEditor).onDrawEnd(e)
+  },
+  onDoubleClick: textEditorHooks(openEditor).onDoubleClick,
+  onPressedMoveEnd: (e) => {
+    captureScreenFraction(e.chart, e.overlay)
+  }
 }
 
 export default anchoredText

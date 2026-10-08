@@ -31,11 +31,11 @@ import {
 import type { FibLevelData } from './fibGeoCommon'
 
 /**
- * 'fibWedge' — Fibonacci Wedge (3-point). P1 is the apex; the two boundary
- * rays run P1→P2 and P1→P3, both clipped to the wedge radius r = |P1→P2|
- * (P3 is projected onto its own ray at length r — TradingView behavior).
- * Fib-ratio intermediate rays subdivide the enclosed sector angle; a sector
- * arc at radius r closes the wedge.
+ * 'fibWedge' — TradingView Fib Wedge (3-point). P1 is the apex; boundary
+ * rays run P1→P2 and P1→P3 (P3 projected onto its ray at wedge radius
+ * r = |P1→P2|). Fib-ratio CONCENTRIC ARCS at radius coeff × r subdivide
+ * the enclosed sector — the wedge is a set of annular arcs between the
+ * two boundary rays, not radial spokes.
  */
 
 export interface FibWedgeExtendData {
@@ -66,6 +66,7 @@ function signedSectorAngle (a1: number, a2: number): number {
 const fibWedge: OverlayTemplate<FibWedgeExtendData> = {
   name: 'fibWedge',
   totalStep: 4,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,
@@ -78,7 +79,7 @@ const fibWedge: OverlayTemplate<FibWedgeExtendData> = {
     levels: DEFAULT_LEVELS,
     showLabels: true
   },
-  createPointFigures: withPerfPipeline(({ overlay, coordinates, isSelected, isHovered }) => {
+  createPointFigures: withPerfPipeline(({ overlay, coordinates, isSelected, isHovered, isTouch }) => {
     const extendData = (overlay.extendData as FibWedgeExtendData | undefined) ?? {}
     const figures: OverlayFigure[] = []
     if (coordinates.length >= 3) {
@@ -97,41 +98,57 @@ const fibWedge: OverlayTemplate<FibWedgeExtendData> = {
           [p1, p2],
           [p1, { x: p1.x + Math.cos(a2) * radius, y: p1.y + Math.sin(a2) * radius }]
         ], {}))
-        // Fib-ratio intermediate rays subdividing the sector angle.
+        // Fib-ratio concentric arcs spanning the sector — annular sectors
+        // at radius coeff × r, from boundary ray a1 to boundary ray a2.
         const levels = readLevels(extendData, DEFAULT_LEVELS)
         const showLabels = extendData.showLabels ?? true
+        const startAngle = da > 0 ? a1 : a1 + da
+        const endAngle = da > 0 ? a1 + da : a1
         levels.forEach((level, index) => {
           if (!level.visible) {
             return
           }
-          const angle = a1 + da * level.coeff
-          const end = { x: p1.x + Math.cos(angle) * radius, y: p1.y + Math.sin(angle) * radius }
-          figures.push(lineFigure(
-            `fib_wedge_ray_${index}`,
-            [[p1, end]],
-            { style: 'solid', size: lineSize, color: level.color }
-          ))
+          const r = radius * level.coeff
+          if (r <= 0) {
+            return
+          }
+          const attrs: ArcAttrs = {
+            x: p1.x,
+            y: p1.y,
+            r,
+            startAngle,
+            endAngle
+          }
+          figures.push({
+            key: `fib_wedge_arc_${index}`,
+            type: 'arc',
+            attrs,
+            styles: { style: 'solid', size: lineSize, color: level.color },
+            bounds: { x: p1.x - r, y: p1.y - r, width: r * 2, height: r * 2 }
+          })
           if (showLabels) {
-            const labelRadius = radius + 12
+            // Label sits at the arc's angular midpoint (TV labelPoint).
+            const midAngle = a1 + da / 2
+            const labelRadius = r
             figures.push(labelFigure(
               `fib_wedge_label_${index}`,
-              p1.x + Math.cos(angle) * labelRadius,
-              p1.y + Math.sin(angle) * labelRadius,
+              p1.x + Math.cos(midAngle) * labelRadius,
+              p1.y + Math.sin(midAngle) * labelRadius,
               formatLevelLabel(level),
               level.color,
               'center',
-              'middle'
+              'bottom'
             ))
           }
         })
-        // Sector arc at the wedge radius closing the two boundary rays.
+        // Closing arc at the full wedge radius.
         if (da !== 0) {
           const attrs: ArcAttrs = {
             x: p1.x,
             y: p1.y,
             r: radius,
-            startAngle: da > 0 ? a1 : a1 + da,
-            endAngle: da > 0 ? a1 + da : a1
+            startAngle,
+            endAngle
           }
           figures.push({
             key: 'fib_wedge_arc',
@@ -147,6 +164,7 @@ const fibWedge: OverlayTemplate<FibWedgeExtendData> = {
       coordinates,
       isSelected,
       isHovered,
+      isTouch,
       isDrawing: overlay.isDrawing(),
       lock: overlay.lock,
       keyPrefix: 'anchor_'

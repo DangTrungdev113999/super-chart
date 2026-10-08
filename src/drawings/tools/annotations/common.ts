@@ -15,6 +15,7 @@
 import type { Chart } from '../../../Chart'
 import type Coordinate from '../../../common/Coordinate'
 import type Point from '../../../common/Point'
+import { isNumber, isString } from '../../../common/utils/typeChecks'
 import type { Overlay } from '../../../component/Overlay'
 
 import { openOverlayTextEditor } from '../../editor/overlayTextEditor'
@@ -27,6 +28,48 @@ import type { TextToolExtendData } from '../text'
  * (except flagMark), renders through the 'richText' figure, and edits through
  * the in-place overlay text editor opened on placement + double-click.
  */
+
+/**
+ * The floating toolbar and settings dialog write a GENERIC
+ * `styles.text.{color,size,weight,style,align}` namespace, while tools keep
+ * their own flat style bag (`styles.<toolKey>`) and the text tool family
+ * shares `styles.textNote`. This resolver merges all three — tool-specific
+ * keys win over shared, both win over the generic text.* writes — and
+ * translates text.* to the flat names readers actually consume:
+ * size→fontSize, weight→bold, style→italic. `text.style` never lands on a
+ * figure (where it would alias the fill/stroke mode field).
+ */
+export function resolvedTextStyles (overlay: Overlay, styleKey: string): AnnotationTextStyle {
+  const styles = overlay.styles as Record<string, Record<string, unknown> | undefined> | undefined
+  const generic = styles?.text
+  const resolved: AnnotationTextStyle = {
+    ...(styles?.textNote as AnnotationTextStyle | undefined),
+    ...(styles?.[styleKey] as AnnotationTextStyle | undefined)
+  }
+  if (generic !== undefined) {
+    if (isString(generic.color)) resolved.color = generic.color
+    if (isNumber(generic.size)) resolved.fontSize = generic.size
+    if (generic.weight === 'bold' || generic.weight === 'normal') resolved.bold = generic.weight === 'bold'
+    if (generic.style === 'italic' || generic.style === 'normal') resolved.italic = generic.style === 'italic'
+    if (isString(generic.family)) resolved.fontFamily = generic.family
+    if (isString(generic.backgroundColor)) resolved.backgroundColor = generic.backgroundColor
+  }
+  return resolved
+}
+
+/**
+ * Horizontal text alignment — extendData.horzTextAlign (per-drawing) wins
+ * over the generic styles.text.align write.
+ */
+export function resolvedHorzTextAlign (
+  overlay: Overlay,
+  fallback: 'left' | 'center' | 'right'
+): 'left' | 'center' | 'right' {
+  const ed = (overlay.extendData as { horzTextAlign?: unknown } | undefined)?.horzTextAlign
+  const generic = (overlay.styles as Record<string, Record<string, unknown> | undefined> | undefined)?.text?.align
+  const v = ed ?? generic
+  return v === 'left' || v === 'center' || v === 'right' ? v : fallback
+}
 
 /** Per-tool style bag read from `overlay.styles.<toolKey>`. */
 export interface AnnotationTextStyle extends RichTextStyle {
@@ -104,6 +147,7 @@ export interface OpenAnnotationEditorOptions<E extends object> {
   anchor?: () => Coordinate
   wordWrapEnabled?: boolean
   forbidLineBreaks?: boolean
+  allowTab?: boolean
   onCommit: (value: string) => void
   onEmpty?: () => void
 }
@@ -125,6 +169,7 @@ export function openAnnotationEditor<E extends object> (options: OpenAnnotationE
     anchor: options.anchor,
     wordWrapEnabled: options.wordWrapEnabled,
     forbidLineBreaks: options.forbidLineBreaks,
+    allowTab: options.allowTab,
     onCommit: options.onCommit,
     onEmpty: options.onEmpty
   })
@@ -157,3 +202,4 @@ export function textEditorHooks<E extends object> (
 
 /** Re-export so group tools can type their extendData against text.ts. */
 export type { TextToolExtendData }
+export { liveTextOf } from '../../editor/overlayTextEditor'

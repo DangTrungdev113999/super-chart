@@ -857,7 +857,7 @@ export default class EventHandlerImp {
     }
 
     if (touches.length !== 2 || this._pinchPrevented || this._longTapActive) {
-      this._stopPinch()
+      this._stopPinch(touches)
     } else {
       this._startPinch(touches)
     }
@@ -871,6 +871,10 @@ export default class EventHandlerImp {
     }
 
     this._startPinchDistance = this._getTouchDistance(touches[0], touches[1])
+    // A pinch must never end as a tap — the finger lifts would otherwise
+    // dispatch mouseClickEvent/doubleTapEvent that commit drawing points
+    // or force-complete an in-progress overlay at the release position.
+    this._cancelTap = true
 
     if (isValid(this._handler.pinchStartEvent)) {
       this._handler.pinchStartEvent({ x: 0, y: 0, pageX: 0, pageY: 0 })
@@ -879,15 +883,27 @@ export default class EventHandlerImp {
     this._clearLongTapTimeout()
   }
 
-  private _stopPinch (): void {
+  private _stopPinch (touches?: TouchList): void {
     if (this._startPinchMiddleCoordinate === null) {
       return
     }
 
     this._startPinchMiddleCoordinate = null
 
+    // When one finger lifts and the other keeps moving, drag detection and
+    // the chart's scroll baseline must re-anchor to the remaining finger —
+    // otherwise the accumulated pinch displacement applies at once as a
+    // scroll jump on the next touchmove.
+    const remaining = touches !== undefined && touches.length === 1
+      ? this._getCoordinate(touches[0])
+      : null
+    if (remaining !== null) {
+      this._touchMoveStartCoordinate = remaining
+    }
+
     if (isValid(this._handler.pinchEndEvent)) {
-      this._handler.pinchEndEvent({ x: 0, y: 0, pageX: 0, pageY: 0 })
+      const coord = remaining ?? { x: 0, y: 0 }
+      this._handler.pinchEndEvent({ ...coord, pageX: 0, pageY: 0 })
     }
   }
 

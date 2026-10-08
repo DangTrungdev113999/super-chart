@@ -18,7 +18,7 @@ import type Coordinate from './common/Coordinate'
 import { UpdateLevel } from './common/Updater'
 import type Crosshair from './common/Crosshair'
 import { requestAnimationFrame, cancelAnimationFrame } from './common/utils/compatible'
-import { isValid, isNumber } from './common/utils/typeChecks'
+import { isValid, isNumber, isFunction } from './common/utils/typeChecks'
 
 import type { AxisRange } from './component/Axis'
 import type YAxis from './component/YAxis'
@@ -28,6 +28,7 @@ import type Chart from './Chart'
 import type Pane from './pane/Pane'
 import type DrawPane from './pane/DrawPane'
 import { PaneIdConstants } from './pane/types'
+import { checkOverlayFigureEvent } from './component/Overlay'
 import type Widget from './widget/Widget'
 import { WidgetNameConstants, REAL_SEPARATOR_HEIGHT } from './widget/types'
 
@@ -202,6 +203,21 @@ export default class Event implements EventHandler {
   private _mouseMoveTriggerWidgetInfo: EventTriggerWidgetInfo = { pane: null, widget: null }
 
   private readonly _boundKeyBoardDownEvent: ((event: KeyboardEvent) => void) = (event: KeyboardEvent) => {
+    // Never steal keys from editable targets — the drawing text editor's
+    // textarea bubbles keydown to the chart container, and Shift+Arrow /
+    // Shift+= / Shift+- would scroll/zoom while the user selects text.
+    const target = event.target
+    if (target instanceof Element) {
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable) ||
+        target.closest('input, textarea, select, [contenteditable]') !== null
+      ) {
+        return
+      }
+    }
     if (event.shiftKey) {
       switch (event.code) {
         case 'Equal': {
@@ -244,6 +260,23 @@ export default class Event implements EventHandler {
   pinchStartEvent (): boolean {
     this._touchZoomed = true
     this._pinchScale = 1
+    // A pinch mid-freehand must END the stroke: touchMove is suppressed while
+    // two fingers are down, and resuming afterwards would append points from
+    // the stale last coordinate — a visible tail jump across the pinch (and
+    // the zoom changes pixel geometry mid-stroke). Mirror the mouseup rule:
+    // fewer than 2 points is a degenerate stroke → drop it.
+    const chartStore = this._chart.getChartStore()
+    const pressed = chartStore.getPressedOverlayInfo().overlay
+    if (pressed !== null && pressed.isDrawing() && pressed.freehand) {
+      pressed.forceComplete()
+      if (pressed.points.length < 2) {
+        chartStore.removeOverlay({ id: pressed.id })
+      } else {
+        chartStore.progressOverlayComplete()
+      }
+      chartStore.setPressedOverlayInfo({ paneId: '', overlay: null, figureType: 'none', figureIndex: -1, figure: null })
+      this._chart.updatePane(UpdateLevel.Overlay)
+    }
     return true
   }
 
@@ -255,6 +288,17 @@ export default class Event implements EventHandler {
       this._pinchScale = scale
       this._chart.getChartStore().zoom(zoomScale, { x: event.x, y: event.y }, 'main')
       return true
+    }
+    return false
+  }
+
+  pinchEndEvent (e: MouseTouchEvent): boolean {
+    // One finger may remain after pinch — re-anchor the scroll baseline to
+    // its current position, or the accumulated pinch displacement applies
+    // at once as a scroll jump on the next touchmove.
+    if (this._startScrollCoordinate !== null) {
+      this._startScrollCoordinate = { x: e.x, y: e.y }
+      this._flingStartTime = new Date().getTime()
     }
     return false
   }
@@ -291,14 +335,21 @@ export default class Event implements EventHandler {
           return widget.dispatchEvent('mouseDownEvent', event)
         }
         case WidgetNameConstants.MAIN: {
-          const yAxis = (pane as DrawPane<YAxis>).getAxisComponent()
-          if (!yAxis.getAutoCalcTickFlag()) {
-            const range = yAxis.getRange()
-            this._prevYAxisRange = { ...range }
+          const consumed = widget.dispatchEvent('mouseDownEvent', event)
+          // Arm scroll only when the press wasn't consumed by an overlay —
+          // a consumed anchor press that loses its pressed slot mid-gesture
+          // (Esc cancel, sync remove) would otherwise scroll the chart by
+          // the total press-to-now displacement (touch path mirrors this).
+          if (!consumed) {
+            const yAxis = (pane as DrawPane<YAxis>).getAxisComponent()
+            if (!yAxis.getAutoCalcTickFlag()) {
+              const range = yAxis.getRange()
+              this._prevYAxisRange = { ...range }
+            }
+            this._startScrollCoordinate = { x: event.x, y: event.y }
+            this._chart.getChartStore().startScroll()
           }
-          this._startScrollCoordinate = { x: event.x, y: event.y }
-          this._chart.getChartStore().startScroll()
-          return widget.dispatchEvent('mouseDownEvent', event)
+          return consumed
         }
         case WidgetNameConstants.X_AXIS: {
           return this._processXAxisScrollStartEvent(widget, event)
@@ -501,8 +552,25 @@ export default class Event implements EventHandler {
     return false
   }
 
-  mouseLeaveEvent (): boolean {
-    this._chart.getChartStore().setCrosshair()
+  mouseLeaveEvent (e: MouseTouchEvent): boolean {
+    const chartStore = this._chart.getChartStore()
+    chartStore.setCrosshair()
+    // Leaving the surface must end hover too — otherwise the last-hovered
+    // overlay keeps its MAX_SAFE_INTEGER zLevel bump and onMouseLeave never
+    // fires until the pointer re-enters and hovers something else.
+    chartStore.setHoverOverlayInfo(
+      { paneId: '', overlay: null, figureType: 'none', figureIndex: -1, figure: null },
+      () => false,
+      (o, f) => {
+        if (isFunction(o.onMouseLeave) && checkOverlayFigureEvent('onMouseLeave', f)) {
+          o.onMouseLeave({ chart: this._chart, overlay: o, figure: f ?? undefined, ...e })
+          return true
+        }
+        return false
+      }
+    )
+    // Reset so re-entering fires widget mouseEnter again.
+    this._mouseMoveTriggerWidgetInfo = { pane: null, widget: null }
     return true
   }
 
@@ -516,16 +584,20 @@ export default class Event implements EventHandler {
       switch (name) {
         case WidgetNameConstants.MAIN: {
           const chartStore = this._chart.getChartStore()
+          // Cancel an in-flight fling BEFORE dispatching — a touch landing on
+          // an overlay figure consumes the event and early-returns, but the
+          // inertial scroll raf must still stop or it keeps scrolling
+          // underneath the anchor drag/stroke.
+          if (this._flingScrollRequestId !== null) {
+            cancelAnimationFrame(this._flingScrollRequestId)
+            this._flingScrollRequestId = null
+          }
           if (widget.dispatchEvent('mouseDownEvent', event)) {
             this._touchCancelCrosshair = true
             this._touchCoordinate = null
             chartStore.setCrosshair(undefined, { notInvalidate: true })
             this._chart.updatePane(UpdateLevel.Overlay)
             return true
-          }
-          if (this._flingScrollRequestId !== null) {
-            cancelAnimationFrame(this._flingScrollRequestId)
-            this._flingScrollRequestId = null
           }
           this._flingStartTime = new Date().getTime()
           const yAxis = (pane as DrawPane<YAxis>).getAxisComponent()
@@ -693,8 +765,11 @@ export default class Event implements EventHandler {
             chartStore.setCrosshair({ x: event.x, y: event.y, paneId: pane?.getId() }, { notInvalidate: true })
             consumed = true
           }
-          this._touchCancelCrosshair = false
         }
+        // The suppression flag only lives for THIS gesture — it is armed in
+        // touchStart/overlay-tap and consulted here. Leaving it set after an
+        // overlay tap would swallow the crosshair on the NEXT empty tap.
+        this._touchCancelCrosshair = false
       }
       if (consumed || result) {
         this._chart.updatePane(UpdateLevel.Overlay)
@@ -839,6 +914,11 @@ export default class Event implements EventHandler {
         event.preventDefault?.()
         const { from, to, range } = this._prevYAxisRange
         const scale = event.pageY / this._yAxisStartScaleDistance
+        // pageY can hit 0 or go negative when the drag leaves the viewport —
+        // a non-positive/NaN scale collapses or flips the axis range.
+        if (!isNumber(scale) || scale <= 0) {
+          return consumed
+        }
         const newRange = range * scale
         const difRange = (newRange - range) / 2
         const newFrom = from - difRange
@@ -888,6 +968,12 @@ export default class Event implements EventHandler {
         return this._mouseDownWidget
       }
       return this._chart.getDrawPaneById(pressedInfo.paneId)?.getMainWidget() ?? this._mouseDownWidget ?? widget
+    }
+    // A separator drag keeps its own lifecycle — releasing over a draw pane
+    // must still reach SeparatorWidget.mouseUpEvent or _dragFlag stays armed
+    // and the separator leaks its active styling forever.
+    if (this._mouseDownWidget?.getName() === WidgetNameConstants.SEPARATOR) {
+      return this._mouseDownWidget
     }
     return widget ?? this._mouseDownWidget
   }
@@ -960,6 +1046,12 @@ export default class Event implements EventHandler {
 
   destroy (): void {
     this._container.removeEventListener('keydown', this._boundKeyBoardDownEvent)
+    // A fling raf outliving destroy would scroll/update a torn-down chart.
+    if (this._flingScrollRequestId !== null) {
+      cancelAnimationFrame(this._flingScrollRequestId)
+      this._flingScrollRequestId = null
+    }
+    this._mouseDownWidget = null
     this._event.destroy()
   }
 }

@@ -15,6 +15,7 @@
 import type { Chart } from '../../Chart'
 import type Coordinate from '../../common/Coordinate'
 import type { Overlay } from '../../component/Overlay'
+import { UpdateLevel } from '../../common/Updater'
 
 import { computeTextBoxLayout, type TextBoxData } from '../text/textBox'
 import { createTextEditorSession, type TextEditorLayout, type TextEditorSession } from './textEditor'
@@ -24,7 +25,48 @@ import { createTextEditorSession, type TextEditorLayout, type TextEditorSession 
  * editor's layout() re-runs computeTextBoxLayout for the live value with
  * the SAME data the figure paints from — the invisible textarea therefore
  * always lands exactly over the rendered text.
+ *
+ * Live buffer: while a session is open its current value is kept in
+ * `liveText` (keyed on the overlay instance) and the overlay is
+ * re-rendered on every keystroke, so the canvas shows the typed text —
+ * not the last committed value. Figure callbacks should read
+ * `liveTextOf(overlay) ?? extendData.text`.
+ *
+ * Session lifecycle: every session registers here; it closes itself when
+ * its overlay is removed (any path — delete, undo, remote sync, scope
+ * switch — all funnel through the onOverlayChange 'remove' action), and
+ * `closeTextEditorSessions(chart)` covers chart-level teardown.
  */
+
+const liveText = new WeakMap<object, string>()
+const sessions = new WeakMap<Chart, Map<string, TextEditorSession>>()
+
+/** The in-flight edit value for an overlay, or undefined when not editing. */
+export function liveTextOf (overlay: object): string | undefined {
+  return liveText.get(overlay)
+}
+
+/** End every open editor on a chart — call on drawing-manager teardown. */
+export function closeTextEditorSessions (chart: Chart): void {
+  const chartSessions = sessions.get(chart)
+  chartSessions?.forEach(session => {
+    session.close('external')
+  })
+  sessions.delete(chart)
+}
+
+interface ChartWithUpdatePane {
+  updatePane?: (level: UpdateLevel, paneId?: string) => void
+}
+
+function repaint (chart: Chart, paneId: string): void {
+  (chart as ChartWithUpdatePane).updatePane?.(UpdateLevel.Overlay, paneId)
+}
+
+interface OverlayChangeEvent {
+  type?: string
+  overlay?: { id?: string }
+}
 
 export interface OverlayTextEditorOptions {
   chart: Chart
@@ -41,6 +83,8 @@ export interface OverlayTextEditorOptions {
   paneId?: string
   wordWrapEnabled?: boolean
   forbidLineBreaks?: boolean
+  /** Insert '\t' on Tab — TSV-style editors (the table tool). */
+  allowTab?: boolean
   maxLength?: number
   selectionColor?: string
   caretColor?: string
@@ -58,15 +102,37 @@ export function openOverlayTextEditor (options: OverlayTextEditorOptions): TextE
     return { x: coordinate.x ?? 0, y: coordinate.y ?? 0 }
   })
 
-  return createTextEditorSession({
+  // One editor per overlay — a second open replaces (and closes) the first.
+  let chartSessions = sessions.get(chart)
+  if (chartSessions === undefined) {
+    chartSessions = new Map()
+    sessions.set(chart, chartSessions)
+  }
+  chartSessions.get(overlay.id)?.close('external')
+
+  const onChartChange = (event?: unknown): void => {
+    const change = event as OverlayChangeEvent | undefined
+    if (change?.type === 'remove' && change.overlay?.id === overlay.id) {
+      session.close('external')
+    }
+  }
+  chart.subscribeAction('onOverlayChange', onChartChange)
+
+  const session = createTextEditorSession({
     chart,
     paneId,
     value: options.data().text,
     maxLength: options.maxLength,
     forbidLineBreaks: options.forbidLineBreaks,
+    allowTab: options.allowTab,
     wordWrapEnabled: options.wordWrapEnabled,
     selectionColor: options.selectionColor,
     caretColor: options.caretColor,
+    onInput: (value: string): void => {
+      liveText.set(overlay, value)
+      overlay.invalidateFigures()
+      repaint(chart, paneId)
+    },
     layout: (value: string): TextEditorLayout => {
       const box = computeTextBoxLayout(
         { ...options.data(), text: value },
@@ -89,6 +155,11 @@ export function openOverlayTextEditor (options: OverlayTextEditorOptions): TextE
       }
     },
     onClose: (_reason, finalValue) => {
+      liveText.delete(overlay)
+      chartSessions.delete(overlay.id)
+      chart.unsubscribeAction('onOverlayChange', onChartChange)
+      overlay.invalidateFigures()
+      repaint(chart, paneId)
       if (finalValue.trim().length === 0) {
         if (options.onEmpty !== undefined) {
           options.onEmpty()
@@ -100,4 +171,11 @@ export function openOverlayTextEditor (options: OverlayTextEditorOptions): TextE
       }
     }
   })
+
+  chartSessions.set(overlay.id, session)
+  // Seed the live buffer so the first paint shows the editor's value.
+  liveText.set(overlay, session.value)
+  overlay.invalidateFigures()
+  repaint(chart, paneId)
+  return session
 }

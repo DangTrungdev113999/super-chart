@@ -180,6 +180,7 @@ function readStoredPattern (extendData: unknown): MiniBar[] | null {
 const barsPattern: OverlayTemplate<BarsPatternExtendData> = {
   name: 'barsPattern',
   totalStep: 3,
+  cullable: false,
   figureCacheDataRev: true,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
@@ -367,7 +368,10 @@ const barsPattern: OverlayTemplate<BarsPatternExtendData> = {
       points[1].timestamp = ts
     }
     if (isNumber(points[0].value)) {
-      points[1].value = points[0].value + firstP - lastP
+      // Native scale: rightY-leftY must equal pc(lastP)-pc(firstP), which
+      // under a linear axis is -(p2.value - p1.value)·k — so the delta is
+      // lastP - firstP, not firstP - lastP (inverted copy otherwise).
+      points[1].value = points[0].value + lastP - firstP
     }
     overlay.invalidateFigures()
   }

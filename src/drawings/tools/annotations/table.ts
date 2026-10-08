@@ -22,8 +22,10 @@ import type { TextBoxData, TextBoxHorzAlign } from '../../text/textBox'
 
 import {
   baseTextBoxData,
+  liveTextOf,
   openAnnotationEditor,
   pointToCoordinate,
+  resolvedTextStyles,
   textEditorHooks,
   type AnnotationTextStyle
 } from './common'
@@ -70,7 +72,7 @@ const DEFAULT_TABLE_HEIGHT = 120
 const DEFAULT_CELL_PADDING = 4
 
 function getTableStyles (overlay: Overlay<TableExtendData>): TableStyle {
-  return ((overlay.styles?.[STYLE_KEY] ?? {}) as TableStyle)
+  return resolvedTextStyles(overlay, STYLE_KEY) as TableStyle
 }
 
 function getExtendData (overlay: Overlay<TableExtendData>): TableExtendData {
@@ -83,6 +85,10 @@ function getExtendData (overlay: Overlay<TableExtendData>): TableExtendData {
 }
 
 function getGrid (overlay: Overlay<TableExtendData>): { rows: number, cols: number, cells: string[] } {
+  const live = liveTextOf(overlay)
+  if (live !== undefined) {
+    return tsvToGrid(live)
+  }
   const extendData = getExtendData(overlay)
   const rows = Math.max(1, extendData.rows ?? DEFAULT_ROWS)
   const cols = Math.max(1, extendData.cols ?? DEFAULT_COLS)
@@ -123,7 +129,7 @@ function getBoxData (overlay: Overlay<TableExtendData>): TextBoxData {
   const extendData = getExtendData(overlay)
   const { rows, cols, cells } = getGrid(overlay)
   return {
-    ...baseTextBoxData(gridToTsv(rows, cols, cells), styles),
+    ...baseTextBoxData(liveTextOf(overlay) ?? gridToTsv(rows, cols, cells), styles),
     boxWidth: extendData.tableWidth ?? DEFAULT_TABLE_WIDTH,
     boxHeight: extendData.tableHeight ?? DEFAULT_TABLE_HEIGHT,
     horzAlign: 'left',
@@ -137,6 +143,7 @@ function openEditor (chart: Chart, overlay: Overlay<TableExtendData>): void {
     overlay,
     data: () => getBoxData(overlay),
     anchor: () => pointToCoordinate(chart, overlay.paneId, overlay.points[0] ?? {}),
+    allowTab: true,
     onCommit: (value) => {
       const { rows, cols, cells } = tsvToGrid(value)
       chart.overrideOverlay({
@@ -166,7 +173,7 @@ const table: OverlayTemplate<TableExtendData> = {
       cellPadding: DEFAULT_CELL_PADDING
     }
   },
-  createPointFigures: ({ overlay, coordinates, isSelected, isHovered }) => {
+  createPointFigures: ({ overlay, coordinates, isSelected, isHovered, isTouch }) => {
     if (coordinates.length === 0) {
       return []
     }
@@ -290,6 +297,7 @@ const table: OverlayTemplate<TableExtendData> = {
       coordinates,
       isSelected,
       isHovered,
+      isTouch,
       isDrawing: overlay.isDrawing(),
       lock: overlay.lock,
       keyPrefix: 'anchor_'

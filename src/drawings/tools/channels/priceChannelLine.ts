@@ -64,6 +64,7 @@ export interface PriceChannelLineExtendData extends ChannelExtendData {}
 const priceChannelLine: OverlayTemplate<PriceChannelLineExtendData> = {
   name: 'priceChannelLine',
   totalStep: 3,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

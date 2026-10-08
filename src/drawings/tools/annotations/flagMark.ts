@@ -63,7 +63,7 @@ const flagMark: OverlayTemplate<FlagMarkExtendData> = {
       flagHeight: 10
     }
   },
-  createPointFigures: ({ overlay, coordinates, isSelected, isHovered }) => {
+  createPointFigures: ({ overlay, coordinates, isSelected, isHovered, isTouch }) => {
     if (coordinates.length === 0) {
       return []
     }
@@ -122,6 +122,7 @@ const flagMark: OverlayTemplate<FlagMarkExtendData> = {
       coordinates,
       isSelected,
       isHovered,
+      isTouch,
       isDrawing: overlay.isDrawing(),
       lock: overlay.lock,
       keyPrefix: 'anchor_'

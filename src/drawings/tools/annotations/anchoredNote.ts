@@ -24,8 +24,11 @@ import type { TextBoxData } from '../../text/textBox'
 import {
   baseTextBoxData,
   commitText,
+  liveTextOf,
   openAnnotationEditor,
   pointToCoordinate,
+  resolvedHorzTextAlign,
+  resolvedTextStyles,
   richTextFigureStyle,
   textEditorHooks,
   type AnnotationTextStyle
@@ -55,7 +58,7 @@ const DEFAULT_STEM_GAP = 10
 const DEFAULT_MARKER_RADIUS = 3
 
 function getNoteStyles (overlay: Overlay<AnchoredNoteExtendData>): AnchoredNoteStyle {
-  return ((overlay.styles?.[STYLE_KEY] ?? {}) as AnchoredNoteStyle)
+  return resolvedTextStyles(overlay, STYLE_KEY) as AnchoredNoteStyle
 }
 
 function getText (overlay: Overlay<AnchoredNoteExtendData>): string {
@@ -63,7 +66,7 @@ function getText (overlay: Overlay<AnchoredNoteExtendData>): string {
   if (isString(extendData)) {
     return extendData
   }
-  return extendData?.text ?? ''
+  return liveTextOf(overlay) ?? extendData?.text ?? ''
 }
 
 function getBoxData (overlay: Overlay<AnchoredNoteExtendData>): TextBoxData {
@@ -72,7 +75,7 @@ function getBoxData (overlay: Overlay<AnchoredNoteExtendData>): TextBoxData {
     ...baseTextBoxData(getText(overlay), styles),
     horzAlign: 'center',
     vertAlign: 'bottom',
-    horzTextAlign: 'center',
+    horzTextAlign: resolvedHorzTextAlign(overlay, 'center'),
     offsetY: styles.stemGap ?? DEFAULT_STEM_GAP
   }
 }
@@ -111,7 +114,7 @@ const anchoredNote: OverlayTemplate<AnchoredNoteExtendData> = {
       stemGap: DEFAULT_STEM_GAP
     }
   },
-  createPointFigures: ({ overlay, coordinates, isSelected, isHovered }) => {
+  createPointFigures: ({ overlay, coordinates, isSelected, isHovered, isTouch }) => {
     if (coordinates.length === 0) {
       return []
     }
@@ -162,6 +165,7 @@ const anchoredNote: OverlayTemplate<AnchoredNoteExtendData> = {
       coordinates,
       isSelected,
       isHovered,
+      isTouch,
       isDrawing: overlay.isDrawing(),
       lock: overlay.lock,
       keyPrefix: 'anchor_'

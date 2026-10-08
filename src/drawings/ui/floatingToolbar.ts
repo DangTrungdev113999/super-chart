@@ -160,7 +160,11 @@ export function attachFloatingToolbar (
       b.setAttribute('data-on', 'true')
     }
     if (iconId !== undefined) {
-      b.innerHTML = `${getDrawingIcon(iconId)}<span>${title}</span>`
+      b.innerHTML = getDrawingIcon(iconId)
+      // title is host-supplied (custom toolbar actions) — never innerHTML it.
+      const span = createDom('span')
+      span.textContent = title
+      b.appendChild(span)
     } else {
       b.textContent = title
     }
@@ -484,6 +488,10 @@ export function attachFloatingToolbar (
     if (element === null || current === null) {
       return
     }
+    // A rebuild orphans any open menu element — the old node's listeners are
+    // gone but menuEl still references it, so the next openMenu swallows one
+    // click toggling the detached node. Close before wiping.
+    closeMenu()
     element.innerHTML = ''
     const grip = createDom('div')
     grip.className = 'sc-drw-btn sc-drw-grip'
@@ -639,23 +647,36 @@ export function attachFloatingToolbar (
     reposition()
   }
 
+  let selectedId: string | null = null
   const onSelect = (payload: { overlay?: Overlay }): void => {
     if (payload.overlay !== undefined) {
+      selectedId = payload.overlay.id
       show(payload.overlay)
     }
   }
   const onDeselect = (): void => {
+    selectedId = null
     hide()
   }
   const onEditStart = (): void => {
     hide()
   }
   const onEditEnd = (payload: { overlay?: Overlay }): void => {
-    if (payload.overlay !== undefined) {
+    // A figure drag on a NON-selected overlay also fires editEnd — binding
+    // the toolbar to it would attach controls to an overlay the selection
+    // model doesn't own.
+    if (payload.overlay !== undefined && payload.overlay.id === selectedId) {
       show(payload.overlay)
     }
   }
   const onChange = (payload: { overlay?: Overlay }): void => {
+    // If the tracked overlay vanished (remove/undo/scope wipe), drop the
+    // toolbar — the 'change' payload may carry no overlay at all.
+    if (selectedId !== null && chart.getOverlayById(selectedId) === null) {
+      selectedId = null
+      hide()
+      return
+    }
     if (current !== null && payload.overlay?.id === current.id) {
       rerender()
     } else {
@@ -680,6 +701,9 @@ export function attachFloatingToolbar (
   if (typeof document !== 'undefined') {
     document.addEventListener('mousemove', onDragMove)
     document.addEventListener('mouseup', onDragEnd)
+    // Releasing the button outside the window never delivers mouseup —
+    // window blur ends the drag or the next mousemove drags buttonless.
+    window.addEventListener('blur', onDragEnd)
   }
 
   return {
@@ -697,6 +721,7 @@ export function attachFloatingToolbar (
       if (typeof document !== 'undefined') {
         document.removeEventListener('mousemove', onDragMove)
         document.removeEventListener('mouseup', onDragEnd)
+        window.removeEventListener('blur', onDragEnd)
       }
     }
   }

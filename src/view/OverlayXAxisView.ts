@@ -33,6 +33,12 @@ export default class OverlayXAxisView extends OverlayYAxisView<XAxis> {
     return false
   }
 
+  // This view only renders createXAxisFigures output + the default
+  // x-axis figure — skip overlays that provide neither.
+  protected override canDrawOverlay (overlay: OverlayImp): boolean {
+    return overlay.createXAxisFigures != null || overlay.needDefaultXAxisFigure
+  }
+
   override getCompleteOverlays (): OverlayImp[] {
     return this.getWidget().getPane().getChart().getChartStore().getOverlaysByPaneId()
   }
@@ -79,6 +85,22 @@ export default class OverlayXAxisView extends OverlayYAxisView<XAxis> {
     const yAxis = pane.getAxisComponent() as unknown as Nullable<YAxis>
     const xAxis = chart.getXAxisPane().getAxisComponent()
     const bounding = widget.getBounding()
-    return o.createXAxisFigures?.({ chart, overlay: o, coordinates, bounding, xAxis, yAxis, isTouch: this._lastIsTouch }) ?? []
+    const chartStore = pane.getChart().getChartStore()
+    const clickInfo = chartStore.getClickOverlayInfo()
+    const hoverInfo = chartStore.getHoverOverlayInfo()
+    return o.createXAxisFigures?.({
+      chart,
+      overlay: o,
+      coordinates,
+      bounding,
+      xAxis,
+      yAxis,
+      isSelected: clickInfo.overlay?.id === o.id && clickInfo.figureType !== 'none',
+      isHovered: hoverInfo.overlay?.id === o.id && hoverInfo.figureType !== 'none',
+      hoveredFigureKey: hoverInfo.overlay?.id === o.id && hoverInfo.figureType !== 'none'
+        ? hoverInfo.figure?.key
+        : undefined,
+      isTouch: this._lastIsTouch
+    }) ?? []
   }
 }

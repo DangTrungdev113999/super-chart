@@ -49,6 +49,7 @@ const MIN_RADIUS_PX = 0.5
 const fibSpiral: OverlayTemplate<FibSpiralExtendData> = {
   name: 'fibSpiral',
   totalStep: 3,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,
@@ -59,7 +60,7 @@ const fibSpiral: OverlayTemplate<FibSpiralExtendData> = {
     counterclockwise: false,
     trendlineVisible: true
   },
-  createPointFigures: withPerfPipeline(({ overlay, coordinates, isSelected, isHovered }) => {
+  createPointFigures: withPerfPipeline(({ overlay, coordinates, isSelected, isHovered, isTouch }) => {
     const extendData = (overlay.extendData as FibSpiralExtendData | undefined) ?? {}
     const figures: OverlayFigure[] = []
     if (coordinates.length >= 2) {
@@ -105,6 +106,7 @@ const fibSpiral: OverlayTemplate<FibSpiralExtendData> = {
       coordinates,
       isSelected,
       isHovered,
+      isTouch,
       isDrawing: overlay.isDrawing(),
       lock: overlay.lock,
       keyPrefix: 'anchor_',

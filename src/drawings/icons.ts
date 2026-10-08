@@ -81,9 +81,13 @@ const ICONS: Record<string, string> = {
   tool: `${SVG_OPEN}<path d="M17 4a5 5 0 0 0-6.6 6.6L5 16l6 6 5.4-5.4A5 5 0 0 0 24 11l-4 4-4-1-1-4 4-4a5 5 0 0 0-2-2z"/></svg>`
 }
 
+// Own-key set — `in` walks the prototype chain, so ids like 'constructor'
+// would resolve to Object.prototype members without this guard.
+const ICON_ID_SET = new Set<string>(Object.keys(ICONS))
+
 /** Inline SVG markup for an icon id — generic 'tool' glyph as fallback. */
 export function getDrawingIcon (iconId: DrawingIconId | undefined): string {
-  if (iconId !== undefined && iconId in ICONS) {
+  if (iconId !== undefined && ICON_ID_SET.has(iconId)) {
     return ICONS[iconId]
   }
   return ICONS.tool

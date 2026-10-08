@@ -24,6 +24,7 @@ import type {
 } from '../../../component/Overlay'
 
 import { isArray, isBoolean, isNumber, isString, isValid } from '../../../common/utils/typeChecks'
+import type { LineType } from '../../../common/Styles'
 import { alphaRgba } from '../../../extension/overlay/ellipse/math'
 import { PERIOD_VIS_KEY } from '../../../extension/overlay/ellipse/constants'
 
@@ -130,7 +131,7 @@ export interface ShapeExtendData {
 export interface ShapeStroke {
   color: string
   size: number
-  style: 'solid' | 'dashed'
+  style: LineType
   dashedValue: number[]
 }
 
@@ -140,7 +141,7 @@ interface ChannelShapeStyle {
   color?: string | CanvasGradient
   borderColor?: string
   borderSize?: number
-  borderStyle?: 'solid' | 'dashed'
+  borderStyle?: LineType
   borderDashedValue?: number[]
 }
 
@@ -164,8 +165,8 @@ export function shapeStrokeOf (
   const themePoly = chart.getStyles().overlay[channel]
   const channelStyles: ChannelShapeStyle = overlay.styles?.[channel] ?? {}
   const extStyle = ext.borderStyle ?? ext.lineStyle
-  const style: 'solid' | 'dashed' = channelStyles.borderStyle ??
-    (extStyle === 'solid' ? 'solid' : extStyle !== undefined ? 'dashed' : themePoly.borderStyle)
+  const style: LineType = channelStyles.borderStyle ??
+    (extStyle === 'solid' || extStyle === 'dotted' ? extStyle : extStyle !== undefined ? 'dashed' : themePoly.borderStyle)
   const dashedValue = channelStyles.borderDashedValue ??
     (extStyle !== undefined ? SHAPE_DASH_MAP[extStyle] : themePoly.borderDashedValue)
   return {

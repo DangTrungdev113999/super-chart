@@ -48,6 +48,7 @@ export interface HorizRayLineExtendData extends LineExtendData {}
 const horizontalRayLine: OverlayTemplate<HorizRayLineExtendData> = {
   name: 'horizontalRayLine',
   totalStep: 2,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

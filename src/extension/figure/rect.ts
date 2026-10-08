@@ -75,7 +75,7 @@ export function drawRect (ctx: CanvasRenderingContext2D, attrs: RectAttrs | Rect
     ctx.strokeStyle = borderColor
     ctx.fillStyle = borderColor
     ctx.lineWidth = borderSize
-    if (borderStyle === 'dashed') {
+    if (borderStyle === 'dashed' || borderStyle === 'dotted') {
       ctx.setLineDash(borderDashedValue)
     } else {
       ctx.setLineDash([])

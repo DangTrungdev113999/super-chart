@@ -14,7 +14,7 @@
 
 import type Bounding from '../../../common/Bounding'
 import type Coordinate from '../../../common/Coordinate'
-import type { SmoothLineStyle } from '../../../common/Styles'
+import type { LineType, SmoothLineStyle } from '../../../common/Styles'
 import { hexToRgb } from '../../../common/utils/color'
 import { isArray, isNumber, isValid } from '../../../common/utils/typeChecks'
 
@@ -335,7 +335,7 @@ function fillBand (currAnchor: Coordinate, prevAnchor: Coordinate, dir: Coordina
 interface ResolvedStroke {
   color: string
   size: number
-  style: 'solid' | 'dashed'
+  style: LineType
   dashedValue: number[]
 }
 
@@ -393,7 +393,7 @@ function pushLine (figures: OverlayFigure[], key: string, coordinates: Coordinat
 }
 
 function buildPointFigures (variant: PitchforkVariant, params: OverlayCreateFiguresCallbackParams<PitchforkExtendData>): OverlayFigure[] {
-  const { overlay, coordinates, bounding, isSelected = false, isHovered = false } = params
+  const { overlay, coordinates, bounding, isSelected = false, isHovered = false, isTouch = false } = params
   const figures: OverlayFigure[] = []
   const count = coordinates.length
   if (count === 0) {
@@ -513,6 +513,7 @@ function buildPointFigures (variant: PitchforkVariant, params: OverlayCreateFigu
     coordinates,
     isSelected,
     isHovered,
+    isTouch,
     isDrawing: overlay.isDrawing(),
     lock: overlay.lock,
     keyPrefix: 'anchor_'
@@ -528,6 +529,7 @@ export function createPitchforkTemplate (name: string, variant: PitchforkVariant
   return {
     name,
     totalStep: 4,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,

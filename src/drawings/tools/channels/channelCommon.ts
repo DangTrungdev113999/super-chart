@@ -14,6 +14,7 @@
 
 import type Bounding from '../../../common/Bounding'
 import type Coordinate from '../../../common/Coordinate'
+import type { LineType } from '../../../common/Styles'
 import type Point from '../../../common/Point'
 import type { Chart } from '../../../Chart'
 import type { YAxis } from '../../../component/YAxis'
@@ -78,7 +79,7 @@ export interface ChannelExtendData extends LineExtendData {
 export interface ChannelStroke {
   color: string
   size: number
-  style: 'solid' | 'dashed'
+  style: LineType
   dashedValue: number[]
 }
 

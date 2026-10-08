@@ -39,6 +39,7 @@ export interface HorizStraightLineExtendData extends LineExtendData {}
 const horizontalStraightLine: OverlayTemplate<HorizStraightLineExtendData> = {
   name: 'horizontalStraightLine',
   totalStep: 2,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

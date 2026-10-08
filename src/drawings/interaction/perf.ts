@@ -44,13 +44,34 @@ interface CacheEntry {
 // independent entry per slot so the callbacks don't fight over one cache key.
 const cache = new WeakMap<object, Map<string, CacheEntry>>()
 
+/**
+ * Above this count the signature switches to stride sampling — freehand
+ * tools carry thousands of points and an O(N) signature per frame costs
+ * more than the cache saves. The signature keeps length + first + last +
+ * every STRIDE-th point: append-heavy freehand strokes always change the
+ * tail, and a mid-edit still lands on a sampled index within STRIDE px.
+ */
+const COORD_SIG_FULL = 64
+const COORD_SIG_STRIDE = 32
+
 function coordsSignature (coordinates: Coordinate[]): string {
   // Quarter-pixel rounding absorbs sub-pixel jitter from axis math without
   // masking real moves.
-  let sig = ''
-  for (const c of coordinates) {
+  const len = coordinates.length
+  if (len <= COORD_SIG_FULL) {
+    let sig = ''
+    for (const c of coordinates) {
+      sig += `${Math.round(c.x * 4)},${Math.round(c.y * 4)};`
+    }
+    return sig
+  }
+  let sig = `${len}|`
+  for (let i = 0; i < len; i += COORD_SIG_STRIDE) {
+    const c = coordinates[i]
     sig += `${Math.round(c.x * 4)},${Math.round(c.y * 4)};`
   }
+  const tail = coordinates[len - 1]
+  sig += `>${Math.round(tail.x * 4)},${Math.round(tail.y * 4)}`
   return sig
 }
 
@@ -93,9 +114,14 @@ export function withFigureCache<E> (
       const last = list[list.length - 1] as KLineData | undefined
       dataRev = `|d${list.length}:${last !== undefined ? last.close : ''}`
     }
+    // envRev — Store's monotonic environment counter (theme, symbol,
+    // precision, period, formatters, locale, timezone). Absent on older
+    // kernels → 0, which simply keeps the previous behavior.
+    const envRev = (params.chart as { getEnvRev?: () => number }).getEnvRev?.() ?? 0
     const signature =
       coordsSignature(params.coordinates) +
       `|r${params.overlay.figuresRev}` +
+      `|e${envRev}` +
       `|s${params.isSelected === true ? 1 : 0}h${params.isHovered === true ? 1 : 0}` +
       `|l${params.overlay.lock ? 1 : 0}` +
       `|b${params.bounding.width}x${params.bounding.height}` +

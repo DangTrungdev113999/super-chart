@@ -71,6 +71,7 @@ export interface FlatTopBottomExtendData extends ChannelExtendData {}
 const flatTopBottom: OverlayTemplate<FlatTopBottomExtendData> = {
   name: 'flatTopBottom',
   totalStep: 4,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

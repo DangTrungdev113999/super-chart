@@ -397,6 +397,11 @@ export function findCatalogItemByHotkey (key: string): DrawingToolItem | null {
 
 /** Find a catalog item by kernel overlay name — reverse lookup for `list()`. */
 export function findCatalogItemByOverlay (overlayName: string): DrawingToolItem | null {
+  // nonTool entries (cursor/eraser/zoom…) share overlayName '' — matching an
+  // empty name would return 'cursor' and activate a nonexistent overlay.
+  if (overlayName === '') {
+    return null
+  }
   for (const group of getDrawingCatalog()) {
     for (const section of group.sections) {
       const found = section.items.find(i => i.overlayName === overlayName)

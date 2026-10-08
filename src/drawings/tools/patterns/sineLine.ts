@@ -35,6 +35,7 @@ import type { PatternExtendData } from './patternCommon'
 const sineLine: OverlayTemplate<PatternExtendData> = {
   name: 'sineLine',
   totalStep: 3,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

@@ -66,14 +66,31 @@ export function serializedToOverlayCreate (d: SerializedDrawing): OverlayCreate 
     name: d.name,
     paneId: d.paneId,
     groupId: d.groupId ?? 'drawings',
-    points: d.points.map(p => ({ timestamp: p.timestamp, value: p.value, dataIndex: p.dataIndex })),
+    points: d.points.map(p => {
+      const point: SerializedDrawingPoint = { timestamp: p.timestamp, value: p.value, dataIndex: p.dataIndex }
+      if (p.interval !== undefined) {
+        point.interval = p.interval
+      }
+      if (p.offset !== undefined) {
+        point.offset = p.offset
+      }
+      return point
+    }),
     styles: clone(d.styles ?? null),
     lock: d.lock ?? false,
     visible: d.visible ?? true,
     mode: d.mode,
     modeSensitivity: d.modeSensitivity,
     zLevel: d.zLevel,
-    extendData: clone(d.extendData ?? null)
+    extendData: clone(d.extendData ?? null),
+    // Restored drawings are finished — never let them occupy the
+    // drawing-progress slot (unlimited-step tools could never satisfy
+    // points >= totalStep - 1 and would displace siblings).
+    completed: d.completed,
+    // Restored points are already normalized — replaying the draw hooks
+    // would re-run templates' per-point transforms (e.g. flatTopBottom
+    // pins P2's dataIndex to P1's) and silently mutate stored geometry.
+    skipDrawReplay: true
   }
 }
 
@@ -82,8 +99,8 @@ export function serializedToOverlayCreate (d: SerializedDrawing): OverlayCreate 
  * persisted: ghosts, sync mirrors, in-progress drawings, invisible
  * transient helpers.
  */
-export function serializeOverlay<E> (overlay: Overlay<E>, options?: { now?: number, positionPercents?: number[] }): SerializedDrawing<E> | null {
-  if (overlay.ghost || overlay.synced || overlay.isDrawing()) {
+export function serializeOverlay<E> (overlay: Overlay<E>, options?: { now?: number, positionPercents?: number[], createdAt?: number }): SerializedDrawing<E> | null {
+  if (overlay.ghost || overlay.synced || overlay.isDrawing() || overlay.transient === true) {
     return null
   }
   const now = options?.now ?? Date.now()
@@ -119,15 +136,17 @@ export function serializeOverlay<E> (overlay: Overlay<E>, options?: { now?: numb
     extendData: clone(overlay.extendData ?? undefined) ?? undefined,
     completed: true,
     positionPercents,
-    createdAt: now,
+    // createdAt sticks to the first serialization — re-stamping it on every
+    // edit would erase the real creation time from storage.
+    createdAt: options?.createdAt ?? now,
     updatedAt: now
   }
 }
 
 /** Cheap structural fingerprint for change detection (persistence diff + undo before-images). */
 export function serializedFingerprint (d: SerializedDrawing): string {
-  const pts = d.points.map(p => `${p.timestamp ?? ''},${p.value ?? ''},${p.dataIndex ?? ''}`).join(';')
-  return `${d.name}|${d.paneId ?? ''}|${pts}|${JSON.stringify(d.styles ?? null)}|${JSON.stringify(d.extendData ?? null)}|${d.lock === true ? 1 : 0}${d.visible === false ? 0 : 1}|${d.mode ?? ''}|${d.zLevel ?? ''}`
+  const pts = d.points.map(p => `${p.timestamp ?? ''},${p.value ?? ''},${p.dataIndex ?? ''},${p.interval ?? ''},${p.offset ?? ''}`).join(';')
+  return `${d.name}|${d.paneId ?? ''}|${d.groupId ?? ''}|${pts}|${JSON.stringify(d.styles ?? null)}|${JSON.stringify(d.extendData ?? null)}|${d.lock === true ? 1 : 0}${d.visible === false ? 0 : 1}|${d.mode ?? ''}|${d.modeSensitivity ?? ''}|${d.zLevel ?? ''}`
 }
 
 // ─── v1 migration ────────────────────────────────────────────────

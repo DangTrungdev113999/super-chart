@@ -68,7 +68,7 @@ export function drawPolygon (ctx: CanvasRenderingContext2D, attrs: PolygonAttrs 
   if ((style === 'stroke' || styles.style === 'stroke_fill') && borderSize > 0 && !isTransparent(borderColor)) {
     ctx.strokeStyle = borderColor
     ctx.lineWidth = borderSize
-    if (borderStyle === 'dashed') {
+    if (borderStyle === 'dashed' || borderStyle === 'dotted') {
       ctx.setLineDash(borderDashedValue)
     } else {
       ctx.setLineDash([])

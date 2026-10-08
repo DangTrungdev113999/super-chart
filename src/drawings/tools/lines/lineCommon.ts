@@ -23,6 +23,7 @@ import type {
 } from '../../../component/Overlay'
 
 import { isArray, isNumber, isString, isValid } from '../../../common/utils/typeChecks'
+import type { LineType } from '../../../common/Styles'
 import { formatPrecision } from '../../../common/utils/format'
 import { calcTextWidth } from '../../../common/utils/canvas'
 import { isSnap45Active, snap45Coordinate } from '../../interaction/snap45'
@@ -169,13 +170,12 @@ export function lineStyleOverrides (
   overlay: Overlay,
   chart: Chart,
   ext?: LineExtendData
-): { color: string, size: number, style: 'solid' | 'dashed', dashedValue: number[] } {
+): { color: string, size: number, style: LineType, dashedValue: number[] } {
   const themeLine = chart.getStyles().overlay.line
   const extStyle = ext?.lineStyle
-  // Kernel LineType only knows 'solid' | 'dashed' — map 'dotted' to a
-  // tight dash pattern so consumer configs still render correctly.
-  const style: 'solid' | 'dashed' = overlay.styles?.line?.style ??
-    (extStyle === 'dashed' || extStyle === 'dotted' ? 'dashed' : 'solid')
+  // 'dotted' is a first-class LineType — figures render it via dashedValue.
+  const style: LineType = overlay.styles?.line?.style ??
+    (extStyle === 'dashed' || extStyle === 'dotted' ? extStyle : 'solid')
   const dashedValue = overlay.styles?.line?.dashedValue ??
     (extStyle === 'dotted' ? [2, 2] : extStyle === 'dashed' ? [6, 4] : [2, 2])
   return {
@@ -416,7 +416,7 @@ export function pushLineWithGap (
   lineStart: Coordinate,
   lineEnd: Coordinate,
   gap?: [number, number],
-  explicitStyles?: { color: string, size: number, style: 'solid' | 'dashed', dashedValue: number[] }
+  explicitStyles?: { color: string, size: number, style: LineType, dashedValue: number[] }
 ): void {
   const makeFigure = (key: string, a: Coordinate, b: Coordinate): OverlayFigure => {
     const figure: OverlayFigure = {

@@ -2,9 +2,9 @@
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
-
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
-
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -19,24 +19,27 @@ import { isTransparent } from '../../common/utils/color'
 
 import type { FigureTemplate } from '../../component/Figure'
 
-export function checkCoordinateOnCircle (coordinate: Coordinate, attrs: CircleAttrs | CircleAttrs[]): boolean {
-  let circles: CircleAttrs[] = []
-  circles = circles.concat(attrs)
+export function checkCoordinateOnEllipse (coordinate: Coordinate, attrs: EllipseAttrs | EllipseAttrs[]): boolean {
+  let ellipses: EllipseAttrs[] = []
+  ellipses = ellipses.concat(attrs)
 
-  for (const circle of circles) {
-    const { x, y, r } = circle
-    const difX = coordinate.x - x
-    const difY = coordinate.y - y
-    if (!(difX * difX + difY * difY > r * r)) {
+  for (const ellipse of ellipses) {
+    const { x, y, rx, ry } = ellipse
+    if (rx <= 0 || ry <= 0) {
+      continue
+    }
+    const nx = (coordinate.x - x) / rx
+    const ny = (coordinate.y - y) / ry
+    if (nx * nx + ny * ny <= 1) {
       return true
     }
   }
   return false
 }
 
-export function drawCircle (ctx: CanvasRenderingContext2D, attrs: CircleAttrs | CircleAttrs[], styles: Partial<PolygonStyle>): void {
-  let circles: CircleAttrs[] = []
-  circles = circles.concat(attrs)
+export function drawEllipse (ctx: CanvasRenderingContext2D, attrs: EllipseAttrs | EllipseAttrs[], styles: Partial<PolygonStyle>): void {
+  let ellipses: EllipseAttrs[] = []
+  ellipses = ellipses.concat(attrs)
 
   const {
     style = 'fill',
@@ -50,11 +53,13 @@ export function drawCircle (ctx: CanvasRenderingContext2D, attrs: CircleAttrs | 
   const solid = (style === 'fill' || styles.style === 'stroke_fill') && (!isString(color) || !isTransparent(color))
   if (solid) {
     ctx.fillStyle = color
-    circles.forEach(({ x, y, r }) => {
-      ctx.beginPath()
-      ctx.arc(x, y, r, 0, Math.PI * 2)
-      ctx.closePath()
-      ctx.fill()
+    ellipses.forEach(({ x, y, rx, ry }) => {
+      if (rx > 0 && ry > 0) {
+        ctx.beginPath()
+        ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2)
+        ctx.closePath()
+        ctx.fill()
+      }
     })
   }
   if ((style === 'stroke' || styles.style === 'stroke_fill') && borderSize > 0 && !isTransparent(borderColor)) {
@@ -65,10 +70,10 @@ export function drawCircle (ctx: CanvasRenderingContext2D, attrs: CircleAttrs | 
     } else {
       ctx.setLineDash([])
     }
-    circles.forEach(({ x, y, r }) => {
-      if (!solid || r > borderSize) {
+    ellipses.forEach(({ x, y, rx, ry }) => {
+      if (rx > 0 && ry > 0 && (!solid || Math.min(rx, ry) > borderSize)) {
         ctx.beginPath()
-        ctx.arc(x, y, r, 0, Math.PI * 2)
+        ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2)
         ctx.closePath()
         ctx.stroke()
       }
@@ -76,18 +81,19 @@ export function drawCircle (ctx: CanvasRenderingContext2D, attrs: CircleAttrs | 
   }
 }
 
-export interface CircleAttrs {
+export interface EllipseAttrs {
   x: number
   y: number
-  r: number
+  rx: number
+  ry: number
 }
 
-const circle: FigureTemplate<CircleAttrs | CircleAttrs[], Partial<PolygonStyle>> = {
-  name: 'circle',
-  checkEventOn: checkCoordinateOnCircle,
-  draw: (ctx: CanvasRenderingContext2D, attrs: CircleAttrs | CircleAttrs[], styles: Partial<PolygonStyle>) => {
-    drawCircle(ctx, attrs, styles)
+const ellipse: FigureTemplate<EllipseAttrs | EllipseAttrs[], Partial<PolygonStyle>> = {
+  name: 'ellipse',
+  checkEventOn: checkCoordinateOnEllipse,
+  draw: (ctx: CanvasRenderingContext2D, attrs: EllipseAttrs | EllipseAttrs[], styles: Partial<PolygonStyle>) => {
+    drawEllipse(ctx, attrs, styles)
   }
 }
 
-export default circle
+export default ellipse

@@ -74,6 +74,7 @@ export interface DisjointChannelExtendData extends ChannelExtendData {}
 const disjointChannel: OverlayTemplate<DisjointChannelExtendData> = {
   name: 'disjointChannel',
   totalStep: 4,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

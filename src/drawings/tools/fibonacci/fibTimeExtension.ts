@@ -43,10 +43,11 @@ export interface FibTimeExtensionExtendData extends FibExtendData {}
 const fibTimeExtension: OverlayTemplate<FibTimeExtensionExtendData> = {
   name: 'fibTimeExtension',
   totalStep: 4,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,
-  createPointFigures: ({ overlay, coordinates, bounding, isSelected, isHovered }) => {
+  createPointFigures: ({ overlay, coordinates, bounding, isSelected, isHovered, isTouch }) => {
     const figures: OverlayFigure[] = []
     if (coordinates.length < 2) {
       return figures
@@ -79,6 +80,7 @@ const fibTimeExtension: OverlayTemplate<FibTimeExtensionExtendData> = {
         coordinates,
         isSelected,
         isHovered,
+        isTouch,
         isDrawing: overlay.isDrawing(),
         lock: overlay.lock,
         keyPrefix: 'anchor_'
@@ -158,6 +160,7 @@ const fibTimeExtension: OverlayTemplate<FibTimeExtensionExtendData> = {
       coordinates,
       isSelected,
       isHovered,
+      isTouch,
       isDrawing: overlay.isDrawing(),
       lock: overlay.lock,
       keyPrefix: 'anchor_'

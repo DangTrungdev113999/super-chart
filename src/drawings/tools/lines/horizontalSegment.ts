@@ -43,6 +43,7 @@ export interface HorizSegmentExtendData extends LineExtendData {}
 const horizontalSegment: OverlayTemplate<HorizSegmentExtendData> = {
   name: 'horizontalSegment',
   totalStep: 3,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

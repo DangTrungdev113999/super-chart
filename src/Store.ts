@@ -421,7 +421,18 @@ export default class StoreImp implements Store {
     })
   }
 
+  /**
+   * Monotonic revision for chart-level environment (theme, symbol,
+   * precision, period, formatters, locale, timezone, separators).
+   * Drawing figure caches key on this so a style/symbol switch can't
+   * leave stale cached figure specs behind.
+   */
+  private _envRev = 0
+
+  getEnvRev (): number { return this._envRev }
+
   setStyles (value: string | DeepPartial<Styles>): void {
+    this._envRev++
     let styles: Nullable<DeepPartial<Styles>> = null
     if (isString(value)) {
       styles = getExtensionStyles(value)
@@ -452,6 +463,7 @@ export default class StoreImp implements Store {
   getStyles (): Styles { return this._styles }
 
   setFormatter (formatter: Partial<Formatter>): void {
+    this._envRev++
     merge(this._formatter, formatter)
   }
 
@@ -465,7 +477,7 @@ export default class StoreImp implements Store {
     return this._innerFormatter
   }
 
-  setLocale (locale: string): void { this._locale = locale }
+  setLocale (locale: string): void { this._envRev++; this._locale = locale }
 
   getLocale (): string { return this._locale }
 
@@ -494,6 +506,7 @@ export default class StoreImp implements Store {
       }
       if (dateTimeFormat !== null) {
         this._dateTimeFormat = dateTimeFormat
+        this._envRev++
       }
     }
   }
@@ -505,16 +518,18 @@ export default class StoreImp implements Store {
   }
 
   setThousandsSeparator (thousandsSeparator: Partial<ThousandsSeparator>): void {
+    this._envRev++
     merge(this._thousandsSeparator, thousandsSeparator)
   }
 
   getThousandsSeparator (): ThousandsSeparator { return this._thousandsSeparator }
 
-  setDecimalFold (decimalFold: Partial<DecimalFold>): void { merge(this._decimalFold, decimalFold) }
+  setDecimalFold (decimalFold: Partial<DecimalFold>): void { this._envRev++; merge(this._decimalFold, decimalFold) }
 
   getDecimalFold (): DecimalFold { return this._decimalFold }
 
   setSymbol (symbol: PickPartial<SymbolInfo, 'pricePrecision' | 'volumePrecision'>): void {
+    this._envRev++
     this.resetData(() => {
       // eslint-disable-next-line @typescript-eslint/ban-ts-comment -- ignore
       // @ts-expect-error
@@ -534,6 +549,7 @@ export default class StoreImp implements Store {
   }
 
   setPeriod (period: Period): void {
+    this._envRev++
     this.resetData(() => {
       this._period = period
     })
@@ -1387,7 +1403,9 @@ export default class StoreImp implements Store {
       })
     }
     const progressOverlay = this._progressOverlayInfo?.overlay
-    if (isValid(progressOverlay) && match(progressOverlay)) {
+    if (isValid(progressOverlay) &&
+        (!isValid(paneId) || this._progressOverlayInfo?.paneId === paneId) &&
+        match(progressOverlay)) {
       overlays.push(progressOverlay)
     }
     return overlays
@@ -1454,6 +1472,10 @@ export default class StoreImp implements Store {
           this._progressOverlayInfo = { paneId, overlay, appointPaneFlag: appointPaneFlags[index] }
           if (isValid(displaced)) {
             this._overlayById.delete(displaced.overlay.id)
+            // The displaced overlay may still be armed in the pressed/hover/
+            // click slots — drop them so the dead instance stops receiving
+            // move events, hover leave, and phantom selections.
+            this._clearOverlayInteractionSlots(displaced.overlay)
             try {
               displaced.overlay.onRemoved?.({ overlay: displaced.overlay, chart: this._chart })
             } catch {}
@@ -1490,6 +1512,49 @@ export default class StoreImp implements Store {
     return this._progressOverlayInfo
   }
 
+  private _clearOverlayInteractionSlots (overlay: OverlayImp): void {
+    // Only null the progress slot when this overlay IS the local in-progress
+    // drawing — a mid-draw ghost mirror also reports isDrawing() but lives in
+    // _overlays, and a foreign remove must not kill our own drawing.
+    if (this._progressOverlayInfo?.overlay === overlay) {
+      this._progressOverlayInfo = null
+    }
+    // A mid-drag removal must also drop the pressed state — otherwise the
+    // next mousemove keeps emitting progress events for a dead overlay and
+    // sync mirrors would materialize it back as a zombie.
+    if (this._pressedOverlayInfo.overlay === overlay) {
+      this._pressedOverlayInfo = {
+        paneId: '',
+        overlay: null,
+        figureType: 'none',
+        figureIndex: -1,
+        figure: null
+      }
+    }
+    // Hover/select slots must not keep pointing at a dead overlay — the
+    // next setHoverOverlayInfo would fire onMouseLeave + zLevel restore on
+    // a removed instance, and click-info would keep reporting a phantom
+    // selection. Deselect goes through selectOverlay so the deselect
+    // event + onDeselected hook still fire in order.
+    if (this._hoverOverlayInfo.overlay === overlay) {
+      this._hoverOverlayInfo = {
+        paneId: '',
+        overlay: null,
+        figureType: 'none',
+        figureIndex: -1,
+        figure: null
+      }
+    }
+    if (this._clickOverlayInfo.overlay === overlay) {
+      // A throwing onDeselected hook must not abort the removal loop —
+      // same isolation as onRemoved; otherwise this overlay stays in
+      // _overlays after its 'remove' bookkeeping and strands zombies.
+      try {
+        this.selectOverlay(null)
+      } catch {}
+    }
+  }
+
   progressOverlayComplete (): void {
     if (this._progressOverlayInfo !== null) {
       const { overlay, paneId } = this._progressOverlayInfo
@@ -1510,6 +1575,12 @@ export default class StoreImp implements Store {
       if (isBoolean(appointPaneFlag) && appointPaneFlag) {
         this._progressOverlayInfo.appointPaneFlag = appointPaneFlag
       }
+      // Once appointed (host createOverlay({paneId}) or the first click),
+      // the pane is sticky — plain mousemoves crossing other panes must not
+      // re-assign the in-progress drawing or it visibly jumps panes.
+      if (this._progressOverlayInfo.appointPaneFlag && appointPaneFlag !== true) {
+        return
+      }
       this._progressOverlayInfo.paneId = paneId
       this._progressOverlayInfo.overlay.override({ paneId })
     }
@@ -1520,7 +1591,34 @@ export default class StoreImp implements Store {
     const updatePaneIds: string[] = []
     const filterOverlays = this.getOverlaysByFilter(override)
     filterOverlays.forEach(overlay => {
+      // paneId is the map key — capture it before the override merge so a
+      // paneId change can migrate the entry between pane lists (otherwise
+      // the overlay keeps rendering on the old pane while paneId claims
+      // the new one).
+      const oldPaneId = overlay.paneId
       overlay.override(override)
+      const newPaneId = overlay.paneId
+      if (newPaneId !== oldPaneId && this._overlays.has(oldPaneId)) {
+        const list = this._overlays.get(oldPaneId)
+        const index = list?.indexOf(overlay) ?? -1
+        if (index > -1) {
+          list?.splice(index, 1)
+          if (list !== undefined && list.length === 0) {
+            this._overlays.delete(oldPaneId)
+          }
+          if (!this._overlays.has(newPaneId)) {
+            this._overlays.set(newPaneId, [])
+          }
+          this._overlays.get(newPaneId)?.push(overlay)
+          sortFlag = true
+          if (!updatePaneIds.includes(oldPaneId)) {
+            updatePaneIds.push(oldPaneId)
+          }
+          if (!updatePaneIds.includes(newPaneId)) {
+            updatePaneIds.push(newPaneId)
+          }
+        }
+      }
       const { sort, draw } = overlay.shouldUpdate()
       if (sort) {
         sortFlag = true
@@ -1560,55 +1658,10 @@ export default class StoreImp implements Store {
     filterOverlays.forEach(overlay => {
       const paneId = overlay.paneId
       const paneOverlays = this.getOverlaysByPaneId(overlay.paneId)
-      // A throwing host callback must not abort the removal loop — callers
-      // wipe overlays in bulk (symbol switch, destroy) and a partial wipe
-      // would strand zombie overlays and their peer mirrors.
-      try {
-        overlay.onRemoved?.({ overlay, chart: this._chart })
-      } catch {}
       if (!updatePaneIds.includes(paneId)) {
         updatePaneIds.push(paneId)
       }
-      // Only null the progress slot when this overlay IS the local in-progress
-      // drawing — a mid-draw ghost mirror also reports isDrawing() but lives in
-      // _overlays, and a foreign remove must not kill our own drawing.
-      if (this._progressOverlayInfo?.overlay === overlay) {
-        this._progressOverlayInfo = null
-      }
-      // A mid-drag removal must also drop the pressed state — otherwise the
-      // next mousemove keeps emitting progress events for a dead overlay and
-      // sync mirrors would materialize it back as a zombie.
-      if (this._pressedOverlayInfo.overlay === overlay) {
-        this._pressedOverlayInfo = {
-          paneId: '',
-          overlay: null,
-          figureType: 'none',
-          figureIndex: -1,
-          figure: null
-        }
-      }
-      // Hover/select slots must not keep pointing at a dead overlay — the
-      // next setHoverOverlayInfo would fire onMouseLeave + zLevel restore on
-      // a removed instance, and click-info would keep reporting a phantom
-      // selection. Deselect goes through selectOverlay so the deselect
-      // event + onDeselected hook still fire in order.
-      if (this._hoverOverlayInfo.overlay === overlay) {
-        this._hoverOverlayInfo = {
-          paneId: '',
-          overlay: null,
-          figureType: 'none',
-          figureIndex: -1,
-          figure: null
-        }
-      }
-      if (this._clickOverlayInfo.overlay === overlay) {
-        // A throwing onDeselected hook must not abort the removal loop —
-        // same isolation as onRemoved above; otherwise this overlay stays
-        // in _overlays after its 'remove' bookkeeping and strands zombies.
-        try {
-          this.selectOverlay(null)
-        } catch {}
-      }
+      this._clearOverlayInteractionSlots(overlay)
       let index = paneOverlays.findIndex(o => o.id === overlay.id)
       if (index === -1) {
         // overlay.paneId may have drifted from the map key (host-side field
@@ -1636,6 +1689,15 @@ export default class StoreImp implements Store {
         this._overlays.delete(paneId)
       }
       this._overlayById.delete(overlay.id)
+      // Emit onRemoved only AFTER the overlay is fully unregistered — a host
+      // hook that calls removeOverlay() again (cascade patterns like synced/
+      // syncRemoved) must not re-match this overlay and recurse.
+      // A throwing host callback must not abort the removal loop — callers
+      // wipe overlays in bulk (symbol switch, destroy) and a partial wipe
+      // would strand zombie overlays and their peer mirrors.
+      try {
+        overlay.onRemoved?.({ overlay, chart: this._chart })
+      } catch {}
       this.executeAction('onOverlayChange', { type: 'remove', overlay })
     })
     if (updatePaneIds.length > 0) {
@@ -1673,8 +1735,15 @@ export default class StoreImp implements Store {
         let ignoreUpdateFlag = false
         let sortFlag = false
         if (overlay !== null) {
-          overlay.override({ zLevel: overlay.getPrevZLevel() })
-          sortFlag = true
+          // Restore only when a bump actually happened — in-progress overlays
+          // are hovered without being bumped (isDrawing guard below), so
+          // getPrevZLevel() is null for them and must NOT reset zLevel to 0.
+          const prevZLevel = overlay.getPrevZLevel()
+          if (prevZLevel !== null) {
+            overlay.override({ zLevel: prevZLevel })
+            overlay.setPrevZLevel(null)
+            sortFlag = true
+          }
           if (processOnMouseLeaveEvent(overlay, figure)) {
             ignoreUpdateFlag = true
           }

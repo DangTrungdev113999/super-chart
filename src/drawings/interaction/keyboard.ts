@@ -26,11 +26,14 @@
  */
 export interface DrawingKeyboardHandlers {
   onEscape?: () => void
-  onDelete?: () => void
+  /** Return true when a drawing was actually removed — only then is the key swallowed. */
+  onDelete?: () => boolean
   onUndo?: () => void
   onRedo?: () => void
-  onCopy?: () => void
-  onPaste?: () => void
+  /** Return true when a drawing was copied — only then is the key swallowed. */
+  onCopy?: () => boolean
+  /** Return true when a drawing was pasted — only then is the key swallowed. */
+  onPaste?: () => boolean
   /**
    * Unmodified single-key press (letter/digit) — tool hotkeys. The handler
    * decides whether the key maps to a tool; returning nothing keeps the
@@ -102,12 +105,11 @@ export function bindDrawingKeyboard (handlers: DrawingKeyboardHandlers, options?
           e.preventDefault()
           handlers.onUndo()
         }
-      } else if (key === 'c' && !e.shiftKey && handlers.onCopy !== undefined) {
+      } else if (key === 'c' && !e.shiftKey && handlers.onCopy?.() === true) {
+        // Nothing selected → fall through to the browser's own copy.
         e.preventDefault()
-        handlers.onCopy()
-      } else if (key === 'v' && !e.shiftKey && handlers.onPaste !== undefined) {
+      } else if (key === 'v' && !e.shiftKey && handlers.onPaste?.() === true) {
         e.preventDefault()
-        handlers.onPaste()
       } else if (key === 'y' && !e.shiftKey && handlers.onRedo !== undefined) {
         // Windows redo convention alongside Cmd+Shift+Z.
         e.preventDefault()
@@ -118,9 +120,10 @@ export function bindDrawingKeyboard (handlers: DrawingKeyboardHandlers, options?
 
     if (e.key === 'Escape' && handlers.onEscape !== undefined) {
       handlers.onEscape()
-    } else if ((e.key === 'Delete' || e.key === 'Backspace') && handlers.onDelete !== undefined) {
+    } else if ((e.key === 'Delete' || e.key === 'Backspace') && handlers.onDelete?.() === true) {
+      // Swallow only when something was deleted — otherwise Backspace must
+      // keep its browser meaning (e.g. host app shortcuts).
       e.preventDefault()
-      handlers.onDelete()
     } else if (e.key.length === 1 && handlers.onHotkey !== undefined) {
       // Tool hotkeys (T/H/V/F/X…) — TradingView activates tools on bare
       // letters; editable targets were already filtered above so typing is

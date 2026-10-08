@@ -20,7 +20,7 @@ import type Coordinate from '../common/Coordinate'
 import type Bounding from '../common/Bounding'
 import type { OverlayStyle } from '../common/Styles'
 import type { MouseTouchEvent } from '../common/EventHandler'
-import { clone, isArray, isBoolean, isFunction, isNumber, isString, isValid, merge } from '../common/utils/typeChecks'
+import { clone, isArray, isBoolean, isFunction, isNumber, isObject, isString, isValid, merge } from '../common/utils/typeChecks'
 
 import type { XAxis } from './XAxis'
 import type { YAxis } from './YAxis'
@@ -390,6 +390,18 @@ export interface Overlay<E = unknown> extends OverlayEventCollection<E> {
   readonly figuresRev: number
 
   /**
+   * Whether the overlay's rendered geometry is bounded by its points.
+   * The overlay view may skip figure creation entirely when every
+   * converted point lies outside the (padded) widget bounds. Set `false`
+   * for tools whose figures can reach the viewport while all anchors are
+   * offscreen — extended/rays/infinite lines, channels, pitchforks, fib
+   * time levels, cycle/vertical-full-height tools, edge-clamped labels,
+   * anchored text (position derives from screen fractions, not points).
+   * Default: true (cullable).
+   */
+  cullable?: boolean
+
+  /**
    * Invalidate the cached figure result — call after mutating extendData in
    * place (inside performEvent* callbacks) when using the drawings figure
    * cache wrapper.
@@ -399,7 +411,11 @@ export interface Overlay<E = unknown> extends OverlayEventCollection<E> {
 
 export type OverlayTemplate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, 'id' | 'groupId' | 'paneId' | 'points' | 'currentStep' | 'isDrawing' | 'isStart' | 'forceComplete' | 'invalidateFigures' | 'figuresRev'>, 'name'>
 
-export type OverlayCreate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, 'currentStep' | 'totalStep' | 'createPointFigures' | 'createXAxisFigures' | 'createYAxisFigures' | 'performEventPressedMove' | 'performEventBodyMove' | 'performEventMoveForDrawing' | 'isDrawing' | 'isStart' | 'forceComplete' | 'invalidateFigures' | 'figuresRev'>, 'name'>
+export type OverlayCreate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, 'currentStep' | 'totalStep' | 'createPointFigures' | 'createXAxisFigures' | 'createYAxisFigures' | 'performEventPressedMove' | 'performEventBodyMove' | 'performEventMoveForDrawing' | 'isDrawing' | 'isStart' | 'forceComplete' | 'invalidateFigures' | 'figuresRev'>, 'name'> & {
+  /** Restore-path flag: the overlay is already finished — skip the
+   * drawing-progress slot regardless of point count vs totalStep. */
+  completed?: boolean
+}
 export type OverlayOverride<E = unknown> = Partial<Omit<Overlay<E>, 'currentStep' | 'totalStep' | 'createPointFigures' | 'createXAxisFigures' | 'createYAxisFigures' | 'performEventPressedMove' | 'performEventBodyMove' | 'performEventMoveForDrawing' | 'isDrawing' | 'isStart' | 'forceComplete' | 'invalidateFigures' | 'figuresRev'>>
 
 /**
@@ -492,13 +508,22 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
   freehand = false
   freehandMinDistance = 4
 
+  // Bounded-by-points flag for viewport culling — templates set false for
+  // figures that can paint into the viewport while all anchors are
+  // offscreen (extended lines, channels, pitchforks, time-level fibs,
+  // anchored text). `undefined` behaves as cullable.
+  cullable: boolean | undefined = undefined
+
   // Plain field (not a getter) — merge() assigns source props directly, so a
   // getter-only accessor would throw if a caller ever passes figuresRev in.
   figuresRev = 0
 
   invalidateFigures (): void { this.figuresRev++ }
 
-  private _prevZLevel = 0
+  // null = no hover bump pending restore. 0 would be a valid zLevel but also
+  // the default — null distinguishes "never bumped" so the restore path can't
+  // demote an overlay that was never raised.
+  private _prevZLevel: Nullable<number> = null
 
   private _prevOverlay: Pick<Overlay<E>, 'zLevel' | 'visible' | 'points' | 'extendData'> & { stylesJson?: string }
 
@@ -535,6 +560,7 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
       styles,
       extendData,
       skipDrawReplay,
+      completed: _cm,
       // Kernel-owned members must never be merge-clobbered by a spread of
       // an overlay snapshot (regressed figuresRev poisons the figure cache;
       // shadowed methods break the instance; restored _prev* snapshots make
@@ -551,6 +577,7 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
       _prevZLevel: _pz,
       ...others
     } = overlay as Partial<Overlay<E>> & {
+      completed?: boolean
       _prevOverlay?: unknown
       _prevPressedPoint?: unknown
       _prevPressedPoints?: unknown
@@ -562,7 +589,11 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
     // Handle extendData separately — always produce a mutable merged result
     // (frozen objects from Immer/store and their sub-objects cannot be mutated)
     if (isValid(extendData)) {
-      if (isValid(this.extendData)) {
+      // merge() assigns into target keys — when the existing payload is a
+      // primitive (legacy string extendData on simpleAnnotation/simpleTag)
+      // and the incoming patch is an object, merging would throw a
+      // strict-mode TypeError. Replace instead: the object patch is complete.
+      if (isValid(this.extendData) && isObject(this.extendData) && isObject(extendData)) {
         // Clone existing first to ensure all sub-objects are mutable, then merge new values
         this.extendData = clone(this.extendData)
         merge(this.extendData, extendData)
@@ -589,12 +620,22 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
       this.figuresRev++
     }
 
-    if (isArray(points) && points.length > 0) {
+    if (isArray(points)) {
       let repeatTotalStep = 0
       this.points = [...points]
-      if (points.length >= this.totalStep - 1) {
+      if (points.length === 0) {
+        // Explicit empty write — reset to the start step so sync/undo can
+        // clear a drawing's points instead of the change being ignored.
+        this.currentStep = OVERLAY_DRAW_STEP_START
+      } else if (points.length >= this.totalStep - 1 || this.currentStep === OVERLAY_DRAW_STEP_FINISHED) {
+        // A finished overlay stays finished on point updates — otherwise a
+        // completed unlimited-step tool (totalStep = MAX_SAFE_INTEGER)
+        // receiving new points would re-enter isDrawing() forever as a
+        // zombie living outside the progress slot.
         this.currentStep = OVERLAY_DRAW_STEP_FINISHED
-        repeatTotalStep = this.totalStep - 1
+        // Clamp the replay count — for unlimited tools totalStep - 1 is
+        // MAX_SAFE_INTEGER and the replay loop must not iterate it.
+        repeatTotalStep = Math.min(this.totalStep - 1, points.length)
       } else {
         this.currentStep = points.length + 1
         repeatTotalStep = points.length
@@ -628,11 +669,20 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
         })
       }
     }
+
+    // Restore-path flag: a create carrying completed must never enter the
+    // drawing-progress slot — for unlimited-step tools (totalStep =
+    // MAX_SAFE_INTEGER) the point count can never satisfy the finish
+    // condition and the overlay would displace the previous in-progress
+    // drawing on every restore.
+    if (_cm === true) {
+      this.currentStep = OVERLAY_DRAW_STEP_FINISHED
+    }
   }
 
-  getPrevZLevel (): number { return this._prevZLevel }
+  getPrevZLevel (): Nullable<number> { return this._prevZLevel }
 
-  setPrevZLevel (zLevel: number): void { this._prevZLevel = zLevel }
+  setPrevZLevel (zLevel: Nullable<number>): void { this._prevZLevel = zLevel }
 
   shouldUpdate (): { draw: boolean, sort: boolean } {
     const sort = this._prevOverlay.zLevel !== this.zLevel

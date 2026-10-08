@@ -7852,7 +7852,7 @@ var RT_PEARSON_R = 'rt_pearson_r';
 var RT_CP_0 = 'rt_cp_0';
 var RT_CP_1 = 'rt_cp_1';
 // ═══════════════════════════════════════
-// Dash map (pixel pattern per LineStyle)
+// Dash map (pixel pattern per RegressionTrendLineStyle)
 // ═══════════════════════════════════════
 var DASH$1 = {
     solid: [],
@@ -33463,6 +33463,115 @@ var richText = {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+// Per-overlay, per-slot — an overlay wrapping more than one figure callback
+// (createPointFigures + createXAxisFigures + createYAxisFigures) gets an
+// independent entry per slot so the callbacks don't fight over one cache key.
+var cache = new WeakMap();
+function coordsSignature(coordinates) {
+    var e_1, _a;
+    // Quarter-pixel rounding absorbs sub-pixel jitter from axis math without
+    // masking real moves.
+    var sig = '';
+    try {
+        for (var coordinates_1 = __values(coordinates), coordinates_1_1 = coordinates_1.next(); !coordinates_1_1.done; coordinates_1_1 = coordinates_1.next()) {
+            var c = coordinates_1_1.value;
+            sig += "".concat(Math.round(c.x * 4), ",").concat(Math.round(c.y * 4), ";");
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (coordinates_1_1 && !coordinates_1_1.done && (_a = coordinates_1.return)) _a.call(coordinates_1);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    return sig;
+}
+/**
+ * CONTRACT: the returned array is SHARED — the view and every subsequent
+ * createFigures call see the same instance until the signature changes.
+ * Templates must treat it as read-only (never push/splice/mutate figure
+ * attrs on the result).
+ */
+function withFigureCache(fn, options) {
+    return function (params) {
+        var _a, _b, _c, _d;
+        var dataRev = '';
+        if ((options === null || options === void 0 ? void 0 : options.includeDataRev) === true) {
+            var list = params.chart.getDataList();
+            var last = list[list.length - 1];
+            dataRev = "|d".concat(list.length, ":").concat(last !== undefined ? last.close : '');
+        }
+        var signature = coordsSignature(params.coordinates) +
+            "|r".concat(params.overlay.figuresRev) +
+            "|s".concat(params.isSelected === true ? 1 : 0, "h").concat(params.isHovered === true ? 1 : 0) +
+            "|l".concat(params.overlay.lock ? 1 : 0) +
+            "|b".concat(params.bounding.width, "x").concat(params.bounding.height) +
+            "|c".concat(params.overlay.currentStep) +
+            "|t".concat(params.isTouch === true ? 1 : 0) +
+            "|h".concat((_a = params.hoveredFigureKey) !== null && _a !== void 0 ? _a : '') +
+            dataRev +
+            "|k".concat((_c = (_b = options === null || options === void 0 ? void 0 : options.extraKey) === null || _b === void 0 ? void 0 : _b.call(options, params)) !== null && _c !== void 0 ? _c : '');
+        var slotKey = (_d = options === null || options === void 0 ? void 0 : options.slot) !== null && _d !== void 0 ? _d : '';
+        var slots = cache.get(params.overlay);
+        var entry = slots === null || slots === void 0 ? void 0 : slots.get(slotKey);
+        if (entry !== undefined && entry.signature === signature) {
+            return entry.figures;
+        }
+        var result = fn(params);
+        var figures = Array.isArray(result) ? result : [result];
+        if (slots === undefined) {
+            slots = new Map();
+            cache.set(params.overlay, slots);
+        }
+        slots.set(slotKey, { signature: signature, figures: figures });
+        return figures;
+    };
+}
+function boundsOutside(bounds, bounding, margin) {
+    return (bounds.x + bounds.width < -margin ||
+        bounds.x > bounding.width + margin ||
+        bounds.y + bounds.height < -margin ||
+        bounds.y > bounding.height + margin);
+}
+/**
+ * Drop figures that declare `bounds` fully outside the viewport. Figures
+ * without bounds are always kept (opt-in per figure).
+ */
+function withViewportCull(fn, options) {
+    var _a;
+    var margin = (_a = options === null || options === void 0 ? void 0 : options.margin) !== null && _a !== void 0 ? _a : 24;
+    return function (params) {
+        var result = fn(params);
+        var figures = Array.isArray(result) ? result : [result];
+        var bounding = params.bounding;
+        return figures.filter(function (figure) {
+            var bounds = figure.bounds;
+            return bounds === undefined || !boundsOutside(bounds, bounding, margin);
+        });
+    };
+}
+/**
+ * Convenience: cache → cull. The composition order matters — cull is inner
+ * so off-screen figures never enter the cache output.
+ */
+function withPerfPipeline(fn, options) {
+    return withFigureCache(withViewportCull(fn, options), options);
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 var ANCHOR_KEY_PREFIX = 'anchor_';
 var ANCHOR_MID_KEY = 'anchor_mid';
 /**
@@ -36479,107 +36588,6 @@ var fibTimeZone = {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// Per-overlay, per-slot — an overlay wrapping more than one figure callback
-// (createPointFigures + createXAxisFigures + createYAxisFigures) gets an
-// independent entry per slot so the callbacks don't fight over one cache key.
-var cache = new WeakMap();
-function coordsSignature(coordinates) {
-    var e_1, _a;
-    // Quarter-pixel rounding absorbs sub-pixel jitter from axis math without
-    // masking real moves.
-    var sig = '';
-    try {
-        for (var coordinates_1 = __values(coordinates), coordinates_1_1 = coordinates_1.next(); !coordinates_1_1.done; coordinates_1_1 = coordinates_1.next()) {
-            var c = coordinates_1_1.value;
-            sig += "".concat(Math.round(c.x * 4), ",").concat(Math.round(c.y * 4), ";");
-        }
-    }
-    catch (e_1_1) { e_1 = { error: e_1_1 }; }
-    finally {
-        try {
-            if (coordinates_1_1 && !coordinates_1_1.done && (_a = coordinates_1.return)) _a.call(coordinates_1);
-        }
-        finally { if (e_1) throw e_1.error; }
-    }
-    return sig;
-}
-/**
- * CONTRACT: the returned array is SHARED — the view and every subsequent
- * createFigures call see the same instance until the signature changes.
- * Templates must treat it as read-only (never push/splice/mutate figure
- * attrs on the result).
- */
-function withFigureCache(fn, options) {
-    return function (params) {
-        var _a, _b, _c, _d;
-        var signature = coordsSignature(params.coordinates) +
-            "|r".concat(params.overlay.figuresRev) +
-            "|s".concat(params.isSelected === true ? 1 : 0, "h").concat(params.isHovered === true ? 1 : 0) +
-            "|l".concat(params.overlay.lock ? 1 : 0) +
-            "|b".concat(params.bounding.width, "x").concat(params.bounding.height) +
-            "|c".concat(params.overlay.currentStep) +
-            "|h".concat((_a = params.hoveredFigureKey) !== null && _a !== void 0 ? _a : '') +
-            "|k".concat((_c = (_b = options === null || options === void 0 ? void 0 : options.extraKey) === null || _b === void 0 ? void 0 : _b.call(options, params)) !== null && _c !== void 0 ? _c : '');
-        var slotKey = (_d = options === null || options === void 0 ? void 0 : options.slot) !== null && _d !== void 0 ? _d : '';
-        var slots = cache.get(params.overlay);
-        var entry = slots === null || slots === void 0 ? void 0 : slots.get(slotKey);
-        if (entry !== undefined && entry.signature === signature) {
-            return entry.figures;
-        }
-        var result = fn(params);
-        var figures = Array.isArray(result) ? result : [result];
-        if (slots === undefined) {
-            slots = new Map();
-            cache.set(params.overlay, slots);
-        }
-        slots.set(slotKey, { signature: signature, figures: figures });
-        return figures;
-    };
-}
-function boundsOutside(bounds, bounding, margin) {
-    return (bounds.x + bounds.width < -margin ||
-        bounds.x > bounding.width + margin ||
-        bounds.y + bounds.height < -margin ||
-        bounds.y > bounding.height + margin);
-}
-/**
- * Drop figures that declare `bounds` fully outside the viewport. Figures
- * without bounds are always kept (opt-in per figure).
- */
-function withViewportCull(fn, options) {
-    var _a;
-    var margin = (_a = options === null || options === void 0 ? void 0 : options.margin) !== null && _a !== void 0 ? _a : 24;
-    return function (params) {
-        var result = fn(params);
-        var figures = Array.isArray(result) ? result : [result];
-        var bounding = params.bounding;
-        return figures.filter(function (figure) {
-            var bounds = figure.bounds;
-            return bounds === undefined || !boundsOutside(bounds, bounding, margin);
-        });
-    };
-}
-/**
- * Convenience: cache → cull. The composition order matters — cull is inner
- * so off-screen figures never enter the cache output.
- */
-function withPerfPipeline(fn, options) {
-    return withFigureCache(withViewportCull(fn, options), options);
-}
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 var TRENDLINE_COLOR = '#787b86';
 var TRENDLINE_DASH = [4, 4];
 var GRID_DASH = [2, 4];
@@ -39319,6 +39327,7 @@ function readStoredPattern(extendData) {
 var barsPattern = {
     name: 'barsPattern',
     totalStep: 3,
+    figureCacheDataRev: true,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -39525,6 +39534,7 @@ var ARROW_SIZE$3 = 6;
 var dateAndPriceRange = {
     name: 'dateAndPriceRange',
     totalStep: 3,
+    figureCacheDataRev: true,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -39678,6 +39688,7 @@ var ARROW_SIZE$2 = 6;
 var dateRange = {
     name: 'dateRange',
     totalStep: 3,
+    figureCacheDataRev: true,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -39942,6 +39953,7 @@ function formatViDatePill(timestamp) {
 var forecast = {
     name: 'forecast',
     totalStep: 3,
+    figureCacheDataRev: true,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -40442,6 +40454,7 @@ function pointBarIndex(point, store) {
 var ghostFeed = {
     name: 'ghostFeed',
     totalStep: 3,
+    figureCacheDataRev: true,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -40849,6 +40862,7 @@ function buildPositionYAxisFigures(params, direction) {
 var longPosition = {
     name: 'longPosition',
     totalStep: 2,
+    figureCacheDataRev: true,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -40886,6 +40900,7 @@ var measure = {
     // Unlimited-step freehand: the stroke collects points for the whole
     // press-drag gesture; only the first/last points are ever read.
     totalStep: Number.MAX_SAFE_INTEGER,
+    figureCacheDataRev: true,
     freehand: true,
     freehandMinDistance: 4,
     transient: true,
@@ -41320,6 +41335,7 @@ var projection = {
 var shortPosition = {
     name: 'shortPosition',
     totalStep: 2,
+    figureCacheDataRev: true,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -45268,6 +45284,7 @@ function toPixelPoints(chart, paneId, points) {
 var regressionTrend = {
     name: 'regressionTrend',
     totalStep: 3,
+    figureCacheDataRev: true,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -48047,6 +48064,7 @@ var MAX_CYCLE_LINES = 512;
 var cyclicLines = {
     name: 'cyclicLines',
     totalStep: 3,
+    figureCacheDataRev: true,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -49650,6 +49668,23 @@ var highlighter = {
  * Loaded AFTER src/extension/overlay (barrel order in src/index.ts), so
  * same-name rebuilt templates replace their kernel predecessors.
  */
+/**
+ * Decorates a template's figure callbacks with the shared per-overlay/
+ * per-slot cache (coordinates + figuresRev + selection/hover + lock +
+ * bounding + currentStep + isTouch signature; `figureCacheDataRev` adds
+ * chart.getDataList() revision for data-reading tools). Templates may opt
+ * out entirely via `figuresCacheable: false`.
+ */
+function withDrawingsFigureCache(template) {
+    if (template.figuresCacheable === false) {
+        return template;
+    }
+    var cacheOpts = { includeDataRev: template.figureCacheDataRev === true };
+    var wrap = function (fn, slot) {
+        return (fn == null ? null : withFigureCache(fn, __assign(__assign({}, cacheOpts), { slot: slot })));
+    };
+    return __assign(__assign({}, template), { createPointFigures: wrap(template.createPointFigures, 'point'), createXAxisFigures: wrap(template.createXAxisFigures, 'x'), createYAxisFigures: wrap(template.createYAxisFigures, 'y') });
+}
 var drawingTools = [
     textNote,
     anchoredNote,
@@ -49743,7 +49778,7 @@ var drawingTools = [
     highlighter
 ];
 drawingTools.forEach(function (template) {
-    registerOverlay(template);
+    registerOverlay(withDrawingsFigureCache(template));
 });
 
 /**

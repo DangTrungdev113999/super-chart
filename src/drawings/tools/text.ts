@@ -19,6 +19,7 @@ import { createAnchorFigures } from '../interaction/anchors'
 import { openOverlayTextEditor } from '../editor/overlayTextEditor'
 import type { TextBoxData } from '../text/textBox'
 import type { RichTextAttrs, RichTextStyle } from '../figures/richText'
+import { resolvedHorzTextAlign, resolvedTextStyles, liveTextOf } from './annotations/common'
 
 /**
  * 'text' — the TradingView Text tool: click to place, type immediately
@@ -57,9 +58,9 @@ function getBoxData (overlay: Overlay<TextToolExtendData>): TextBoxData {
   // extendData may be absent at runtime when the overlay was created
   // without a payload — treat as empty rather than crash the figure path.
   const extendData = (overlay.extendData as TextToolExtendData | undefined) ?? {}
-  const styles = (overlay.styles?.textNote ?? overlay.styles ?? {}) as TextToolStyle
+  const styles = resolvedTextStyles(overlay, 'textNote') as TextToolStyle
   return {
-    text: extendData.text ?? '',
+    text: liveTextOf(overlay) ?? extendData.text ?? '',
     fontSize: styles.fontSize ?? 12,
     bold: styles.bold,
     italic: styles.italic,
@@ -68,7 +69,7 @@ function getBoxData (overlay: Overlay<TextToolExtendData>): TextBoxData {
     maxHeight: extendData.maxHeight,
     horzAlign: extendData.horzAlign ?? 'left',
     vertAlign: extendData.vertAlign ?? 'top',
-    horzTextAlign: extendData.horzTextAlign,
+    horzTextAlign: resolvedHorzTextAlign(overlay, extendData.horzTextAlign ?? 'left'),
     angle: extendData.angle,
     boxWidth: extendData.boxWidth,
     boxHeight: extendData.boxHeight,
@@ -81,7 +82,7 @@ function getBoxData (overlay: Overlay<TextToolExtendData>): TextBoxData {
 }
 
 function getFigureStyle (overlay: Overlay<TextToolExtendData>): RichTextStyle {
-  const styles = (overlay.styles?.textNote ?? overlay.styles ?? {}) as TextToolStyle
+  const styles = resolvedTextStyles(overlay, 'textNote') as TextToolStyle
   return {
     color: styles.color,
     backgroundColor: styles.backgroundColor,
@@ -122,7 +123,7 @@ const textNote: OverlayTemplate<TextToolExtendData> = {
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,
-  createPointFigures: ({ overlay, coordinates, isSelected, isHovered }) => {
+  createPointFigures: ({ overlay, coordinates, isSelected, isHovered, isTouch }) => {
     if (coordinates.length === 0) {
       return []
     }
@@ -144,6 +145,7 @@ const textNote: OverlayTemplate<TextToolExtendData> = {
       coordinates,
       isSelected,
       isHovered,
+      isTouch,
       isDrawing: overlay.isDrawing(),
       lock: overlay.lock,
       keyPrefix: 'anchor_'

@@ -57,6 +57,7 @@ const DEFAULT_LEVELS: FibLevelData[] = [
 const gannFan: OverlayTemplate<GannFanExtendData> = {
   name: 'gannFan',
   totalStep: 3,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,
@@ -68,7 +69,7 @@ const gannFan: OverlayTemplate<GannFanExtendData> = {
     levels: DEFAULT_LEVELS,
     showLabels: true
   },
-  createPointFigures: withPerfPipeline(({ overlay, coordinates, bounding, isSelected, isHovered }) => {
+  createPointFigures: withPerfPipeline(({ overlay, coordinates, bounding, isSelected, isHovered, isTouch }) => {
     const extendData = (overlay.extendData as GannFanExtendData | undefined) ?? {}
     const figures: OverlayFigure[] = []
     if (coordinates.length >= 2) {
@@ -113,6 +114,7 @@ const gannFan: OverlayTemplate<GannFanExtendData> = {
       coordinates,
       isSelected,
       isHovered,
+      isTouch,
       isDrawing: overlay.isDrawing(),
       lock: overlay.lock,
       keyPrefix: 'anchor_',

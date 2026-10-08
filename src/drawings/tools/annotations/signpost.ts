@@ -24,8 +24,11 @@ import type { TextBoxData } from '../../text/textBox'
 import {
   baseTextBoxData,
   commitText,
+  liveTextOf,
   openAnnotationEditor,
   pointToCoordinate,
+  resolvedHorzTextAlign,
+  resolvedTextStyles,
   textEditorHooks,
   type AnnotationTextStyle
 } from './common'
@@ -63,7 +66,7 @@ const SIGN_PADDING_HORZ = 8
 const BASE_RADIUS = 4
 
 function getSignpostStyles (overlay: Overlay<SignpostExtendData>): SignpostStyle {
-  return ((overlay.styles?.[STYLE_KEY] ?? {}) as SignpostStyle)
+  return resolvedTextStyles(overlay, STYLE_KEY) as SignpostStyle
 }
 
 function getText (overlay: Overlay<SignpostExtendData>): string {
@@ -71,7 +74,7 @@ function getText (overlay: Overlay<SignpostExtendData>): string {
   if (isString(extendData)) {
     return extendData
   }
-  return extendData?.text ?? ''
+  return liveTextOf(overlay) ?? extendData?.text ?? ''
 }
 
 function getDirection (overlay: Overlay<SignpostExtendData>): 'up' | 'down' {
@@ -86,7 +89,7 @@ function getBoxData (overlay: Overlay<SignpostExtendData>): TextBoxData {
     bold: styles.bold ?? true,
     horzAlign: 'center',
     vertAlign: 'middle',
-    horzTextAlign: 'center'
+    horzTextAlign: resolvedHorzTextAlign(overlay, 'center')
   }
 }
 
@@ -128,7 +131,7 @@ const signpost: OverlayTemplate<SignpostExtendData> = {
       minSignWidth: 56
     }
   },
-  createPointFigures: ({ overlay, coordinates, isSelected, isHovered }) => {
+  createPointFigures: ({ overlay, coordinates, isSelected, isHovered, isTouch }) => {
     if (coordinates.length === 0) {
       return []
     }
@@ -202,6 +205,7 @@ const signpost: OverlayTemplate<SignpostExtendData> = {
       coordinates,
       isSelected,
       isHovered,
+      isTouch,
       isDrawing: overlay.isDrawing(),
       lock: overlay.lock,
       keyPrefix: 'anchor_'

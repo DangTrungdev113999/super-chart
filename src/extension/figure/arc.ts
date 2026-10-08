@@ -50,7 +50,7 @@ export function drawArc (ctx: CanvasRenderingContext2D, attrs: ArcAttrs | ArcAtt
   const { style = 'solid', size = 1, color = 'currentColor', dashedValue = [2, 2] } = styles
   ctx.lineWidth = size
   ctx.strokeStyle = color
-  if (style === 'dashed') {
+  if (style === 'dashed' || style === 'dotted') {
     ctx.setLineDash(dashedValue)
   } else {
     ctx.setLineDash([])

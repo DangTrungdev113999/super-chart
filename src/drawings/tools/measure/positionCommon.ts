@@ -18,7 +18,7 @@ import type { KLineData } from '../../../common/Data'
 import type { OverlayFigure, OverlayCreateFiguresCallbackParams } from '../../../component/Overlay'
 import type { Chart } from '../../../Chart'
 
-import { isValid } from '../../../common/utils/typeChecks'
+import { isNumber, isValid } from '../../../common/utils/typeChecks'
 
 import { rgbaToSolid, fmtNum, signedNum, signedPct, pillFigures, getPricePrecision } from './measureCommon'
 
@@ -79,13 +79,18 @@ export const POSITION_DEFAULTS: PositionDefaults = {
   showPriceLabels: true
 }
 
+/** `??` lets NaN/negative persisted heights through — clamp to sane pixels. */
+function sanePx (value: number | undefined, fallback: number): number {
+  return isNumber(value) && value > 0 ? value : fallback
+}
+
 export function getPositionExt (extendData: PositionToolExtendData | undefined): PositionDefaults {
   const d = POSITION_DEFAULTS
   const e = extendData ?? {}
   return {
-    profitHeight: e.profitHeight ?? d.profitHeight,
-    stopHeight: e.stopHeight ?? d.stopHeight,
-    zoneWidth: e.zoneWidth ?? d.zoneWidth,
+    profitHeight: sanePx(e.profitHeight, d.profitHeight),
+    stopHeight: sanePx(e.stopHeight, d.stopHeight),
+    zoneWidth: sanePx(e.zoneWidth, d.zoneWidth),
     accountSize: e.accountSize ?? d.accountSize,
     risk: e.risk ?? d.risk,
     riskDisplayMode: e.riskDisplayMode ?? d.riskDisplayMode,
@@ -356,12 +361,13 @@ export function buildPositionYAxisFigures (
   const x = isFromZero ? 0 : bounding.width
 
   const figures: OverlayFigure[] = []
+  let pillIndex = 0
   const pill = (y: number, value: number | null, bg: string): void => {
-    if (value == null) {
+    if (value == null || !Number.isFinite(y)) {
       return
     }
     figures.push({
-      key: '',
+      key: `pos_axis_pill_${pillIndex++}`,
       type: 'text',
       attrs: { x, y, text: fmtNum(value, precision), align, baseline: 'middle' as CanvasTextBaseline },
       styles: {

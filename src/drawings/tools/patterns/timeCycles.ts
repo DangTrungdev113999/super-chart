@@ -46,6 +46,7 @@ const MAX_CYCLE_DOMES = 512
 const timeCycles: OverlayTemplate<PatternExtendData> = {
   name: 'timeCycles',
   totalStep: 3,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,
@@ -126,8 +127,10 @@ const timeCycles: OverlayTemplate<PatternExtendData> = {
   }),
 
   // TradingView `addPoint`/`setPoint`: both anchors share one baseline
-  // price — whichever anchor is dragged/drag-placed wins, the other
-  // follows. During replay the normalized pair converges to point[0].
+  // price. While DRAWING, point[0] owns the baseline — placing point[1]
+  // snaps it onto point[0]'s level (never drags the baseline down to
+  // wherever the second click lands). Post-draw drags keep whichever
+  // anchor moved as the source.
   performEventPressedMove: ({ points, performPointIndex }) => {
     const moved = points[performPointIndex]
     const other = points[1 - performPointIndex]
@@ -137,10 +140,13 @@ const timeCycles: OverlayTemplate<PatternExtendData> = {
   },
 
   performEventMoveForDrawing: ({ points, performPointIndex }) => {
+    if (performPointIndex === 0) {
+      return
+    }
+    const baseline = points[0]
     const moved = points[performPointIndex]
-    const other = points[1 - performPointIndex]
-    if (isValid(moved) && isValid(other) && isNumber(moved.value)) {
-      other.value = moved.value
+    if (isValid(baseline) && isValid(moved) && isNumber(baseline.value)) {
+      moved.value = baseline.value
     }
   }
 }

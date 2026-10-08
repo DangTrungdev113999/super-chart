@@ -72,6 +72,7 @@ function extendRayToPaneEdge (from: Coordinate, dir: Coordinate, bounding: Bound
 const headAndShoulders: OverlayTemplate<PatternExtendData> = {
   name: 'headAndShoulders',
   totalStep: 8,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

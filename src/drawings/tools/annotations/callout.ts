@@ -24,8 +24,11 @@ import type { TextBoxData } from '../../text/textBox'
 import {
   baseTextBoxData,
   commitText,
+  liveTextOf,
   openAnnotationEditor,
   pointToCoordinate,
+  resolvedHorzTextAlign,
+  resolvedTextStyles,
   richTextFigureStyle,
   textEditorHooks,
   type AnnotationTextStyle
@@ -58,7 +61,7 @@ const TARGET_DOT_RADIUS = 3
 const ARROW_ANGLE = Math.PI / 6
 
 function getCalloutStyles (overlay: Overlay<CalloutExtendData>): CalloutStyle {
-  return ((overlay.styles?.[STYLE_KEY] ?? {}) as CalloutStyle)
+  return resolvedTextStyles(overlay, STYLE_KEY) as CalloutStyle
 }
 
 function getText (overlay: Overlay<CalloutExtendData>): string {
@@ -66,7 +69,7 @@ function getText (overlay: Overlay<CalloutExtendData>): string {
   if (isString(extendData)) {
     return extendData
   }
-  return extendData?.text ?? ''
+  return liveTextOf(overlay) ?? extendData?.text ?? ''
 }
 
 function getBoxData (overlay: Overlay<CalloutExtendData>): TextBoxData {
@@ -77,7 +80,7 @@ function getBoxData (overlay: Overlay<CalloutExtendData>): TextBoxData {
     wordWrapWidth: extendData.wordWrapWidth,
     horzAlign: 'center',
     vertAlign: 'middle',
-    horzTextAlign: 'center'
+    horzTextAlign: resolvedHorzTextAlign(overlay, 'center')
   }
 }
 
@@ -119,7 +122,7 @@ const callout: OverlayTemplate<CalloutExtendData> = {
       arrowSize: 8
     }
   },
-  createPointFigures: ({ overlay, coordinates, isSelected, isHovered }) => {
+  createPointFigures: ({ overlay, coordinates, isSelected, isHovered, isTouch }) => {
     if (coordinates.length === 0) {
       return []
     }
@@ -217,6 +220,7 @@ const callout: OverlayTemplate<CalloutExtendData> = {
       coordinates,
       isSelected,
       isHovered,
+      isTouch,
       isDrawing: overlay.isDrawing(),
       lock: overlay.lock,
       keyPrefix: 'anchor_'

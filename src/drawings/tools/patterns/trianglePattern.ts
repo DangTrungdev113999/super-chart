@@ -74,26 +74,26 @@ const trianglePattern: OverlayTemplate<PatternExtendData> = {
     let wedge: Coordinate[] | null = null
     if (coordinates.length === 4) {
       const [a, b, c, d] = coordinates
-      if (Math.abs(c.x - a.x) < 1 || Math.abs(d.x - b.x) < 1) {
-        return []
-      }
+      const degenerate = Math.abs(c.x - a.x) < 1 || Math.abs(d.x - b.x) < 1
       const slopeAC = (c.y - a.y) / (c.x - a.x)
       const slopeBD = (d.y - b.y) / (d.x - b.x)
-      if (Math.abs(slopeAC - slopeBD) < 1e-6) {
-        return []
+      // Only the WEDGE is skipped when legs are vertical/parallel — legs,
+      // labels and anchors still render (a degenerate wedge is not a
+      // degenerate drawing).
+      if (!degenerate && Math.abs(slopeAC - slopeBD) >= 1e-6) {
+        let edgeX = Math.min(a.x, b.x, c.x, d.x)
+        let wedgeA = { x: edgeX, y: a.y + (edgeX - a.x) * slopeAC }
+        let wedgeB = { x: edgeX, y: b.y + (edgeX - b.x) * slopeBD }
+        const apexX = (b.y - a.y + a.x * slopeAC - b.x * slopeBD) / (slopeAC - slopeBD)
+        if (apexX < edgeX) {
+          // Crossing sits left of every vertex — cap on the right edge.
+          edgeX = Math.max(a.x, b.x, c.x, d.x)
+          wedgeA = { x: edgeX, y: a.y + (edgeX - a.x) * slopeAC }
+          wedgeB = { x: edgeX, y: b.y + (edgeX - b.x) * slopeBD }
+        }
+        const apex = { x: apexX, y: a.y + (apexX - a.x) * slopeAC }
+        wedge = [wedgeA, wedgeB, apex]
       }
-      let edgeX = Math.min(a.x, b.x, c.x, d.x)
-      let wedgeA = { x: edgeX, y: a.y + (edgeX - a.x) * slopeAC }
-      let wedgeB = { x: edgeX, y: b.y + (edgeX - b.x) * slopeBD }
-      const apexX = (b.y - a.y + a.x * slopeAC - b.x * slopeBD) / (slopeAC - slopeBD)
-      if (apexX < edgeX) {
-        // Crossing sits left of every vertex — cap on the right edge.
-        edgeX = Math.max(a.x, b.x, c.x, d.x)
-        wedgeA = { x: edgeX, y: a.y + (edgeX - a.x) * slopeAC }
-        wedgeB = { x: edgeX, y: b.y + (edgeX - b.x) * slopeBD }
-      }
-      const apex = { x: apexX, y: a.y + (apexX - a.x) * slopeAC }
-      wedge = [wedgeA, wedgeB, apex]
     }
 
     // Solid legs (TV draws three separate solid trend lines).

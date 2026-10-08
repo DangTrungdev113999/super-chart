@@ -95,6 +95,7 @@ const DEFAULT_LEVELS: FibLevelData[] = [
 const gannBox: OverlayTemplate<GannBoxExtendData> = {
   name: 'gannBox',
   totalStep: 3,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

@@ -38,6 +38,7 @@ export interface VertRayExtendData extends LineExtendData {}
 const verticalRayLine: OverlayTemplate<VertRayExtendData> = {
   name: 'verticalRayLine',
   totalStep: 3,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

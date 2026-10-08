@@ -27,8 +27,11 @@ import type { TextBoxData } from '../../text/textBox'
 import {
   baseTextBoxData,
   commitText,
+  liveTextOf,
   openAnnotationEditor,
   pointToCoordinate,
+  resolvedHorzTextAlign,
+  resolvedTextStyles,
   richTextFigureStyle,
   textEditorHooks,
   type AnnotationTextStyle
@@ -56,7 +59,7 @@ const STYLE_KEY = 'priceLabel'
 const DEFAULT_TIP_WIDTH = 6
 
 function getLabelStyles (overlay: Overlay<PriceLabelExtendData>): PriceLabelStyle {
-  return ((overlay.styles?.[STYLE_KEY] ?? {}) as PriceLabelStyle)
+  return resolvedTextStyles(overlay, STYLE_KEY) as PriceLabelStyle
 }
 
 function getPrecision (chart: Chart, overlay: Overlay<PriceLabelExtendData>, isCandle: boolean): number {
@@ -76,6 +79,10 @@ function getLabelText (
   overlay: Overlay<PriceLabelExtendData>,
   isCandle: boolean
 ): string {
+  const live = liveTextOf(overlay)
+  if (live !== undefined) {
+    return live
+  }
   const extendData = overlay.extendData as PriceLabelExtendData | string | undefined
   if (isString(extendData)) {
     return extendData
@@ -98,7 +105,7 @@ function getBoxData (
     bold: styles.bold ?? true,
     horzAlign: 'left',
     vertAlign: 'middle',
-    horzTextAlign: 'center'
+    horzTextAlign: resolvedHorzTextAlign(overlay, 'center')
   }
 }
 
@@ -141,7 +148,7 @@ const priceLabel: OverlayTemplate<PriceLabelExtendData> = {
       boxPaddingVert: 4
     }
   },
-  createPointFigures: ({ chart, overlay, coordinates, yAxis, isSelected, isHovered }) => {
+  createPointFigures: ({ chart, overlay, coordinates, yAxis, isSelected, isHovered, isTouch }) => {
     if (coordinates.length === 0) {
       return []
     }
@@ -184,6 +191,7 @@ const priceLabel: OverlayTemplate<PriceLabelExtendData> = {
       coordinates,
       isSelected,
       isHovered,
+      isTouch,
       isDrawing: overlay.isDrawing(),
       lock: overlay.lock,
       moveDirections: ['vert'],

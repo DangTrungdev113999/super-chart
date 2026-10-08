@@ -21,20 +21,20 @@ import {
   FIB_COLORS,
   TRENDLINE_COLOR,
   TRENDLINE_DASH,
-  distance,
   fibLevel,
   formatLevelLabel,
   labelFigure,
   lineFigure,
-  midpoint,
   readLevels
 } from './fibGeoCommon'
 import type { FibLevelData } from './fibGeoCommon'
 
 /**
- * 'fibCircles' — TradingView Fib Circles (2-point). P1→P2 distance is the
- * base radius r; concentric circles at coeff × r centered on the segment
- * midpoint, plus the optional dashed radial trendline P1→P2.
+ * 'fibCircles' — TradingView Fib Circles (2-point). P1 is the center;
+ * P2 defines the base radius vector. Levels render as ELLIPSES whose
+ * rx = coeff × |Δx| and ry = coeff × |Δy| — radii scale per-axis, so
+ * the circles deform correctly when either axis zooms/pans (TV behavior),
+ * rather than staying round in pixel space.
  */
 
 export interface FibCirclesExtendData {
@@ -59,6 +59,7 @@ const DEFAULT_LEVELS: FibLevelData[] = [
 const fibCircles: OverlayTemplate<FibCirclesExtendData> = {
   name: 'fibCircles',
   totalStep: 3,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,
@@ -71,14 +72,14 @@ const fibCircles: OverlayTemplate<FibCirclesExtendData> = {
     trendlineVisible: true,
     showLabels: true
   },
-  createPointFigures: withPerfPipeline(({ overlay, coordinates, isSelected, isHovered }) => {
+  createPointFigures: withPerfPipeline(({ overlay, coordinates, isSelected, isHovered, isTouch }) => {
     const extendData = (overlay.extendData as FibCirclesExtendData | undefined) ?? {}
     const figures: OverlayFigure[] = []
     if (coordinates.length >= 2) {
       const [p1, p2] = coordinates
-      const baseRadius = distance(p1, p2)
-      if (baseRadius > 0) {
-        const center = midpoint(p1, p2)
+      const dx = Math.abs(p2.x - p1.x)
+      const dy = Math.abs(p2.y - p1.y)
+      if (dx > 0 || dy > 0) {
         if (extendData.trendlineVisible ?? true) {
           // Inherits styles.line (dashed trendline color from the toolbar).
           figures.push(lineFigure('fib_circles_trend', [[p1, p2]], {}))
@@ -90,23 +91,24 @@ const fibCircles: OverlayTemplate<FibCirclesExtendData> = {
           if (!level.visible) {
             return
           }
-          const r = baseRadius * level.coeff
-          if (r <= 0) {
+          const rx = dx * level.coeff
+          const ry = dy * level.coeff
+          if (rx <= 0 && ry <= 0) {
             return
           }
           figures.push({
             key: `fib_circle_${index}`,
-            type: 'circle',
-            attrs: { x: center.x, y: center.y, r },
+            type: 'ellipse',
+            attrs: { x: p1.x, y: p1.y, rx, ry },
             styles: { style: 'stroke', borderColor: level.color, borderSize: lineSize },
-            bounds: { x: center.x - r, y: center.y - r, width: r * 2, height: r * 2 }
+            bounds: { x: p1.x - rx, y: p1.y - ry, width: rx * 2, height: ry * 2 }
           })
           if (showLabels) {
-            // Label hangs off the circle's bottom point (TV labelPoint).
+            // Label hangs off the ellipse's bottom point (TV labelPoint).
             figures.push(labelFigure(
               `fib_circle_label_${index}`,
-              center.x,
-              center.y + r,
+              p1.x,
+              p1.y + ry,
               formatLevelLabel(level),
               level.color,
               'center',
@@ -120,6 +122,7 @@ const fibCircles: OverlayTemplate<FibCirclesExtendData> = {
       coordinates,
       isSelected,
       isHovered,
+      isTouch,
       isDrawing: overlay.isDrawing(),
       lock: overlay.lock,
       keyPrefix: 'anchor_',

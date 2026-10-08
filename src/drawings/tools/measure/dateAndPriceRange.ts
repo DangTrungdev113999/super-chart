@@ -50,7 +50,7 @@ const dateAndPriceRange: OverlayTemplate<DateAndPriceRangeExtendData> = {
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,
 
-  createPointFigures: ({ chart, coordinates, overlay, bounding, isSelected, isHovered }) => {
+  createPointFigures: ({ chart, coordinates, overlay, bounding, isSelected, isHovered, isTouch }) => {
     if (coordinates.length < 2) {
       return []
     }
@@ -181,6 +181,7 @@ const dateAndPriceRange: OverlayTemplate<DateAndPriceRangeExtendData> = {
       coordinates,
       isSelected,
       isHovered,
+      isTouch,
       isDrawing: overlay.isDrawing(),
       lock: overlay.lock,
       keyPrefix: 'anchor_'

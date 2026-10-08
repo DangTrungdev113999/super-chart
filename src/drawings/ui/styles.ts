@@ -265,20 +265,18 @@ const CSS = `
 }
 `
 
-let injected = false
-
 /** Inject the drawings UI stylesheet — idempotent, SSR-safe. */
 export function injectDrawingStyles (): void {
-  if (injected || typeof document === 'undefined') {
+  if (typeof document === 'undefined') {
     return
   }
+  // Dedupe by element id per document — a module-global flag would skip
+  // injection in second documents/iframes and never re-add a removed node.
   if (document.getElementById(STYLE_ID) !== null) {
-    injected = true
     return
   }
   const style = document.createElement('style')
   style.id = STYLE_ID
   style.textContent = CSS
   document.head.appendChild(style)
-  injected = true
 }

@@ -48,6 +48,7 @@ export interface SegmentExtendData extends LineExtendData {}
 const segment: OverlayTemplate<SegmentExtendData> = {
   name: 'segment',
   totalStep: 3,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

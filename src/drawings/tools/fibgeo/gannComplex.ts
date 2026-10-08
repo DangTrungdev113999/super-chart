@@ -114,6 +114,7 @@ function correctToSquare (overlay: Overlay<GannComplexExtendData>, params: Overl
 const gannComplex: OverlayTemplate<GannComplexExtendData> = {
   name: 'gannComplex',
   totalStep: 3,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,
@@ -130,7 +131,7 @@ const gannComplex: OverlayTemplate<GannComplexExtendData> = {
     showLabels: true,
     reverse: false
   },
-  createPointFigures: withPerfPipeline(({ chart, overlay, coordinates, yAxis, isSelected, isHovered }) => {
+  createPointFigures: withPerfPipeline(({ chart, overlay, coordinates, yAxis, isSelected, isHovered, isTouch }) => {
     rememberLineChart(overlay, chart)
     const ext: GannComplexExtendData = isValid(overlay.extendData) ? overlay.extendData : {}
     const figures: OverlayFigure[] = []
@@ -205,6 +206,7 @@ const gannComplex: OverlayTemplate<GannComplexExtendData> = {
       coordinates,
       isSelected,
       isHovered,
+      isTouch,
       isDrawing: overlay.isDrawing(),
       lock: overlay.lock,
       keyPrefix: 'anchor_',
