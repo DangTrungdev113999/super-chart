@@ -176,9 +176,10 @@ function buildCatalog (): DrawingToolGroup[] {
             item('horizontalSegment', 'horizontalSegment', 'Horizontal Segment', 'horizontalLine', caps({ anchorCount: 2 }), LINE_RECIPE),
             item('verticalLine', 'verticalStraightLine', 'Vertical Line', 'verticalLine', caps({ anchorCount: 1 }), LINE_RECIPE, { hotkey: 'V' }),
             item('verticalSegment', 'verticalSegment', 'Vertical Segment', 'verticalLine', caps({ anchorCount: 2 }), LINE_RECIPE),
-            item('crossLine', 'crossLine', 'Cross Line', 'cross', caps({ anchorCount: 1 }), LINE_RECIPE, { available: false }),
+            item('verticalRay', 'verticalRayLine', 'Vertical Ray Line', 'verticalLine', caps({ anchorCount: 2 }), LINE_RECIPE),
+            item('crossLine', 'crossLine', 'Cross Line', 'cross', caps({ anchorCount: 1 }), LINE_RECIPE),
             item('priceLine', 'priceLine', 'Price Line', 'horizontalLine', caps({ anchorCount: 1 }), LINE_RECIPE),
-            item('arrow', 'arrowLine', 'Arrow', 'arrow', caps({ anchorCount: 2 }), LINE_RECIPE, { available: false })
+            item('arrow', 'arrowLine', 'Arrow', 'arrow', caps({ anchorCount: 2 }), LINE_RECIPE)
           ]
         },
         {
@@ -225,10 +226,10 @@ function buildCatalog (): DrawingToolGroup[] {
           id: 'gann',
           items: [
             item('gannFan', 'gannFan', 'Gann Fan', 'trendLine', caps({ anchorCount: 2 }), FIB_RECIPE),
-            item('gannBox', 'gannBox', 'Gann Box', 'rect', caps({ anchorCount: 2 }), FIB_RECIPE, { available: false }),
-            item('gannSquare', 'gannSquare', 'Gann Square', 'rect', caps({ anchorCount: 2 }), FIB_RECIPE, { available: false }),
-            item('gannFixed', 'gannFixed', 'Gann Square Fixed', 'rect', caps({ anchorCount: 2 }), FIB_RECIPE, { available: false }),
-            item('gannComplex', 'gannComplex', 'Gann Complex', 'rect', caps({ anchorCount: 2 }), FIB_RECIPE, { available: false })
+            item('gannBox', 'gannBox', 'Gann Box', 'rect', caps({ anchorCount: 2 }), FIB_RECIPE),
+            item('gannSquare', 'gannSquare', 'Gann Square', 'rect', caps({ anchorCount: 2 }), FIB_RECIPE),
+            item('gannFixed', 'gannFixed', 'Gann Square Fixed', 'rect', caps({ anchorCount: 1 }), FIB_RECIPE),
+            item('gannComplex', 'gannComplex', 'Gann Complex', 'rect', caps({ anchorCount: 2 }), FIB_RECIPE)
           ]
         }
       ]
@@ -240,30 +241,30 @@ function buildCatalog (): DrawingToolGroup[] {
         {
           id: 'chart-patterns',
           items: [
-            item('xabcd', 'xabcd', 'XABCD Pattern', 'xabcd', caps({ anchorCount: 5 }), LINE_RECIPE, { available: false }),
-            item('cypher', 'cypher', 'Cypher Pattern', 'xabcd', caps({ anchorCount: 5 }), LINE_RECIPE, { available: false }),
-            item('headAndShoulders', 'headAndShoulders', 'Head and Shoulders', 'elliottCorrection', caps({ anchorCount: 7 }), LINE_RECIPE, { available: false }),
-            item('abcd', 'abcd', 'ABCD Pattern', 'xabcd', caps({ anchorCount: 4 }), LINE_RECIPE, { available: false }),
-            item('threeDrives', 'threeDrives', 'Three Drives', 'elliottImpulse', caps({ anchorCount: 7 }), LINE_RECIPE, { available: false }),
-            item('trianglePattern', 'trianglePattern', 'Triangle Pattern', 'triangle', caps({ anchorCount: 4 }), LINE_RECIPE, { available: false })
+            item('xabcd', 'xabcd', 'XABCD Pattern', 'xabcd', caps({ anchorCount: 5 }), LINE_RECIPE),
+            item('cypher', 'cypher', 'Cypher Pattern', 'xabcd', caps({ anchorCount: 5 }), LINE_RECIPE),
+            item('headAndShoulders', 'headAndShoulders', 'Head and Shoulders', 'elliottCorrection', caps({ anchorCount: 7 }), LINE_RECIPE),
+            item('abcd', 'abcd', 'ABCD Pattern', 'xabcd', caps({ anchorCount: 4 }), LINE_RECIPE),
+            item('threeDrives', 'threeDrives', 'Three Drives', 'elliottImpulse', caps({ anchorCount: 7 }), LINE_RECIPE),
+            item('trianglePattern', 'trianglePattern', 'Triangle Pattern', 'triangle', caps({ anchorCount: 4 }), LINE_RECIPE)
           ]
         },
         {
           id: 'elliott',
           items: [
-            item('elliottImpulse', 'elliottImpulse', 'Elliott Impulse (12345)', 'elliottImpulse', caps({ anchorCount: 6 }), LINE_RECIPE, { available: false }),
-            item('elliottCorrection', 'elliottCorrection', 'Elliott Correction (ABC)', 'elliottCorrection', caps({ anchorCount: 4 }), LINE_RECIPE, { available: false }),
-            item('elliottTriangle', 'elliottTriangle', 'Elliott Triangle (ABCDE)', 'elliottCorrection', caps({ anchorCount: 6 }), LINE_RECIPE, { available: false }),
-            item('elliottDoubleCombo', 'elliottDoubleCombo', 'Elliott Double Combo (WXY)', 'elliottCorrection', caps({ anchorCount: 6 }), LINE_RECIPE, { available: false }),
-            item('elliottTripleCombo', 'elliottTripleCombo', 'Elliott Triple Combo (WXYZ)', 'elliottCorrection', caps({ anchorCount: 7 }), LINE_RECIPE, { available: false })
+            item('elliottImpulse', 'elliottImpulse', 'Elliott Impulse (12345)', 'elliottImpulse', caps({ anchorCount: 6 }), LINE_RECIPE),
+            item('elliottCorrection', 'elliottCorrection', 'Elliott Correction (ABC)', 'elliottCorrection', caps({ anchorCount: 4 }), LINE_RECIPE),
+            item('elliottTriangle', 'elliottTriangle', 'Elliott Triangle (ABCDE)', 'elliottCorrection', caps({ anchorCount: 6 }), LINE_RECIPE),
+            item('elliottDoubleCombo', 'elliottDoubleCombo', 'Elliott Double Combo (WXY)', 'elliottCorrection', caps({ anchorCount: 6 }), LINE_RECIPE),
+            item('elliottTripleCombo', 'elliottTripleCombo', 'Elliott Triple Combo (WXYZ)', 'elliottCorrection', caps({ anchorCount: 7 }), LINE_RECIPE)
           ]
         },
         {
           id: 'cycles',
           items: [
-            item('cyclicLines', 'cyclicLines', 'Cyclic Lines', 'verticalLine', caps({ anchorCount: 2 }), LINE_RECIPE, { available: false }),
-            item('timeCycles', 'timeCycles', 'Time Cycles', 'verticalLine', caps({ anchorCount: 2 }), LINE_RECIPE, { available: false }),
-            item('sineLine', 'sineLine', 'Sine Line', 'curve', caps({ anchorCount: 2 }), LINE_RECIPE, { available: false })
+            item('cyclicLines', 'cyclicLines', 'Cyclic Lines', 'verticalLine', caps({ anchorCount: 2 }), LINE_RECIPE),
+            item('timeCycles', 'timeCycles', 'Time Cycles', 'verticalLine', caps({ anchorCount: 2 }), LINE_RECIPE),
+            item('sineLine', 'sineLine', 'Sine Line', 'curve', caps({ anchorCount: 2 }), LINE_RECIPE)
           ]
         }
       ]
@@ -276,15 +277,15 @@ function buildCatalog (): DrawingToolGroup[] {
           id: 'forecast',
           items: [
             item('forecast', 'forecast', 'Forecast', 'forecast', caps({ anchorCount: 2 }), MEASURE_RECIPE),
-            item('projection', 'projection', 'Projection', 'forecast', caps({ anchorCount: 2 }), MEASURE_RECIPE, { available: false }),
-            item('barsPattern', 'barsPattern', 'Bars Pattern', 'path', caps({ anchorCount: 2 }), MEASURE_RECIPE, { available: false }),
-            item('ghostFeed', 'ghostFeed', 'Ghost Feed', 'path', caps({ anchorCount: 2 }), MEASURE_RECIPE, { available: false })
+            item('projection', 'projection', 'Projection', 'forecast', caps({ anchorCount: 3 }), MEASURE_RECIPE),
+            item('barsPattern', 'barsPattern', 'Bars Pattern', 'path', caps({ anchorCount: 2 }), MEASURE_RECIPE),
+            item('ghostFeed', 'ghostFeed', 'Ghost Feed', 'path', caps({ anchorCount: 2 }), MEASURE_RECIPE)
           ]
         },
         {
           id: 'measurers',
           items: [
-            item('measure', 'measure', 'Measure', 'measure', caps({ anchorCount: 2, snap45: false }), MEASURE_RECIPE),
+            item('measure', 'measure', 'Measure', 'measure', caps({ anchorCount: 0, freehand: true, snap45: false }), MEASURE_RECIPE),
             item('dateRange', 'dateRange', 'Date Range', 'dateRange', caps({ anchorCount: 2 }), MEASURE_RECIPE),
             item('priceRange', 'priceRange', 'Price Range', 'priceRange', caps({ anchorCount: 2 }), MEASURE_RECIPE),
             item('dateAndPriceRange', 'dateAndPriceRange', 'Date and Price Range', 'dateRange', caps({ anchorCount: 2 }), MEASURE_RECIPE),
@@ -301,19 +302,19 @@ function buildCatalog (): DrawingToolGroup[] {
         {
           id: 'brushes',
           items: [
-            item('brush', 'brush', 'Brush', 'brush', caps({ anchorCount: 0, freehand: true, snap45: false }), SHAPE_RECIPE, { available: false }),
-            item('highlighter', 'highlighter', 'Highlighter', 'highlighter', caps({ anchorCount: 0, freehand: true, snap45: false }), SHAPE_RECIPE, { available: false }),
+            item('brush', 'brush', 'Brush', 'brush', caps({ anchorCount: 0, freehand: true, snap45: false }), SHAPE_RECIPE),
+            item('highlighter', 'highlighter', 'Highlighter', 'highlighter', caps({ anchorCount: 0, freehand: true, snap45: false }), SHAPE_RECIPE),
             item('path', 'path', 'Path', 'path', caps({ anchorCount: -1, snap45: false }), SHAPE_RECIPE)
           ]
         },
         {
           id: 'arrows',
           items: [
-            item('arrowMarkUp', 'arrowMarkUp', 'Arrow Mark Up', 'arrow', caps({ anchorCount: 1, snap45: false }), SHAPE_RECIPE, { available: false }),
-            item('arrowMarkDown', 'arrowMarkDown', 'Arrow Mark Down', 'arrow', caps({ anchorCount: 1, snap45: false }), SHAPE_RECIPE, { available: false }),
-            item('arrowMarkLeft', 'arrowMarkLeft', 'Arrow Mark Left', 'arrow', caps({ anchorCount: 1, snap45: false }), SHAPE_RECIPE, { available: false }),
-            item('arrowMarkRight', 'arrowMarkRight', 'Arrow Mark Right', 'arrow', caps({ anchorCount: 1, snap45: false }), SHAPE_RECIPE, { available: false }),
-            item('arrowMarker', 'arrowMarker', 'Arrow Marker', 'arrow', caps({ anchorCount: 1, snap45: false }), SHAPE_RECIPE, { available: false })
+            item('arrowMarkUp', 'arrowMarkUp', 'Arrow Mark Up', 'arrow', caps({ anchorCount: 1, snap45: false }), SHAPE_RECIPE),
+            item('arrowMarkDown', 'arrowMarkDown', 'Arrow Mark Down', 'arrow', caps({ anchorCount: 1, snap45: false }), SHAPE_RECIPE),
+            item('arrowMarkLeft', 'arrowMarkLeft', 'Arrow Mark Left', 'arrow', caps({ anchorCount: 1, snap45: false }), SHAPE_RECIPE),
+            item('arrowMarkRight', 'arrowMarkRight', 'Arrow Mark Right', 'arrow', caps({ anchorCount: 1, snap45: false }), SHAPE_RECIPE),
+            item('arrowMarker', 'arrowMarker', 'Arrow Marker', 'arrow', caps({ anchorCount: 2, snap45: false }), SHAPE_RECIPE)
           ]
         },
         {
@@ -325,9 +326,9 @@ function buildCatalog (): DrawingToolGroup[] {
             item('circle', 'circle', 'Circle', 'circle', caps({ anchorCount: 2 }), SHAPE_RECIPE),
             item('ellipse', 'ellipse', 'Ellipse', 'ellipse', caps({ anchorCount: 2 }), SHAPE_RECIPE),
             item('triangle', 'triangle', 'Triangle', 'triangle', caps({ anchorCount: 3 }), SHAPE_RECIPE),
-            item('arc', 'arc', 'Arc', 'arc', caps({ anchorCount: 2 }), SHAPE_RECIPE),
+            item('arc', 'arc', 'Arc', 'arc', caps({ anchorCount: 3 }), SHAPE_RECIPE),
             item('curve', 'curve', 'Curve', 'curve', caps({ anchorCount: 2 }), SHAPE_RECIPE),
-            item('doubleCurve', 'doubleCurve', 'Double Curve', 'curve', caps({ anchorCount: 3 }), SHAPE_RECIPE),
+            item('doubleCurve', 'doubleCurve', 'Double Curve', 'curve', caps({ anchorCount: 2 }), SHAPE_RECIPE),
             item('polyline', 'polyline', 'Polyline', 'polyline', caps({ anchorCount: -1 }), SHAPE_RECIPE)
           ]
         }

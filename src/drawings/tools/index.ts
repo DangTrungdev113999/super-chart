@@ -37,13 +37,21 @@ import fibSpeedArcs from './fibgeo/fibSpeedArcs'
 import fibSpeedFan from './fibgeo/fibSpeedFan'
 import fibSpiral from './fibgeo/fibSpiral'
 import fibWedge from './fibgeo/fibWedge'
+import gannBox from './fibgeo/gannBox'
+import gannComplex from './fibgeo/gannComplex'
 import gannFan from './fibgeo/gannFan'
+import gannFixed from './fibgeo/gannFixed'
+import gannSquare from './fibgeo/gannSquare'
 
+import barsPattern from './measure/barsPattern'
 import dateAndPriceRange from './measure/dateAndPriceRange'
 import dateRange from './measure/dateRange'
+import forecast from './measure/forecast'
+import ghostFeed from './measure/ghostFeed'
 import longPosition from './measure/longPosition'
 import measure from './measure/measure'
 import priceRange from './measure/priceRange'
+import projection from './measure/projection'
 import shortPosition from './measure/shortPosition'
 
 import insidePitchfork from './pitchforks/insidePitchfork'
@@ -51,14 +59,19 @@ import modifiedSchiffPitchfork from './pitchforks/modifiedSchiffPitchfork'
 import pitchfork from './pitchforks/pitchfork'
 import schiffPitchfork from './pitchforks/schiffPitchfork'
 
+import arrowLine from './lines/arrowLine'
+import crossLine from './lines/crossLine'
 import horizontalRayLine from './lines/horizontalRayLine'
 import horizontalSegment from './lines/horizontalSegment'
 import horizontalStraightLine from './lines/horizontalStraightLine'
 import infoLine from './lines/infoLine'
+import priceLine from './lines/priceLine'
 import rayLine from './lines/rayLine'
 import segment from './lines/segment'
 import straightLine from './lines/straightLine'
 import trendAngle from './lines/trendAngle'
+import verticalRayLine from './lines/verticalRayLine'
+import verticalSegment from './lines/verticalSegment'
 import verticalStraightLine from './lines/verticalStraightLine'
 
 import disjointChannel from './channels/disjointChannel'
@@ -78,6 +91,29 @@ import polyline from './shapes/polyline'
 import rect from './shapes/rect'
 import rotatedRect from './shapes/rotatedRect'
 import triangle from './shapes/triangle'
+
+import abcd from './patterns/abcd'
+import cyclicLines from './patterns/cyclicLines'
+import cypher from './patterns/cypher'
+import elliottCorrection from './patterns/elliottCorrection'
+import elliottDoubleCombo from './patterns/elliottDoubleCombo'
+import elliottImpulse from './patterns/elliottImpulse'
+import elliottTriangle from './patterns/elliottTriangle'
+import elliottTripleCombo from './patterns/elliottTripleCombo'
+import headAndShoulders from './patterns/headAndShoulders'
+import sineLine from './patterns/sineLine'
+import threeDrives from './patterns/threeDrives'
+import timeCycles from './patterns/timeCycles'
+import trianglePattern from './patterns/trianglePattern'
+import xabcd from './patterns/xabcd'
+
+import arrowMarkDown from './marks/arrowMarkDown'
+import arrowMarker from './marks/arrowMarker'
+import arrowMarkLeft from './marks/arrowMarkLeft'
+import arrowMarkRight from './marks/arrowMarkRight'
+import arrowMarkUp from './marks/arrowMarkUp'
+import brush from './marks/brush'
+import highlighter from './marks/highlighter'
 
 /**
  * Drawing-subsystem tool registry — self-registers on module load so
@@ -108,25 +144,38 @@ const drawingTools = [
   fibSpeedFan,
   fibSpiral,
   fibWedge,
+  gannBox,
+  gannComplex,
   gannFan,
+  gannFixed,
+  gannSquare,
+  barsPattern,
   dateAndPriceRange,
   dateRange,
+  forecast,
+  ghostFeed,
   longPosition,
   measure,
   priceRange,
+  projection,
   shortPosition,
   insidePitchfork,
   modifiedSchiffPitchfork,
   pitchfork,
   schiffPitchfork,
+  arrowLine,
+  crossLine,
   horizontalRayLine,
   horizontalSegment,
   horizontalStraightLine,
   infoLine,
+  priceLine,
   rayLine,
   segment,
   straightLine,
   trendAngle,
+  verticalRayLine,
+  verticalSegment,
   verticalStraightLine,
   disjointChannel,
   flatTopBottom,
@@ -143,7 +192,28 @@ const drawingTools = [
   polyline,
   rect,
   rotatedRect,
-  triangle
+  triangle,
+  abcd,
+  cyclicLines,
+  cypher,
+  elliottCorrection,
+  elliottDoubleCombo,
+  elliottImpulse,
+  elliottTriangle,
+  elliottTripleCombo,
+  headAndShoulders,
+  sineLine,
+  threeDrives,
+  timeCycles,
+  trianglePattern,
+  xabcd,
+  arrowMarkDown,
+  arrowMarker,
+  arrowMarkLeft,
+  arrowMarkRight,
+  arrowMarkUp,
+  brush,
+  highlighter
 ]
 
 drawingTools.forEach(template => {
