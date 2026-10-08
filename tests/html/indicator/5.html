@@ -20,7 +20,7 @@ limitations under the License.
     <meta name="theme-color" content="#000000" />
     <meta name="keywords" content="kline time-line candlestick stock chart canvas k线 行情 蜡烛图 分时图 技术指标 图表"/>
     <meta name="description" content="FP KTR/KCB levels (crazii formulas) plus Pivot/Bullishness/BoysPressure placeholders"/>
-    <script type="text/javascript" src="../../../dist/klinecharts.min.js"></script>
+    <script type="text/javascript" src="../../../dist/umd/super-chart.min.js"></script>
     <script type="text/javascript" src="../../js/dataSource.js"></script>
     <link rel="stylesheet" type="text/css" href="../../css/chart.css"/>
     <title>Indicator -- FP KTR Bands / KCB Targets / Pivot / Bullishness / Boys Pressure</title>
@@ -31,7 +31,7 @@ limitations under the License.
     <div></div>
     <script>
       window.onload = function () {
-        var chart = klinecharts.init('chart')
+        var chart = superChart.init('chart')
         chart.createIndicator('FP_KTR_BANDS', false, { id: 'candle_pane' })
         chart.createIndicator('FP_KCB_TARGETS', false, { id: 'candle_pane' })
         chart.createIndicator('FP_PIVOT_LEVELS', false, { id: 'candle_pane' })

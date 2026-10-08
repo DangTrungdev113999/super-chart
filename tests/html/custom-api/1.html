@@ -20,7 +20,7 @@ limitations under the License.
     <meta name="theme-color" content="#000000" />
     <meta name="keywords" content="kline time-line candlestick stock chart canvas k线 行情 蜡烛图 分时图 技术指标 图表"/>
     <meta name="description" content="shape test"/>
-    <script type="text/javascript" src="../../../dist/klinecharts.min.js"></script>
+    <script type="text/javascript" src="../../../dist/umd/super-chart.min.js"></script>
     <script type="text/javascript" src="../../js/dataSource.js"></script>
     <link rel="stylesheet" type="text/css" href="../../css/chart.css"/>
     <title>Custom Api -- Initialize settings</title>
@@ -30,14 +30,14 @@ limitations under the License.
     <div id="chart"></div>
     <script>
       window.onload = function () {
-        var chart = klinecharts.init('chart', {
+        var chart = superChart.init('chart', {
           customApi: {
             formatDate: function (dateTimeFormat, timestamp, format, type) {
-              return klinecharts.utils.formatDate(dateTimeFormat, timestamp, 'YYYY-MM-DD HH:mm:ss')
+              return superChart.utils.formatDate(dateTimeFormat, timestamp, 'YYYY-MM-DD HH:mm:ss')
             },
             formatBigNumber: function (value) {
               const v = +value
-              if (klinecharts.utils.isNumber(v)) {
+              if (superChart.utils.isNumber(v)) {
                 if (value > 1000000000) {
                   return `${+((v / 1000000000).toFixed(3))}十亿`
                 }

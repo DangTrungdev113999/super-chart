@@ -20,7 +20,7 @@ limitations under the License.
     <meta name="theme-color" content="#000000" />
     <meta name="keywords" content="kline time-line candlestick stock chart canvas k线 行情 蜡烛图 分时图 技术指标 图表"/>
     <meta name="description" content="shape test"/>
-    <script type="text/javascript" src="../../../dist/klinecharts.min.js"></script>
+    <script type="text/javascript" src="../../../dist/umd/super-chart.min.js"></script>
     <script type="text/javascript" src="../../js/dataSource.js"></script>
     <link rel="stylesheet" type="text/css" href="../../css/chart.css"/>
     <title>Indicator -- Custom2</title>
@@ -31,7 +31,7 @@ limitations under the License.
     <script>
       window.onload = function () {
         // Register indicator
-        klinecharts.registerIndicator({
+        superChart.registerIndicator({
           name: 'TEST-Render',
           precision: 2,
           calc: function (kLineDataList) {
@@ -63,7 +63,7 @@ limitations under the License.
             }
           }
         })
-        var chart = klinecharts.init('chart')
+        var chart = superChart.init('chart')
         chart.createIndicator('MA', false, { id: 'candle_pane' })
         chart.createIndicator('EMA', true, { id: 'candle_pane' })
         chart.createIndicator('TEST-Render', true, { id: 'candle_pane' })

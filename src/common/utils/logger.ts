@@ -25,7 +25,7 @@ function log (templateText: string, tagStyle: string, messageStyle: string, api:
 
 export function logWarn (api: string, invalidParam: string, append?: string): void {
   log(
-    '%c😑 klinecharts warning%c %s%s%s',
+    '%c😑 super-chart warning%c %s%s%s',
     'padding:3px 4px;border-radius:2px;color:#ffffff;background-color:#FF9600',
     'color:#FF9600',
     api, invalidParam, append ?? ''
@@ -34,7 +34,7 @@ export function logWarn (api: string, invalidParam: string, append?: string): vo
 
 export function logError (api: string, invalidParam: string, append?: string): void {
   log(
-    '%c😟 klinecharts error%c %s%s%s',
+    '%c😟 super-chart error%c %s%s%s',
     'padding:3px 4px;border-radius:2px;color:#ffffff;background-color:#F92855;',
     'color:#F92855;',
     api, invalidParam, append ?? ''
@@ -43,7 +43,7 @@ export function logError (api: string, invalidParam: string, append?: string): v
 
 export function logTag (): void {
   log(
-    '%c❤️ Welcome to klinecharts. Version is __VERSION__',
+    '%c❤️ Welcome to super-chart. Version is __VERSION__',
     'border-radius:4px;border:dashed 1px #1677FF;line-height:70px;padding:0 20px;margin:16px 0;font-size:14px;color:#1677FF;',
     '',
     '',

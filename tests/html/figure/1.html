@@ -25,7 +25,7 @@ limitations under the License.
     <meta name="description" content="shape test" />
     <script
       type="text/javascript"
-      src="../../../dist/klinecharts.min.js"
+      src="../../../dist/umd/super-chart.min.js"
     ></script>
     <script type="text/javascript" src="../../js/dataSource.js"></script>
     <link rel="stylesheet" type="text/css" href="../../css/chart.css" />
@@ -37,7 +37,7 @@ limitations under the License.
     <script>
       // Testing figure bounding box with 0 width or height
 
-      klinecharts.registerOverlay({
+      superChart.registerOverlay({
         name: "rect",
         totalStep: 3,
         needDefaultPointFigure: true,
@@ -63,7 +63,7 @@ limitations under the License.
       });
 
       window.onload = function () {
-        var chart = klinecharts.init("chart");
+        var chart = superChart.init("chart");
         chart.createIndicator("EMA");
         chart.applyNewData(generated());
         // Create any
