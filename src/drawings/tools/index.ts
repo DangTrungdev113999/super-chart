@@ -16,6 +16,34 @@ import { registerOverlay } from '../../extension/overlay/index'
 
 import textNote from './text'
 
+import anchoredNote from './annotations/anchoredNote'
+import anchoredText from './annotations/anchoredText'
+import callout from './annotations/callout'
+import comment from './annotations/comment'
+import flagMark from './annotations/flagMark'
+import simpleTag from './annotations/note'
+import priceLabel from './annotations/priceLabel'
+import signpost from './annotations/signpost'
+import table from './annotations/table'
+
+import fibChannel from './fibonacci/fibChannel'
+import fibExtension from './fibonacci/fibExtension'
+import fibRetracement from './fibonacci/fibRetracement'
+import fibTimeExtension from './fibonacci/fibTimeExtension'
+import fibTimeZone from './fibonacci/fibTimeZone'
+
+import fibCircles from './fibgeo/fibCircles'
+import fibSpeedArcs from './fibgeo/fibSpeedArcs'
+import fibSpeedFan from './fibgeo/fibSpeedFan'
+import fibSpiral from './fibgeo/fibSpiral'
+import fibWedge from './fibgeo/fibWedge'
+import gannFan from './fibgeo/gannFan'
+
+import dateAndPriceRange from './measure/dateAndPriceRange'
+import dateRange from './measure/dateRange'
+import measure from './measure/measure'
+import priceRange from './measure/priceRange'
+
 /**
  * Drawing-subsystem tool registry — self-registers on module load so
  * `import ... from 'super-chart'` makes every rebuilt tool available to
@@ -25,11 +53,33 @@ import textNote from './text'
  */
 
 const drawingTools = [
-  textNote
+  textNote,
+  anchoredNote,
+  anchoredText,
+  callout,
+  comment,
+  flagMark,
+  simpleTag,
+  priceLabel,
+  signpost,
+  table,
+  fibChannel,
+  fibExtension,
+  fibRetracement,
+  fibTimeExtension,
+  fibTimeZone,
+  fibCircles,
+  fibSpeedArcs,
+  fibSpeedFan,
+  fibSpiral,
+  fibWedge,
+  gannFan,
+  dateAndPriceRange,
+  dateRange,
+  measure,
+  priceRange
 ]
 
 drawingTools.forEach(template => {
   registerOverlay(template)
 })
-
-export {}
