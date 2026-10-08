@@ -107,3 +107,50 @@ export type { RichTextAttrs, RichTextStyle } from './figures/richText'
 // ─── Tool templates ──────────────────────────────────────────────────────────
 export { default as textNoteTool } from './tools/text'
 export type { TextToolExtendData, TextToolStyle } from './tools/text'
+
+// ─── Serialization + history + persistence + manager (DP-4/5) ────────────────
+export {
+  serializeOverlay,
+  serializedToOverlayCreate,
+  serializedFingerprint,
+  migrateDrawingV1toV2
+} from './serialize'
+export type {
+  SerializedDrawing,
+  SerializedDrawingPoint,
+  LegacyDrawingV1
+} from './serialize'
+
+export { createDrawingHistory } from './history'
+export type {
+  DrawingHistory,
+  UndoCommand,
+  UndoApply
+} from './history'
+
+export {
+  createMemoryDrawingStore,
+  createLocalStorageStore,
+  createIndexedDBStore,
+  createHttpDrawingStore,
+  createCompositeStore,
+  withBroadcastSync
+} from './persistence'
+export type {
+  DrawingStore,
+  DrawingScope,
+  DrawingChangeSet,
+  DrawingStoreEvent,
+  DrawingStoreLoadResult,
+  DrawingStoreApplyMeta,
+  CompositeStoreOptions,
+  HttpAdapterOptions
+} from './persistence'
+
+export { createDrawingManager } from './manager'
+export type {
+  DrawingManager,
+  DrawingManagerOptions,
+  DrawingsEventType,
+  DrawingsEventCallback
+} from './manager'

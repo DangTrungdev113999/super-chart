@@ -79,6 +79,7 @@ export interface Chart extends Store {
   getIndicators: (filter?: IndicatorFilter) => Indicator[]
   createOverlay: (value: string | OverlayCreate | Array<string | OverlayCreate>) => Nullable<string> | Array<Nullable<string>>
   getOverlays: (filter?: OverlayFilter) => Overlay[]
+  getOverlayById: (id: Nullable<string>) => Nullable<Overlay>
   selectOverlay: (id: Nullable<string>) => void
   setPaneOptions: (options: PaneOptions) => void
   getPaneOptions: (id?: string) => Nullable<PaneOptions> | PaneOptions[]
@@ -827,6 +828,13 @@ export default class ChartImp implements Chart {
 
   getOverlays (filter?: OverlayFilter): Overlay[] {
     return this._chartStore.getOverlaysByFilter(filter ?? {})
+  }
+
+  /**
+   * O(1) id lookup — backed by the store's id map (no pane scan).
+   */
+  getOverlayById (id: Nullable<string>): Nullable<Overlay> {
+    return this._chartStore.getOverlayById(id)
   }
 
   /**

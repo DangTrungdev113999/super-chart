@@ -208,6 +208,13 @@ export interface Overlay<E = unknown> extends OverlayEventCollection<E> {
   ghost: boolean
 
   /**
+   * Transient overlays render and interact normally but are excluded from
+   * persistence, undo history, and drawings.list() — e.g. the measure
+   * ruler, which vanishes on deselect by design.
+   */
+  transient?: boolean
+
+  /**
    * Whether the overlay was mirrored onto this chart by a chart-sync layer
    * (as opposed to created by this chart's own user/persistence). Hosts can
    * use this to skip duplicate persistence/history bookkeeping for mirrors.
@@ -423,6 +430,8 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
   currentStep = OVERLAY_DRAW_STEP_START
   lock = false
   ghost = false
+
+  transient = false
 
   synced = false
   visible = true
