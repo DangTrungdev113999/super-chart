@@ -326,6 +326,13 @@ export default class StoreImp implements Store {
   private readonly _overlays = new Map<string, OverlayImp[]>()
 
   /**
+   * O(1) id → overlay lookup (completed AND in-progress overlays). Maintained
+   * in addOverlays/removeOverlay/destroy — saves the full pane scan on every
+   * id-filtered getOverlaysByFilter call (sync-apply, select, hit lookups).
+   */
+  private readonly _overlayById = new Map<string, OverlayImp>()
+
+  /**
    * Overlay information in painting
    */
   private _progressOverlayInfo: Nullable<ProgressOverlayInfo> = null
@@ -1341,13 +1348,23 @@ export default class StoreImp implements Store {
 
   getOverlaysByFilter (filter: OverlayFilter): OverlayImp[] {
     const { id, groupId, paneId, name } = filter
+    // Fast path: an id lookup resolves through the map instead of scanning
+    // every pane's overlay list (previously O(total overlays) per call).
+    if (isValid(id)) {
+      const overlay = this._overlayById.get(id)
+      if (
+        isValid(overlay) &&
+        (!isValid(groupId) || overlay.groupId === groupId) &&
+        (!isValid(name) || overlay.name === name) &&
+        (!isValid(paneId) || overlay.paneId === paneId)
+      ) {
+        return [overlay]
+      }
+      return []
+    }
     const match: ((overlay: OverlayImp) => boolean) = overlay => {
-      if (isValid(id)) {
-        return overlay.id === id
-      } else {
-        if (isValid(groupId)) {
-          return overlay.groupId === groupId && (!isValid(name) || overlay.name === name)
-        }
+      if (isValid(groupId)) {
+        return overlay.groupId === groupId && (!isValid(name) || overlay.name === name)
       }
       return !isValid(name) || overlay.name === name
     }
@@ -1393,16 +1410,9 @@ export default class StoreImp implements Store {
     const createdOverlays: OverlayImp[] = []
     const ids = os.map((create, index) => {
       if (isValid(create.id)) {
-        let findOverlay: Nullable<OverlayImp> = null
-        for (const item of this._overlays) {
-          const overlays = item[1]
-          const overlay = overlays.find(o => o.id === create.id)
-          if (isValid(overlay)) {
-            findOverlay = overlay
-            break
-          }
-        }
-        if (isValid(findOverlay)) {
+        // Dedupe via the id map — also catches the in-progress overlay, which
+        // the previous pane-list scan missed entirely.
+        if (isValid(this._overlayById.get(create.id))) {
           return create.id
         }
       }
@@ -1416,6 +1426,7 @@ export default class StoreImp implements Store {
         const zLevel = this.getOverlaysByPaneId(paneId).length
         create.zLevel ??= zLevel
         overlay.override(create)
+        this._overlayById.set(id, overlay)
         if (overlay.ghost) {
           // Ghost overlays are passive mirrors of drawings on other charts:
           // they never occupy the drawing-progress slot and never take input.
@@ -1433,6 +1444,7 @@ export default class StoreImp implements Store {
           const displaced = this._progressOverlayInfo
           this._progressOverlayInfo = { paneId, overlay, appointPaneFlag: appointPaneFlags[index] }
           if (isValid(displaced)) {
+            this._overlayById.delete(displaced.overlay.id)
             try {
               displaced.overlay.onRemoved?.({ overlay: displaced.overlay, chart: this._chart })
             } catch {}
@@ -1592,6 +1604,7 @@ export default class StoreImp implements Store {
       if (paneOverlays.length === 0) {
         this._overlays.delete(paneId)
       }
+      this._overlayById.delete(overlay.id)
       this.executeAction('onOverlayChange', { type: 'remove', overlay })
     })
     if (updatePaneIds.length > 0) {
@@ -1670,9 +1683,11 @@ export default class StoreImp implements Store {
       if (overlay?.id !== infoOverlay?.id) {
         if (isValid(overlay)) {
           processOnDeselectedEvent(overlay, figure)
+          this.executeAction('onOverlayChange', { type: 'deselect', overlay })
         }
         if (isValid(infoOverlay)) {
           processOnSelectedEvent(infoOverlay, info.figure)
+          this.executeAction('onOverlayChange', { type: 'select', overlay: infoOverlay })
         }
         this._chart.updatePane(UpdateLevel.Overlay, info.paneId)
         if (paneId !== info.paneId) {
@@ -1685,6 +1700,32 @@ export default class StoreImp implements Store {
 
   getClickOverlayInfo (): EventOverlayInfo {
     return this._clickOverlayInfo
+  }
+
+  /**
+   * Programmatic selection — drives the same click-info pipeline a mouse
+   * click does (onSelected/onDeselected hooks + select/deselect change
+   * events + pane repaints). Pass null/undefined to deselect.
+   */
+  selectOverlay (id: Nullable<string>): void {
+    const overlay = isString(id) ? this._overlayById.get(id) ?? null : null
+    this.setClickOverlayInfo(
+      {
+        paneId: overlay?.paneId ?? this._clickOverlayInfo.paneId,
+        overlay,
+        figureType: overlay !== null ? 'other' : 'none',
+        figureIndex: -1,
+        figure: null
+      },
+      (o, f) => {
+        o.onSelected?.({ chart: this._chart, overlay: o, figure: f ?? undefined })
+        return true
+      },
+      (o, f) => {
+        o.onDeselected?.({ chart: this._chart, overlay: o, figure: f ?? undefined })
+        return true
+      }
+    )
   }
 
   isOverlayEmpty (): boolean {
@@ -1737,6 +1778,7 @@ export default class StoreImp implements Store {
     this._clearLastPriceMarkExtendTextUpdateTimer()
     this._taskScheduler.clear()
     this._overlays.clear()
+    this._overlayById.clear()
     this._indicators.clear()
     this._actions.clear()
   }

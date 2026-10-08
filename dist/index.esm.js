@@ -458,6 +458,303 @@ typeof SuppressedError === "function" ? SuppressedError : function (error, suppr
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+function checkOverlayFigureEvent(targetEventType, figure) {
+    var _a;
+    var ignoreEvent = (_a = figure === null || figure === void 0 ? void 0 : figure.ignoreEvent) !== null && _a !== void 0 ? _a : false;
+    if (isBoolean(ignoreEvent)) {
+        return !ignoreEvent;
+    }
+    return !ignoreEvent.includes(targetEventType);
+}
+var OVERLAY_DRAW_STEP_START = 1;
+var OVERLAY_DRAW_STEP_FINISHED = -1;
+function safeStylesJson(styles) {
+    try {
+        return JSON.stringify(styles !== null && styles !== void 0 ? styles : null);
+    }
+    catch (_a) {
+        // Sentinel that never matches a real snapshot — unserializable styles
+        // force a redraw rather than being silently dropped.
+        return '__unserializable__';
+    }
+}
+var OVERLAY_ID_PREFIX = 'overlay_';
+var OVERLAY_FIGURE_KEY_PREFIX = 'overlay_figure_';
+var OverlayImp = /** @class */ (function () {
+    function OverlayImp(overlay) {
+        this.groupId = '';
+        this.totalStep = 1;
+        this.currentStep = OVERLAY_DRAW_STEP_START;
+        this.lock = false;
+        this.ghost = false;
+        this.synced = false;
+        this.visible = true;
+        this.zLevel = 0;
+        this.needDefaultPointFigure = false;
+        this.needDefaultXAxisFigure = false;
+        this.needDefaultYAxisFigure = false;
+        this.mode = 'normal';
+        this.modeSensitivity = 8;
+        this.points = [];
+        this.styles = null;
+        this.createPointFigures = null;
+        this.createXAxisFigures = null;
+        this.createYAxisFigures = null;
+        this.performEventPressedMove = null;
+        this.performEventMoveForDrawing = null;
+        this.onDrawStart = null;
+        this.onDrawing = null;
+        this.onDrawEnd = null;
+        this.onClick = null;
+        this.onDoubleClick = null;
+        this.onRightClick = null;
+        this.onPressedMoveStart = null;
+        this.onPressedMoving = null;
+        this.onPressedMoveEnd = null;
+        this.onMouseMove = null;
+        this.onMouseEnter = null;
+        this.onMouseLeave = null;
+        this.onRemoved = null;
+        this.onSelected = null;
+        this.onDeselected = null;
+        this._prevZLevel = 0;
+        this._prevPressedPoint = null;
+        this._prevPressedPoints = [];
+        this.override(overlay);
+    }
+    OverlayImp.prototype.override = function (overlay) {
+        var _a;
+        // Snapshot only the fields shouldUpdate() compares — a deep clone of the
+        // whole overlay here used to dominate the drag/sync hot path. styles are
+        // compared by value (JSON) because override() merges them in place —
+        // a same-reference compare would silently drop style-only updates.
+        // stringify can throw on non-serializable values (BigInt, throwing
+        // toJSON) — fall back to a reference sentinel so override never throws.
+        // Styles JSON is captured ONLY when the incoming override carries styles;
+        // drag/point overrides skip both stringifies entirely.
+        var stylesJson = isValid(overlay.styles) ? safeStylesJson(this.styles) : undefined;
+        this._prevOverlay = {
+            zLevel: this.zLevel,
+            visible: this.visible,
+            points: this.points.map(function (p) { return (__assign({}, p)); }),
+            extendData: this.extendData,
+            stylesJson: stylesJson
+        };
+        var id = overlay.id, name = overlay.name; overlay.currentStep; var points = overlay.points, styles = overlay.styles, extendData = overlay.extendData, skipDrawReplay = overlay.skipDrawReplay, others = __rest(overlay, ["id", "name", "currentStep", "points", "styles", "extendData", "skipDrawReplay"]);
+        merge(this, others);
+        // Handle extendData separately — always produce a mutable merged result
+        // (frozen objects from Immer/store and their sub-objects cannot be mutated)
+        if (isValid(extendData)) {
+            if (isValid(this.extendData)) {
+                // Clone existing first to ensure all sub-objects are mutable, then merge new values
+                this.extendData = clone(this.extendData);
+                merge(this.extendData, extendData);
+            }
+            else {
+                this.extendData = clone(extendData);
+            }
+        }
+        if (!isString(this.name)) {
+            this.name = name !== null && name !== void 0 ? name : '';
+        }
+        if (!isString(this.id) && isString(id)) {
+            this.id = id;
+        }
+        if (isValid(styles)) {
+            if (this.styles == null || Object.isFrozen(this.styles)) {
+                this.styles = clone(styles);
+            }
+            else {
+                merge(this.styles, styles);
+            }
+        }
+        if (isArray(points) && points.length > 0) {
+            var repeatTotalStep = 0;
+            this.points = __spreadArray([], __read(points), false);
+            if (points.length >= this.totalStep - 1) {
+                this.currentStep = OVERLAY_DRAW_STEP_FINISHED;
+                repeatTotalStep = this.totalStep - 1;
+            }
+            else {
+                this.currentStep = points.length + 1;
+                repeatTotalStep = points.length;
+            }
+            // Prevent wrong drawing due to wrong points
+            if (isFunction(this.performEventMoveForDrawing) && skipDrawReplay !== true) {
+                for (var i = 0; i < repeatTotalStep; i++) {
+                    this.performEventMoveForDrawing({
+                        currentStep: i + 2,
+                        mode: this.mode,
+                        points: this.points,
+                        performPointIndex: i,
+                        performPoint: this.points[i],
+                        prevPoints: this._prevPressedPoints
+                    });
+                }
+            }
+            if (this.currentStep === OVERLAY_DRAW_STEP_FINISHED) {
+                (_a = this.performEventPressedMove) === null || _a === void 0 ? void 0 : _a.call(this, {
+                    currentStep: this.currentStep,
+                    mode: this.mode,
+                    points: this.points,
+                    performPointIndex: this.points.length - 1,
+                    performPoint: this.points[this.points.length - 1],
+                    prevPoints: this._prevPressedPoints
+                });
+            }
+        }
+    };
+    OverlayImp.prototype.getPrevZLevel = function () { return this._prevZLevel; };
+    OverlayImp.prototype.setPrevZLevel = function (zLevel) { this._prevZLevel = zLevel; };
+    OverlayImp.prototype.shouldUpdate = function () {
+        var sort = this._prevOverlay.zLevel !== this.zLevel;
+        // Field-wise compare — JSON.stringify(points) twice per override was the
+        // hot-path bottleneck during drag/draw bursts (O(N) serialization + allocs).
+        var prevPoints = this._prevOverlay.points;
+        var points = this.points;
+        var pointsChanged = prevPoints.length !== points.length;
+        if (!pointsChanged) {
+            for (var i = 0; i < points.length; i++) {
+                var prev = prevPoints[i];
+                var curr = points[i];
+                if (prev.timestamp !== curr.timestamp ||
+                    prev.value !== curr.value ||
+                    prev.dataIndex !== curr.dataIndex) {
+                    pointsChanged = true;
+                    break;
+                }
+            }
+        }
+        var prevStylesJson = this._prevOverlay.stylesJson;
+        var stylesChanged = prevStylesJson !== undefined && prevStylesJson !== safeStylesJson(this.styles);
+        var draw = sort ||
+            pointsChanged ||
+            this._prevOverlay.visible !== this.visible ||
+            this._prevOverlay.extendData !== this.extendData ||
+            stylesChanged;
+        return { sort: sort, draw: draw };
+    };
+    OverlayImp.prototype.nextStep = function () {
+        if (this.currentStep === this.totalStep - 1) {
+            this.currentStep = OVERLAY_DRAW_STEP_FINISHED;
+        }
+        else {
+            this.currentStep++;
+        }
+    };
+    OverlayImp.prototype.forceComplete = function () {
+        this.currentStep = OVERLAY_DRAW_STEP_FINISHED;
+    };
+    OverlayImp.prototype.isDrawing = function () {
+        return this.currentStep !== OVERLAY_DRAW_STEP_FINISHED;
+    };
+    OverlayImp.prototype.isStart = function () {
+        return this.currentStep === OVERLAY_DRAW_STEP_START;
+    };
+    OverlayImp.prototype.eventMoveForDrawing = function (point) {
+        var _a;
+        var pointIndex = this.currentStep - 1;
+        var newPoint = {};
+        if (isNumber(point.timestamp)) {
+            newPoint.timestamp = point.timestamp;
+        }
+        if (isNumber(point.dataIndex)) {
+            newPoint.dataIndex = point.dataIndex;
+        }
+        if (isNumber(point.value)) {
+            newPoint.value = point.value;
+        }
+        this.points[pointIndex] = newPoint;
+        (_a = this.performEventMoveForDrawing) === null || _a === void 0 ? void 0 : _a.call(this, {
+            currentStep: this.currentStep,
+            mode: this.mode,
+            points: this.points,
+            performPointIndex: pointIndex,
+            performPoint: newPoint,
+            prevPoints: this._prevPressedPoints
+        });
+    };
+    OverlayImp.prototype.eventPressedPointMove = function (point, pointIndex, figureKey) {
+        var _a;
+        if (pointIndex >= this.points.length) {
+            while (this.points.length <= pointIndex) {
+                this.points.push({});
+            }
+        }
+        this.points[pointIndex].timestamp = point.timestamp;
+        if (isNumber(point.dataIndex)) {
+            this.points[pointIndex].dataIndex = point.dataIndex;
+        }
+        if (isNumber(point.value)) {
+            this.points[pointIndex].value = point.value;
+        }
+        (_a = this.performEventPressedMove) === null || _a === void 0 ? void 0 : _a.call(this, {
+            currentStep: this.currentStep,
+            points: this.points,
+            mode: this.mode,
+            performPointIndex: pointIndex,
+            performPoint: this.points[pointIndex],
+            prevPoints: this._prevPressedPoints,
+            figureKey: figureKey
+        });
+    };
+    OverlayImp.prototype.startPressedMove = function (point) {
+        this._prevPressedPoint = __assign({}, point);
+        this._prevPressedPoints = clone(this.points);
+    };
+    OverlayImp.prototype.eventPressedOtherMove = function (point, chartStore) {
+        if (this._prevPressedPoint !== null) {
+            var difDataIndex_1 = null;
+            if (isNumber(point.dataIndex) && isNumber(this._prevPressedPoint.dataIndex)) {
+                difDataIndex_1 = point.dataIndex - this._prevPressedPoint.dataIndex;
+            }
+            var difValue_1 = null;
+            if (isNumber(point.value) && isNumber(this._prevPressedPoint.value)) {
+                difValue_1 = point.value - this._prevPressedPoint.value;
+            }
+            this.points = this._prevPressedPoints.map(function (p) {
+                var _a;
+                if (isNumber(p.timestamp)) {
+                    p.dataIndex = chartStore.timestampToDataIndex(p.timestamp);
+                }
+                var newPoint = __assign({}, p);
+                if (isNumber(difDataIndex_1) && isNumber(p.dataIndex)) {
+                    newPoint.dataIndex = p.dataIndex + difDataIndex_1;
+                    newPoint.timestamp = (_a = chartStore.dataIndexToTimestamp(newPoint.dataIndex)) !== null && _a !== void 0 ? _a : undefined;
+                }
+                if (isNumber(difValue_1) && isNumber(p.value)) {
+                    newPoint.value = p.value + difValue_1;
+                }
+                return newPoint;
+            });
+        }
+    };
+    OverlayImp.extend = function (template) {
+        var Custom = /** @class */ (function (_super) {
+            __extends(Custom, _super);
+            function Custom() {
+                return _super.call(this, template) || this;
+            }
+            return Custom;
+        }(OverlayImp));
+        return Custom;
+    };
+    return OverlayImp;
+}());
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+
+ * http://www.apache.org/licenses/LICENSE-2.0
+
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 function createDefaultBounding(bounding) {
     var defaultBounding = {
         width: 0,
@@ -8722,299 +9019,6 @@ function getIndicatorClass(name) {
 function getSupportedIndicators() {
     return Object.keys(indicators);
 }
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
-
- * http://www.apache.org/licenses/LICENSE-2.0
-
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-function checkOverlayFigureEvent(targetEventType, figure) {
-    var _a;
-    var ignoreEvent = (_a = figure === null || figure === void 0 ? void 0 : figure.ignoreEvent) !== null && _a !== void 0 ? _a : false;
-    if (isBoolean(ignoreEvent)) {
-        return !ignoreEvent;
-    }
-    return !ignoreEvent.includes(targetEventType);
-}
-var OVERLAY_DRAW_STEP_START = 1;
-var OVERLAY_DRAW_STEP_FINISHED = -1;
-var OVERLAY_ID_PREFIX = 'overlay_';
-var OVERLAY_FIGURE_KEY_PREFIX = 'overlay_figure_';
-var OverlayImp = /** @class */ (function () {
-    function OverlayImp(overlay) {
-        this.groupId = '';
-        this.totalStep = 1;
-        this.currentStep = OVERLAY_DRAW_STEP_START;
-        this.lock = false;
-        this.ghost = false;
-        this.synced = false;
-        this.visible = true;
-        this.zLevel = 0;
-        this.needDefaultPointFigure = false;
-        this.needDefaultXAxisFigure = false;
-        this.needDefaultYAxisFigure = false;
-        this.mode = 'normal';
-        this.modeSensitivity = 8;
-        this.points = [];
-        this.styles = null;
-        this.createPointFigures = null;
-        this.createXAxisFigures = null;
-        this.createYAxisFigures = null;
-        this.performEventPressedMove = null;
-        this.performEventMoveForDrawing = null;
-        this.onDrawStart = null;
-        this.onDrawing = null;
-        this.onDrawEnd = null;
-        this.onClick = null;
-        this.onDoubleClick = null;
-        this.onRightClick = null;
-        this.onPressedMoveStart = null;
-        this.onPressedMoving = null;
-        this.onPressedMoveEnd = null;
-        this.onMouseMove = null;
-        this.onMouseEnter = null;
-        this.onMouseLeave = null;
-        this.onRemoved = null;
-        this.onSelected = null;
-        this.onDeselected = null;
-        this._prevZLevel = 0;
-        this._prevPressedPoint = null;
-        this._prevPressedPoints = [];
-        this.override(overlay);
-    }
-    OverlayImp.prototype.override = function (overlay) {
-        var _a, _b;
-        // Snapshot only the fields shouldUpdate() compares — a deep clone of the
-        // whole overlay here used to dominate the drag/sync hot path. styles are
-        // compared by value (JSON) because override() merges them in place —
-        // a same-reference compare would silently drop style-only updates.
-        // stringify can throw on non-serializable values (BigInt, throwing
-        // toJSON) — fall back to a reference sentinel so override never throws.
-        var stylesJson = '';
-        try {
-            stylesJson = JSON.stringify((_a = this.styles) !== null && _a !== void 0 ? _a : null);
-        }
-        catch (_c) { }
-        this._prevOverlay = {
-            zLevel: this.zLevel,
-            visible: this.visible,
-            points: this.points.map(function (p) { return (__assign({}, p)); }),
-            extendData: this.extendData,
-            stylesJson: stylesJson
-        };
-        var id = overlay.id, name = overlay.name; overlay.currentStep; var points = overlay.points, styles = overlay.styles, extendData = overlay.extendData, skipDrawReplay = overlay.skipDrawReplay, others = __rest(overlay, ["id", "name", "currentStep", "points", "styles", "extendData", "skipDrawReplay"]);
-        merge(this, others);
-        // Handle extendData separately — always produce a mutable merged result
-        // (frozen objects from Immer/store and their sub-objects cannot be mutated)
-        if (isValid(extendData)) {
-            if (isValid(this.extendData)) {
-                // Clone existing first to ensure all sub-objects are mutable, then merge new values
-                this.extendData = clone(this.extendData);
-                merge(this.extendData, extendData);
-            }
-            else {
-                this.extendData = clone(extendData);
-            }
-        }
-        if (!isString(this.name)) {
-            this.name = name !== null && name !== void 0 ? name : '';
-        }
-        if (!isString(this.id) && isString(id)) {
-            this.id = id;
-        }
-        if (isValid(styles)) {
-            if (this.styles == null || Object.isFrozen(this.styles)) {
-                this.styles = clone(styles);
-            }
-            else {
-                merge(this.styles, styles);
-            }
-        }
-        if (isArray(points) && points.length > 0) {
-            var repeatTotalStep = 0;
-            this.points = __spreadArray([], __read(points), false);
-            if (points.length >= this.totalStep - 1) {
-                this.currentStep = OVERLAY_DRAW_STEP_FINISHED;
-                repeatTotalStep = this.totalStep - 1;
-            }
-            else {
-                this.currentStep = points.length + 1;
-                repeatTotalStep = points.length;
-            }
-            // Prevent wrong drawing due to wrong points
-            if (isFunction(this.performEventMoveForDrawing) && skipDrawReplay !== true) {
-                for (var i = 0; i < repeatTotalStep; i++) {
-                    this.performEventMoveForDrawing({
-                        currentStep: i + 2,
-                        mode: this.mode,
-                        points: this.points,
-                        performPointIndex: i,
-                        performPoint: this.points[i],
-                        prevPoints: this._prevPressedPoints
-                    });
-                }
-            }
-            if (this.currentStep === OVERLAY_DRAW_STEP_FINISHED) {
-                (_b = this.performEventPressedMove) === null || _b === void 0 ? void 0 : _b.call(this, {
-                    currentStep: this.currentStep,
-                    mode: this.mode,
-                    points: this.points,
-                    performPointIndex: this.points.length - 1,
-                    performPoint: this.points[this.points.length - 1],
-                    prevPoints: this._prevPressedPoints
-                });
-            }
-        }
-    };
-    OverlayImp.prototype.getPrevZLevel = function () { return this._prevZLevel; };
-    OverlayImp.prototype.setPrevZLevel = function (zLevel) { this._prevZLevel = zLevel; };
-    OverlayImp.prototype.shouldUpdate = function () {
-        var _a;
-        var sort = this._prevOverlay.zLevel !== this.zLevel;
-        // Field-wise compare — JSON.stringify(points) twice per override was the
-        // hot-path bottleneck during drag/draw bursts (O(N) serialization + allocs).
-        var prevPoints = this._prevOverlay.points;
-        var points = this.points;
-        var pointsChanged = prevPoints.length !== points.length;
-        if (!pointsChanged) {
-            for (var i = 0; i < points.length; i++) {
-                var prev = prevPoints[i];
-                var curr = points[i];
-                if (prev.timestamp !== curr.timestamp ||
-                    prev.value !== curr.value ||
-                    prev.dataIndex !== curr.dataIndex) {
-                    pointsChanged = true;
-                    break;
-                }
-            }
-        }
-        var stylesJson = '';
-        try {
-            stylesJson = JSON.stringify((_a = this.styles) !== null && _a !== void 0 ? _a : null);
-        }
-        catch (_b) { }
-        var draw = sort ||
-            pointsChanged ||
-            this._prevOverlay.visible !== this.visible ||
-            this._prevOverlay.extendData !== this.extendData ||
-            this._prevOverlay.stylesJson !== stylesJson;
-        return { sort: sort, draw: draw };
-    };
-    OverlayImp.prototype.nextStep = function () {
-        if (this.currentStep === this.totalStep - 1) {
-            this.currentStep = OVERLAY_DRAW_STEP_FINISHED;
-        }
-        else {
-            this.currentStep++;
-        }
-    };
-    OverlayImp.prototype.forceComplete = function () {
-        this.currentStep = OVERLAY_DRAW_STEP_FINISHED;
-    };
-    OverlayImp.prototype.isDrawing = function () {
-        return this.currentStep !== OVERLAY_DRAW_STEP_FINISHED;
-    };
-    OverlayImp.prototype.isStart = function () {
-        return this.currentStep === OVERLAY_DRAW_STEP_START;
-    };
-    OverlayImp.prototype.eventMoveForDrawing = function (point) {
-        var _a;
-        var pointIndex = this.currentStep - 1;
-        var newPoint = {};
-        if (isNumber(point.timestamp)) {
-            newPoint.timestamp = point.timestamp;
-        }
-        if (isNumber(point.dataIndex)) {
-            newPoint.dataIndex = point.dataIndex;
-        }
-        if (isNumber(point.value)) {
-            newPoint.value = point.value;
-        }
-        this.points[pointIndex] = newPoint;
-        (_a = this.performEventMoveForDrawing) === null || _a === void 0 ? void 0 : _a.call(this, {
-            currentStep: this.currentStep,
-            mode: this.mode,
-            points: this.points,
-            performPointIndex: pointIndex,
-            performPoint: newPoint,
-            prevPoints: this._prevPressedPoints
-        });
-    };
-    OverlayImp.prototype.eventPressedPointMove = function (point, pointIndex, figureKey) {
-        var _a;
-        if (pointIndex >= this.points.length) {
-            while (this.points.length <= pointIndex) {
-                this.points.push({});
-            }
-        }
-        this.points[pointIndex].timestamp = point.timestamp;
-        if (isNumber(point.dataIndex)) {
-            this.points[pointIndex].dataIndex = point.dataIndex;
-        }
-        if (isNumber(point.value)) {
-            this.points[pointIndex].value = point.value;
-        }
-        (_a = this.performEventPressedMove) === null || _a === void 0 ? void 0 : _a.call(this, {
-            currentStep: this.currentStep,
-            points: this.points,
-            mode: this.mode,
-            performPointIndex: pointIndex,
-            performPoint: this.points[pointIndex],
-            prevPoints: this._prevPressedPoints,
-            figureKey: figureKey
-        });
-    };
-    OverlayImp.prototype.startPressedMove = function (point) {
-        this._prevPressedPoint = __assign({}, point);
-        this._prevPressedPoints = clone(this.points);
-    };
-    OverlayImp.prototype.eventPressedOtherMove = function (point, chartStore) {
-        if (this._prevPressedPoint !== null) {
-            var difDataIndex_1 = null;
-            if (isNumber(point.dataIndex) && isNumber(this._prevPressedPoint.dataIndex)) {
-                difDataIndex_1 = point.dataIndex - this._prevPressedPoint.dataIndex;
-            }
-            var difValue_1 = null;
-            if (isNumber(point.value) && isNumber(this._prevPressedPoint.value)) {
-                difValue_1 = point.value - this._prevPressedPoint.value;
-            }
-            this.points = this._prevPressedPoints.map(function (p) {
-                var _a;
-                if (isNumber(p.timestamp)) {
-                    p.dataIndex = chartStore.timestampToDataIndex(p.timestamp);
-                }
-                var newPoint = __assign({}, p);
-                if (isNumber(difDataIndex_1) && isNumber(p.dataIndex)) {
-                    newPoint.dataIndex = p.dataIndex + difDataIndex_1;
-                    newPoint.timestamp = (_a = chartStore.dataIndexToTimestamp(newPoint.dataIndex)) !== null && _a !== void 0 ? _a : undefined;
-                }
-                if (isNumber(difValue_1) && isNumber(p.value)) {
-                    newPoint.value = p.value + difValue_1;
-                }
-                return newPoint;
-            });
-        }
-    };
-    OverlayImp.extend = function (template) {
-        var Custom = /** @class */ (function (_super) {
-            __extends(Custom, _super);
-            function Custom() {
-                return _super.call(this, template) || this;
-            }
-            return Custom;
-        }(OverlayImp));
-        return Custom;
-    };
-    return OverlayImp;
-}());
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17598,6 +17602,12 @@ var StoreImp = /** @class */ (function () {
          */
         this._overlays = new Map();
         /**
+         * O(1) id → overlay lookup (completed AND in-progress overlays). Maintained
+         * in addOverlays/removeOverlay/destroy — saves the full pane scan on every
+         * id-filtered getOverlaysByFilter call (sync-apply, select, hit lookups).
+         */
+        this._overlayById = new Map();
+        /**
          * Overlay information in painting
          */
         this._progressOverlayInfo = null;
@@ -18521,14 +18531,21 @@ var StoreImp = /** @class */ (function () {
     StoreImp.prototype.getOverlaysByFilter = function (filter) {
         var _a;
         var id = filter.id, groupId = filter.groupId, paneId = filter.paneId, name = filter.name;
-        var match = function (overlay) {
-            if (isValid(id)) {
-                return overlay.id === id;
+        // Fast path: an id lookup resolves through the map instead of scanning
+        // every pane's overlay list (previously O(total overlays) per call).
+        if (isValid(id)) {
+            var overlay = this._overlayById.get(id);
+            if (isValid(overlay) &&
+                (!isValid(groupId) || overlay.groupId === groupId) &&
+                (!isValid(name) || overlay.name === name) &&
+                (!isValid(paneId) || overlay.paneId === paneId)) {
+                return [overlay];
             }
-            else {
-                if (isValid(groupId)) {
-                    return overlay.groupId === groupId && (!isValid(name) || overlay.name === name);
-                }
+            return [];
+        }
+        var match = function (overlay) {
+            if (isValid(groupId)) {
+                return overlay.groupId === groupId && (!isValid(name) || overlay.name === name);
             }
             return !isValid(name) || overlay.name === name;
         };
@@ -18574,42 +18591,25 @@ var StoreImp = /** @class */ (function () {
         var updatePaneIds = [];
         var createdOverlays = [];
         var ids = os.map(function (create, index) {
-            var e_1, _a;
-            var _b, _c, _d, _e, _f, _g, _h, _j;
+            var _a, _b, _c, _d, _e, _f, _g, _h;
             if (isValid(create.id)) {
-                var findOverlay = null;
-                try {
-                    for (var _k = __values(_this._overlays), _l = _k.next(); !_l.done; _l = _k.next()) {
-                        var item = _l.value;
-                        var overlays = item[1];
-                        var overlay = overlays.find(function (o) { return o.id === create.id; });
-                        if (isValid(overlay)) {
-                            findOverlay = overlay;
-                            break;
-                        }
-                    }
-                }
-                catch (e_1_1) { e_1 = { error: e_1_1 }; }
-                finally {
-                    try {
-                        if (_l && !_l.done && (_a = _k.return)) _a.call(_k);
-                    }
-                    finally { if (e_1) throw e_1.error; }
-                }
-                if (isValid(findOverlay)) {
+                // Dedupe via the id map — also catches the in-progress overlay, which
+                // the previous pane-list scan missed entirely.
+                if (isValid(_this._overlayById.get(create.id))) {
                     return create.id;
                 }
             }
             var OverlayClazz = getOverlayInnerClass(create.name);
             if (isValid(OverlayClazz)) {
-                var id = (_b = create.id) !== null && _b !== void 0 ? _b : createId(OVERLAY_ID_PREFIX);
+                var id = (_a = create.id) !== null && _a !== void 0 ? _a : createId(OVERLAY_ID_PREFIX);
                 var overlay = new OverlayClazz();
-                var paneId = (_c = create.paneId) !== null && _c !== void 0 ? _c : PaneIdConstants.CANDLE;
+                var paneId = (_b = create.paneId) !== null && _b !== void 0 ? _b : PaneIdConstants.CANDLE;
                 create.id = id;
-                (_d = create.groupId) !== null && _d !== void 0 ? _d : (create.groupId = id);
+                (_c = create.groupId) !== null && _c !== void 0 ? _c : (create.groupId = id);
                 var zLevel = _this.getOverlaysByPaneId(paneId).length;
-                (_e = create.zLevel) !== null && _e !== void 0 ? _e : (create.zLevel = zLevel);
+                (_d = create.zLevel) !== null && _d !== void 0 ? _d : (create.zLevel = zLevel);
                 overlay.override(create);
+                _this._overlayById.set(id, overlay);
                 if (overlay.ghost) {
                     // Ghost overlays are passive mirrors of drawings on other charts:
                     // they never occupy the drawing-progress slot and never take input.
@@ -18627,10 +18627,11 @@ var StoreImp = /** @class */ (function () {
                     var displaced = _this._progressOverlayInfo;
                     _this._progressOverlayInfo = { paneId: paneId, overlay: overlay, appointPaneFlag: appointPaneFlags[index] };
                     if (isValid(displaced)) {
+                        _this._overlayById.delete(displaced.overlay.id);
                         try {
-                            (_g = (_f = displaced.overlay).onRemoved) === null || _g === void 0 ? void 0 : _g.call(_f, { overlay: displaced.overlay, chart: _this._chart });
+                            (_f = (_e = displaced.overlay).onRemoved) === null || _f === void 0 ? void 0 : _f.call(_e, { overlay: displaced.overlay, chart: _this._chart });
                         }
-                        catch (_m) { }
+                        catch (_j) { }
                         _this.executeAction('onOverlayChange', { type: 'remove', overlay: displaced.overlay });
                     }
                 }
@@ -18638,10 +18639,10 @@ var StoreImp = /** @class */ (function () {
                     if (!_this._overlays.has(paneId)) {
                         _this._overlays.set(paneId, []);
                     }
-                    (_h = _this._overlays.get(paneId)) === null || _h === void 0 ? void 0 : _h.push(overlay);
+                    (_g = _this._overlays.get(paneId)) === null || _g === void 0 ? void 0 : _g.push(overlay);
                 }
                 if (overlay.isStart() && !overlay.ghost) {
-                    (_j = overlay.onDrawStart) === null || _j === void 0 ? void 0 : _j.call(overlay, ({ overlay: overlay, chart: _this._chart }));
+                    (_h = overlay.onDrawStart) === null || _h === void 0 ? void 0 : _h.call(overlay, ({ overlay: overlay, chart: _this._chart }));
                 }
                 createdOverlays.push(overlay);
                 return id;
@@ -18730,7 +18731,7 @@ var StoreImp = /** @class */ (function () {
         var updatePaneIds = [];
         var filterOverlays = this.getOverlaysByFilter(filter);
         filterOverlays.forEach(function (overlay) {
-            var e_2, _a;
+            var e_1, _a;
             var _b, _c;
             var paneId = overlay.paneId;
             var paneOverlays = _this.getOverlaysByPaneId(overlay.paneId);
@@ -18785,12 +18786,12 @@ var StoreImp = /** @class */ (function () {
                         }
                     }
                 }
-                catch (e_2_1) { e_2 = { error: e_2_1 }; }
+                catch (e_1_1) { e_1 = { error: e_1_1 }; }
                 finally {
                     try {
                         if (_f && !_f.done && (_a = _e.return)) _a.call(_e);
                     }
-                    finally { if (e_2) throw e_2.error; }
+                    finally { if (e_1) throw e_1.error; }
                 }
             }
             else {
@@ -18799,6 +18800,7 @@ var StoreImp = /** @class */ (function () {
             if (paneOverlays.length === 0) {
                 _this._overlays.delete(paneId);
             }
+            _this._overlayById.delete(overlay.id);
             _this.executeAction('onOverlayChange', { type: 'remove', overlay: overlay });
         });
         if (updatePaneIds.length > 0) {
@@ -18861,9 +18863,11 @@ var StoreImp = /** @class */ (function () {
             if ((overlay === null || overlay === void 0 ? void 0 : overlay.id) !== (infoOverlay === null || infoOverlay === void 0 ? void 0 : infoOverlay.id)) {
                 if (isValid(overlay)) {
                     processOnDeselectedEvent(overlay, figure);
+                    this.executeAction('onOverlayChange', { type: 'deselect', overlay: overlay });
                 }
                 if (isValid(infoOverlay)) {
                     processOnSelectedEvent(infoOverlay, info.figure);
+                    this.executeAction('onOverlayChange', { type: 'select', overlay: infoOverlay });
                 }
                 this._chart.updatePane(1 /* UpdateLevel.Overlay */, info.paneId);
                 if (paneId !== info.paneId) {
@@ -18875,6 +18879,31 @@ var StoreImp = /** @class */ (function () {
     };
     StoreImp.prototype.getClickOverlayInfo = function () {
         return this._clickOverlayInfo;
+    };
+    /**
+     * Programmatic selection — drives the same click-info pipeline a mouse
+     * click does (onSelected/onDeselected hooks + select/deselect change
+     * events + pane repaints). Pass null/undefined to deselect.
+     */
+    StoreImp.prototype.selectOverlay = function (id) {
+        var _this = this;
+        var _a, _b;
+        var overlay = isString(id) ? (_a = this._overlayById.get(id)) !== null && _a !== void 0 ? _a : null : null;
+        this.setClickOverlayInfo({
+            paneId: (_b = overlay === null || overlay === void 0 ? void 0 : overlay.paneId) !== null && _b !== void 0 ? _b : this._clickOverlayInfo.paneId,
+            overlay: overlay,
+            figureType: overlay !== null ? 'other' : 'none',
+            figureIndex: -1,
+            figure: null
+        }, function (o, f) {
+            var _a;
+            (_a = o.onSelected) === null || _a === void 0 ? void 0 : _a.call(o, { chart: _this._chart, overlay: o, figure: f !== null && f !== void 0 ? f : undefined });
+            return true;
+        }, function (o, f) {
+            var _a;
+            (_a = o.onDeselected) === null || _a === void 0 ? void 0 : _a.call(o, { chart: _this._chart, overlay: o, figure: f !== null && f !== void 0 ? f : undefined });
+            return true;
+        });
     };
     StoreImp.prototype.isOverlayEmpty = function () {
         return this._overlays.size === 0 && this._progressOverlayInfo === null;
@@ -18923,6 +18952,7 @@ var StoreImp = /** @class */ (function () {
         this._clearLastPriceMarkExtendTextUpdateTimer();
         this._taskScheduler.clear();
         this._overlays.clear();
+        this._overlayById.clear();
         this._indicators.clear();
         this._actions.clear();
     };
@@ -21284,6 +21314,8 @@ var OverlayView = /** @class */ (function (_super) {
                 if (checkOverlayFigureEvent('onPressedMoveEnd', figure)) {
                     (_a = overlay.onPressedMoveEnd) === null || _a === void 0 ? void 0 : _a.call(overlay, __assign({ chart: chart, overlay: overlay, figure: figure !== null && figure !== void 0 ? figure : undefined }, event));
                 }
+                // Gesture commit boundary — pairs with 'editStart' emitted on press.
+                chartStore.executeAction('onOverlayChange', { type: 'editEnd', overlay: overlay });
             }
             chartStore.setPressedOverlayInfo({
                 paneId: paneId,
@@ -21400,6 +21432,9 @@ var OverlayView = /** @class */ (function (_super) {
             if (checkOverlayFigureEvent('onPressedMoveStart', figure)) {
                 (_a = overlay.onPressedMoveStart) === null || _a === void 0 ? void 0 : _a.call(overlay, __assign({ chart: pane.getChart(), overlay: overlay, figure: figure }, event));
                 pane.getChart().getChartStore().setPressedOverlayInfo({ paneId: paneId, overlay: overlay, figureType: figureType, figureIndex: figureIndex, figure: figure });
+                // Gesture commit boundary — everything between editStart/editEnd is
+                // one undo/persistence unit (drag gestures emit many 'progress').
+                pane.getChart().getChartStore().executeAction('onOverlayChange', { type: 'editStart', overlay: overlay });
                 return !overlay.isDrawing();
             }
             return false;
@@ -21621,14 +21656,26 @@ var OverlayView = /** @class */ (function (_super) {
         return null;
     };
     OverlayView.prototype.getFigures = function (o, coordinates) {
-        var _a, _b;
+        var _a, _b, _c, _d;
         var widget = this.getWidget();
         var pane = widget.getPane();
         var chart = pane.getChart();
+        var chartStore = chart.getChartStore();
         var yAxis = pane.getAxisComponent();
         var xAxis = chart.getXAxisPane().getAxisComponent();
         var bounding = widget.getBounding();
-        return (_b = (_a = o.createPointFigures) === null || _a === void 0 ? void 0 : _a.call(o, { chart: chart, overlay: o, coordinates: coordinates, bounding: bounding, xAxis: xAxis, yAxis: yAxis })) !== null && _b !== void 0 ? _b : [];
+        var clickInfo = chartStore.getClickOverlayInfo();
+        var hoverInfo = chartStore.getHoverOverlayInfo();
+        return (_d = (_a = o.createPointFigures) === null || _a === void 0 ? void 0 : _a.call(o, {
+            chart: chart,
+            overlay: o,
+            coordinates: coordinates,
+            bounding: bounding,
+            xAxis: xAxis,
+            yAxis: yAxis,
+            isSelected: ((_b = clickInfo.overlay) === null || _b === void 0 ? void 0 : _b.id) === o.id && clickInfo.figureType !== 'none',
+            isHovered: ((_c = hoverInfo.overlay) === null || _c === void 0 ? void 0 : _c.id) === o.id && hoverInfo.figureType !== 'none'
+        })) !== null && _d !== void 0 ? _d : [];
     };
     OverlayView.prototype.drawDefaultFigures = function (ctx, overlay, coordinates) {
         var _this = this;
@@ -25947,6 +25994,12 @@ var EventHandlerImp = /** @class */ (function () {
             pageX: eventLike.pageX,
             pageY: eventLike.pageY,
             isTouch: !event.type.startsWith('mouse') && event.type !== 'contextmenu' && event.type !== 'click' && event.type !== 'wheel',
+            // TouchEvent lacks modifier props — read through a Partial so the
+            // `=== true` normalization to false stays honest.
+            shiftKey: event.shiftKey === true,
+            ctrlKey: event.ctrlKey === true,
+            altKey: event.altKey === true,
+            metaKey: event.metaKey === true,
             preventDefault: function () {
                 if (event.type !== 'touchstart') {
                     // touchstart is passive and cannot be prevented
@@ -27581,6 +27634,13 @@ var ChartImp = /** @class */ (function () {
     ChartImp.prototype.getOverlays = function (filter) {
         return this._chartStore.getOverlaysByFilter(filter !== null && filter !== void 0 ? filter : {});
     };
+    /**
+     * Programmatic selection — same pipeline as a user click (hooks, change
+     * events, repaint). Pass null to deselect.
+     */
+    ChartImp.prototype.selectOverlay = function (id) {
+        this._chartStore.selectOverlay(id);
+    };
     ChartImp.prototype.overrideOverlay = function (override) {
         return this._chartStore.overrideOverlay(override);
     };
@@ -28479,6 +28539,15 @@ function createChartSync(options) {
                             chart.removeOverlay({ id: overlay.id });
                             break;
                         }
+                        // Local-only lifecycle — selection state and drag-gesture brackets
+                        // are per-chart concerns; mirroring them would deselect the peer's
+                        // own drawing and corrupt its undo/persistence boundaries.
+                        case 'select':
+                        case 'deselect':
+                        case 'editStart':
+                        case 'editEnd': {
+                            break;
+                        }
                     }
                 }
                 finally {
@@ -29100,4 +29169,4 @@ var utils = {
     checkCoordinateOnText: checkCoordinateOnText
 };
 
-export { KCX_PERIOD, KTR_STEP_PERCENT, SYNC_GROUP_COLORS, createChartSync, dispose, getFigureClass, getOverlayClass, getSupportedFigures, getSupportedIndicators, getSupportedLocales, getSupportedOverlays, init, registerFigure, registerIndicator, registerLocale, registerOverlay, registerStyles, registerXAxis, registerYAxis, utils, version };
+export { KCX_PERIOD, KTR_STEP_PERCENT, OVERLAY_FIGURE_KEY_PREFIX, OVERLAY_ID_PREFIX, SYNC_GROUP_COLORS, checkOverlayFigureEvent, createChartSync, dispose, getFigureClass, getOverlayClass, getSupportedFigures, getSupportedIndicators, getSupportedLocales, getSupportedOverlays, init, registerFigure, registerIndicator, registerLocale, registerOverlay, registerStyles, registerXAxis, registerYAxis, utils, version };

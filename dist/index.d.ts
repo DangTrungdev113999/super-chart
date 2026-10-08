@@ -527,6 +527,10 @@ export interface MouseTouchEvent extends Coordinate {
 	pageX: number;
 	pageY: number;
 	isTouch?: boolean;
+	shiftKey?: boolean;
+	ctrlKey?: boolean;
+	altKey?: boolean;
+	metaKey?: boolean;
 	preventDefault?: () => void;
 }
 /**
@@ -673,6 +677,7 @@ export interface OverlayEventCollection<E> {
 	onSelected: Nullable<OverlayEventCallback<E>>;
 	onDeselected: Nullable<OverlayEventCallback<E>>;
 }
+export declare function checkOverlayFigureEvent(targetEventType: keyof Omit<OverlayEventCollection<unknown>, "onDrawStart" | "onDrawing" | "onDrawEnd" | "onRemoved">, figure: Nullable<OverlayFigure>): boolean;
 export interface OverlayFigure {
 	key?: string;
 	type: string;
@@ -697,6 +702,16 @@ export interface OverlayCreateFiguresCallbackParams<E> {
 	bounding: Bounding;
 	xAxis: Nullable<XAxis>;
 	yAxis: Nullable<YAxis>;
+	/**
+	 * Whether the overlay is currently selected (clicked). Templates use this
+	 * to render selection anchors / control handles instead of reaching into
+	 * internal store state.
+	 */
+	isSelected?: boolean;
+	/**
+	 * Whether the pointer is currently hovering over the overlay.
+	 */
+	isHovered?: boolean;
 }
 export interface OverlayEvent<E> extends Partial<MouseTouchEvent> {
 	figure?: OverlayFigure;
@@ -835,9 +850,15 @@ export interface Overlay<E = unknown> extends OverlayEventCollection<E> {
 	 * Whether no point has been committed yet
 	 */
 	isStart: () => boolean;
+	/**
+	 * Finish the remaining drawing steps immediately (e.g. unlimited-step tools
+	 * like path/polyline completing on Esc or double-click).
+	 */
+	forceComplete: () => void;
 }
-export type OverlayTemplate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, "id" | "groupId" | "paneId" | "points" | "currentStep" | "isDrawing" | "isStart">, "name">;
-export type OverlayCreate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, "currentStep" | "totalStep" | "createPointFigures" | "createXAxisFigures" | "createYAxisFigures" | "performEventPressedMove" | "performEventMoveForDrawing" | "isDrawing" | "isStart">, "name">;
+export type OverlayTemplate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, "id" | "groupId" | "paneId" | "points" | "currentStep" | "isDrawing" | "isStart" | "forceComplete">, "name">;
+export type OverlayCreate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, "currentStep" | "totalStep" | "createPointFigures" | "createXAxisFigures" | "createYAxisFigures" | "performEventPressedMove" | "performEventMoveForDrawing" | "isDrawing" | "isStart" | "forceComplete">, "name">;
+export type OverlayOverride<E = unknown> = Partial<Omit<Overlay<E>, "currentStep" | "totalStep" | "createPointFigures" | "createXAxisFigures" | "createYAxisFigures" | "performEventPressedMove" | "performEventMoveForDrawing" | "isDrawing" | "isStart" | "forceComplete">>;
 /**
  * Lifecycle stream emitted through the `onOverlayChange` action.
  * `create`   — an overlay was created (armed for drawing or already finished).
@@ -845,14 +866,20 @@ export type OverlayCreate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, "cu
  * `update`   — an existing overlay was overridden via overrideOverlay.
  * `remove`   — an overlay was removed (also fires for cancelled drawings).
  * `drawEnd`  — the progress overlay finished its last step and was committed.
+ * `select`/`deselect` — click-selection changed.
+ * `editStart`/`editEnd` — a point/figure drag gesture bracketed. Consumers
+ *             use the pair as the commit boundary for undo and persistence
+ *             (one gesture = one commit, not one commit per progress event).
  */
-export type OverlayChangeEventType = "create" | "progress" | "update" | "remove" | "drawEnd";
+export type OverlayChangeEventType = "create" | "progress" | "update" | "remove" | "drawEnd" | "select" | "deselect" | "editStart" | "editEnd";
 export interface OverlayChangeEvent<E = unknown> {
 	type: OverlayChangeEventType;
 	overlay: Overlay<E>;
 }
 export type OverlayFilter<E = unknown> = Partial<Pick<Overlay<E>, "id" | "groupId" | "name" | "paneId">>;
 export type OverlayConstructor<E = unknown> = new () => Overlay<E>;
+export declare const OVERLAY_ID_PREFIX = "overlay_";
+export declare const OVERLAY_FIGURE_KEY_PREFIX = "overlay_figure_";
 export interface Store {
 	setStyles: (value: string | DeepPartial<Styles>) => void;
 	getStyles: () => Styles;
@@ -908,6 +935,7 @@ export interface Chart extends Store {
 	getIndicators: (filter?: IndicatorFilter) => Indicator[];
 	createOverlay: (value: string | OverlayCreate | Array<string | OverlayCreate>) => Nullable<string> | Array<Nullable<string>>;
 	getOverlays: (filter?: OverlayFilter) => Overlay[];
+	selectOverlay: (id: Nullable<string>) => void;
 	setPaneOptions: (options: PaneOptions) => void;
 	getPaneOptions: (id?: string) => Nullable<PaneOptions> | PaneOptions[];
 	scrollByDistance: (distance: number, animationDuration?: number) => void;
@@ -1233,6 +1261,13 @@ export interface SegmentExtendData {
 	showAngle?: boolean;
 	alwaysShowStats?: boolean;
 	statsPosition?: number;
+}
+export interface PathAttrs {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+	path: string;
 }
 /**
  * Regression Trend (Xu hướng hồi quy) - ExtendData types

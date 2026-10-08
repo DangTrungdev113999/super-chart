@@ -26,7 +26,7 @@
 
 import type {
   LineType, PolygonType, TooltipShowRule, TooltipShowType, FeatureType, TooltipFeaturePosition,
-  CandleType, CandleTooltipRectPosition
+  CandleType, CandleTooltipRectPosition, OverlayStyle
 } from './common/Styles'
 import type Nullable from './common/Nullable'
 
@@ -46,7 +46,17 @@ import {
 import { calcTextWidth } from './common/utils/canvas'
 import type { ActionType } from './common/Action'
 import type { IndicatorSeries } from './component/Indicator'
-import type { OverlayMode, Overlay, OverlayCreate, OverlayChangeEvent, OverlayChangeEventType } from './component/Overlay'
+import type {
+  OverlayMode, Overlay, OverlayCreate, OverlayChangeEvent, OverlayChangeEventType,
+  OverlayTemplate, OverlayFigure, OverlayEvent, OverlayEventCallback,
+  OverlayCreateFiguresCallback, OverlayCreateFiguresCallbackParams,
+  OverlayPerformEventParams, OverlayFilter, OverlayOverride, OverlayConstructor
+} from './component/Overlay'
+import { checkOverlayFigureEvent, OVERLAY_ID_PREFIX, OVERLAY_FIGURE_KEY_PREFIX } from './component/Overlay'
+import type { MouseTouchEvent } from './common/EventHandler'
+import type { FigureTemplate, FigureConstructor } from './component/Figure'
+import type Coordinate from './common/Coordinate'
+import type Bounding from './common/Bounding'
 import type Crosshair from './common/Crosshair'
 import type Point from './common/Point'
 import type { KLineData } from './common/Data'
@@ -73,6 +83,13 @@ import { registerIndicator, getSupportedIndicators } from './extension/indicator
 import { registerLocale, getSupportedLocales } from './extension/i18n/index'
 import { registerOverlay, getOverlayClass, getSupportedOverlays } from './extension/overlay/index'
 import type { SegmentExtendData } from './extension/overlay/segment'
+import type { TextAttrs } from './extension/figure/text'
+import type { RectAttrs } from './extension/figure/rect'
+import type { PolygonAttrs } from './extension/figure/polygon'
+import type { PathAttrs } from './extension/figure/path'
+import type { LineAttrs } from './extension/figure/line'
+import type { CircleAttrs } from './extension/figure/circle'
+import type { ArcAttrs } from './extension/figure/arc'
 import type {
   RegressionTrendExtendData,
   RegressionSource,
@@ -217,6 +234,15 @@ export {
   type CandleType, type FormatDateType, type ZoomAnchor,
   type DomPosition, type ActionType, type IndicatorSeries, type OverlayMode,
   type Overlay, type OverlayCreate, type OverlayChangeEvent, type OverlayChangeEventType,
+  type OverlayTemplate, type OverlayFigure, type OverlayEvent, type OverlayEventCallback,
+  type OverlayCreateFiguresCallback, type OverlayCreateFiguresCallbackParams,
+  type OverlayPerformEventParams, type OverlayFilter, type OverlayOverride, type OverlayConstructor,
+  checkOverlayFigureEvent, OVERLAY_ID_PREFIX, OVERLAY_FIGURE_KEY_PREFIX,
+  type OverlayStyle, type MouseTouchEvent,
+  type FigureTemplate, type FigureConstructor,
+  type Coordinate, type Bounding,
+  type TextAttrs, type RectAttrs, type PolygonAttrs, type PathAttrs,
+  type LineAttrs, type CircleAttrs, type ArcAttrs,
   type Crosshair, type Point, type KLineData, type Period, type SymbolInfo,
   type SegmentExtendData,
   type RegressionTrendExtendData,

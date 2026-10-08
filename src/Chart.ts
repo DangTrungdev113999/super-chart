@@ -79,6 +79,7 @@ export interface Chart extends Store {
   getIndicators: (filter?: IndicatorFilter) => Indicator[]
   createOverlay: (value: string | OverlayCreate | Array<string | OverlayCreate>) => Nullable<string> | Array<Nullable<string>>
   getOverlays: (filter?: OverlayFilter) => Overlay[]
+  selectOverlay: (id: Nullable<string>) => void
   setPaneOptions: (options: PaneOptions) => void
   getPaneOptions: (id?: string) => Nullable<PaneOptions> | PaneOptions[]
   scrollByDistance: (distance: number, animationDuration?: number) => void
@@ -826,6 +827,14 @@ export default class ChartImp implements Chart {
 
   getOverlays (filter?: OverlayFilter): Overlay[] {
     return this._chartStore.getOverlaysByFilter(filter ?? {})
+  }
+
+  /**
+   * Programmatic selection — same pipeline as a user click (hooks, change
+   * events, repaint). Pass null to deselect.
+   */
+  selectOverlay (id: Nullable<string>): void {
+    this._chartStore.selectOverlay(id)
   }
 
   overrideOverlay (override: OverlayOverride): boolean {

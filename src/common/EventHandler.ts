@@ -33,6 +33,10 @@ export interface MouseTouchEvent extends Coordinate {
   pageX: number
   pageY: number
   isTouch?: boolean
+  shiftKey?: boolean
+  ctrlKey?: boolean
+  altKey?: boolean
+  metaKey?: boolean
   preventDefault?: () => void
 }
 
@@ -907,6 +911,12 @@ export default class EventHandlerImp {
       pageX: eventLike.pageX,
       pageY: eventLike.pageY,
       isTouch: !event.type.startsWith('mouse') && event.type !== 'contextmenu' && event.type !== 'click' && event.type !== 'wheel',
+      // TouchEvent lacks modifier props — read through a Partial so the
+      // `=== true` normalization to false stays honest.
+      shiftKey: (event as Partial<MouseEvent>).shiftKey === true,
+      ctrlKey: (event as Partial<MouseEvent>).ctrlKey === true,
+      altKey: (event as Partial<MouseEvent>).altKey === true,
+      metaKey: (event as Partial<MouseEvent>).metaKey === true,
 
       preventDefault: () => {
         if (event.type !== 'touchstart') {

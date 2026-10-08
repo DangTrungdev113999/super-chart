@@ -30,7 +30,7 @@ Commitlint enforces conventional commits. Allowed types: `feat`, `fix`, `docs`, 
 Action → Store (state) → UpdateLevel → Panes → Widgets → Views (canvas render)
 ```
 
-**Update levels** (from heaviest to lightest): `All` → `Layout` → `AxisRange` → `VisibleData` → `Drawer`
+**Update levels** (`src/common/Updater.ts`): `All` (every pane) → `Drawer` (full pane redraw) → `Main` / `Overlay` / `Separator` (targeted canvases — main layer, overlay layer, separator drag respectively)
 
 ### Key Modules
 
@@ -83,7 +83,7 @@ Target ES5, strict null checks enabled. Key strictness flags: `noUnusedLocals`, 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **super-chart** (5530 symbols, 11482 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **super-chart** (5603 symbols, 11767 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
 

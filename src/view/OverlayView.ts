@@ -182,6 +182,8 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
         if (checkOverlayFigureEvent('onPressedMoveEnd', figure)) {
           overlay.onPressedMoveEnd?.({ chart, overlay, figure: figure ?? undefined, ...event })
         }
+        // Gesture commit boundary — pairs with 'editStart' emitted on press.
+        chartStore.executeAction('onOverlayChange', { type: 'editEnd', overlay })
       }
       chartStore.setPressedOverlayInfo({
         paneId,
@@ -305,6 +307,9 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
       if (checkOverlayFigureEvent('onPressedMoveStart', figure)) {
         overlay.onPressedMoveStart?.({ chart: pane.getChart(), overlay, figure, ...event })
         pane.getChart().getChartStore().setPressedOverlayInfo({ paneId, overlay, figureType, figureIndex, figure })
+        // Gesture commit boundary — everything between editStart/editEnd is
+        // one undo/persistence unit (drag gestures emit many 'progress').
+        pane.getChart().getChartStore().executeAction('onOverlayChange', { type: 'editStart', overlay })
         return !overlay.isDrawing()
       }
       return false
@@ -541,10 +546,22 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
     const widget = this.getWidget()
     const pane = widget.getPane()
     const chart = pane.getChart()
+    const chartStore = chart.getChartStore()
     const yAxis = pane.getAxisComponent() as unknown as Nullable<YAxis>
     const xAxis = chart.getXAxisPane().getAxisComponent()
     const bounding = widget.getBounding()
-    return o.createPointFigures?.({ chart, overlay: o, coordinates, bounding, xAxis, yAxis }) ?? []
+    const clickInfo = chartStore.getClickOverlayInfo()
+    const hoverInfo = chartStore.getHoverOverlayInfo()
+    return o.createPointFigures?.({
+      chart,
+      overlay: o,
+      coordinates,
+      bounding,
+      xAxis,
+      yAxis,
+      isSelected: clickInfo.overlay?.id === o.id && clickInfo.figureType !== 'none',
+      isHovered: hoverInfo.overlay?.id === o.id && hoverInfo.figureType !== 'none'
+    }) ?? []
   }
 
   protected drawDefaultFigures (

@@ -94,6 +94,16 @@ export interface OverlayCreateFiguresCallbackParams<E> {
   bounding: Bounding
   xAxis: Nullable<XAxis>
   yAxis: Nullable<YAxis>
+  /**
+   * Whether the overlay is currently selected (clicked). Templates use this
+   * to render selection anchors / control handles instead of reaching into
+   * internal store state.
+   */
+  isSelected?: boolean
+  /**
+   * Whether the pointer is currently hovering over the overlay.
+   */
+  isHovered?: boolean
 }
 
 export interface OverlayEvent<E> extends Partial<MouseTouchEvent> {
@@ -264,12 +274,18 @@ export interface Overlay<E = unknown> extends OverlayEventCollection<E> {
    * Whether no point has been committed yet
    */
   isStart: () => boolean
+
+  /**
+   * Finish the remaining drawing steps immediately (e.g. unlimited-step tools
+   * like path/polyline completing on Esc or double-click).
+   */
+  forceComplete: () => void
 }
 
-export type OverlayTemplate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, 'id' | 'groupId' | 'paneId' | 'points' | 'currentStep' | 'isDrawing' | 'isStart'>, 'name'>
+export type OverlayTemplate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, 'id' | 'groupId' | 'paneId' | 'points' | 'currentStep' | 'isDrawing' | 'isStart' | 'forceComplete'>, 'name'>
 
-export type OverlayCreate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, 'currentStep' | 'totalStep' | 'createPointFigures' | 'createXAxisFigures' | 'createYAxisFigures' | 'performEventPressedMove' | 'performEventMoveForDrawing' | 'isDrawing' | 'isStart'>, 'name'>
-export type OverlayOverride<E = unknown> = Partial<Omit<Overlay<E>, 'currentStep' | 'totalStep' | 'createPointFigures' | 'createXAxisFigures' | 'createYAxisFigures' | 'performEventPressedMove' | 'performEventMoveForDrawing' | 'isDrawing' | 'isStart'>>
+export type OverlayCreate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, 'currentStep' | 'totalStep' | 'createPointFigures' | 'createXAxisFigures' | 'createYAxisFigures' | 'performEventPressedMove' | 'performEventMoveForDrawing' | 'isDrawing' | 'isStart' | 'forceComplete'>, 'name'>
+export type OverlayOverride<E = unknown> = Partial<Omit<Overlay<E>, 'currentStep' | 'totalStep' | 'createPointFigures' | 'createXAxisFigures' | 'createYAxisFigures' | 'performEventPressedMove' | 'performEventMoveForDrawing' | 'isDrawing' | 'isStart' | 'forceComplete'>>
 
 /**
  * Lifecycle stream emitted through the `onOverlayChange` action.
@@ -278,8 +294,12 @@ export type OverlayOverride<E = unknown> = Partial<Omit<Overlay<E>, 'currentStep
  * `update`   — an existing overlay was overridden via overrideOverlay.
  * `remove`   — an overlay was removed (also fires for cancelled drawings).
  * `drawEnd`  — the progress overlay finished its last step and was committed.
+ * `select`/`deselect` — click-selection changed.
+ * `editStart`/`editEnd` — a point/figure drag gesture bracketed. Consumers
+ *             use the pair as the commit boundary for undo and persistence
+ *             (one gesture = one commit, not one commit per progress event).
  */
-export type OverlayChangeEventType = 'create' | 'progress' | 'update' | 'remove' | 'drawEnd'
+export type OverlayChangeEventType = 'create' | 'progress' | 'update' | 'remove' | 'drawEnd' | 'select' | 'deselect' | 'editStart' | 'editEnd'
 
 export interface OverlayChangeEvent<E = unknown> {
   type: OverlayChangeEventType
@@ -293,6 +313,16 @@ export type OverlayConstructor<E = unknown> = new () => Overlay<E>
 
 const OVERLAY_DRAW_STEP_START = 1
 const OVERLAY_DRAW_STEP_FINISHED = -1
+
+function safeStylesJson (styles: unknown): string {
+  try {
+    return JSON.stringify(styles ?? null)
+  } catch {
+    // Sentinel that never matches a real snapshot — unserializable styles
+    // force a redraw rather than being silently dropped.
+    return '__unserializable__'
+  }
+}
 
 export const OVERLAY_ID_PREFIX = 'overlay_'
 
@@ -342,7 +372,7 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
 
   private _prevZLevel = 0
 
-  private _prevOverlay: Pick<Overlay<E>, 'zLevel' | 'visible' | 'points' | 'extendData'> & { stylesJson: string }
+  private _prevOverlay: Pick<Overlay<E>, 'zLevel' | 'visible' | 'points' | 'extendData'> & { stylesJson?: string }
 
   private _prevPressedPoint: Nullable<Partial<Point>> = null
   private _prevPressedPoints: Array<Partial<Point>> = []
@@ -358,10 +388,9 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
     // a same-reference compare would silently drop style-only updates.
     // stringify can throw on non-serializable values (BigInt, throwing
     // toJSON) — fall back to a reference sentinel so override never throws.
-    let stylesJson = ''
-    try {
-      stylesJson = JSON.stringify(this.styles ?? null)
-    } catch {}
+    // Styles JSON is captured ONLY when the incoming override carries styles;
+    // drag/point overrides skip both stringifies entirely.
+    const stylesJson = isValid(overlay.styles) ? safeStylesJson(this.styles) : undefined
     this._prevOverlay = {
       zLevel: this.zLevel,
       visible: this.visible,
@@ -473,15 +502,13 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
         }
       }
     }
-    let stylesJson = ''
-    try {
-      stylesJson = JSON.stringify(this.styles ?? null)
-    } catch {}
+    const prevStylesJson = this._prevOverlay.stylesJson
+    const stylesChanged = prevStylesJson !== undefined && prevStylesJson !== safeStylesJson(this.styles)
     const draw = sort ||
       pointsChanged ||
       this._prevOverlay.visible !== this.visible ||
       this._prevOverlay.extendData !== this.extendData ||
-      this._prevOverlay.stylesJson !== stylesJson
+      stylesChanged
 
     return { sort, draw }
   }
