@@ -38,6 +38,12 @@ export interface OverlayPerformEventParams {
   prevPoints: Array<Partial<Point>>
   /** Key of the figure that triggered the drag (from OverlayFigure.key) */
   figureKey?: string
+  /**
+   * Raw mouse/touch event for the move — carries modifier keys so templates
+   * can implement Shift-snapping, axis locks and clone drags.
+   * Absent during restore/replay (override-driven perform calls).
+   */
+  event?: Partial<MouseTouchEvent>
 }
 
 export interface OverlayEventCollection<E> {
@@ -69,6 +75,19 @@ export function checkOverlayFigureEvent (
   return !ignoreEvent.includes(targetEventType)
 }
 
+export type OverlayFigureMoveDirection = 'both' | 'horz' | 'vert'
+
+/**
+ * Pixel-space axis-aligned rect a figure may declare for viewport culling.
+ * Opt-in — figures without bounds are never culled.
+ */
+export interface OverlayFigureBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 export interface OverlayFigure {
   key?: string
   type: string
@@ -81,10 +100,21 @@ export interface OverlayFigure {
    */
   pointIndex?: number
   /**
+   * Axis constraint applied when this figure is dragged: 'horz' keeps the
+   * dragged value (y) unchanged, 'vert' keeps the dragged time/index (x)
+   * unchanged. Mirrors TradingView's PossibleMovingDirections.
+   */
+  moveDirection?: OverlayFigureMoveDirection
+  /**
    * Custom CSS cursor when hovering over this figure.
    * Defaults to 'pointer' if not set.
    */
   cursor?: string
+  /**
+   * Declared pixel-space bounds — used by the drawings viewport-cull
+   * pipeline to skip off-screen figures. Optional.
+   */
+  bounds?: OverlayFigureBounds
 }
 
 export interface OverlayCreateFiguresCallbackParams<E> {
@@ -104,6 +134,11 @@ export interface OverlayCreateFiguresCallbackParams<E> {
    * Whether the pointer is currently hovering over the overlay.
    */
   isHovered?: boolean
+  /**
+   * `key` of the figure currently under the pointer, if the pointer is over
+   * a figure of this overlay. Lets templates render per-anchor hover rings.
+   */
+  hoveredFigureKey?: string
 }
 
 export interface OverlayEvent<E> extends Partial<MouseTouchEvent> {
@@ -280,12 +315,40 @@ export interface Overlay<E = unknown> extends OverlayEventCollection<E> {
    * like path/polyline completing on Esc or double-click).
    */
   forceComplete: () => void
+
+  /**
+   * Freehand drawing mode (brush/highlighter/measure): the overlay collects
+   * points while the pointer is PRESSED instead of per click. Mouse-down
+   * starts the stroke, moves append points (decimated by
+   * `freehandMinDistance`), mouse-up force-completes.
+   */
+  freehand?: boolean
+
+  /**
+   * Minimum pointer distance (px) between appended points in freehand mode.
+   * Default 4.
+   */
+  freehandMinDistance?: number
+
+  /**
+   * Figure-cache revision — bumped by override() whenever styles/extendData
+   * change and by invalidateFigures(). The drawings subsystem's figure cache
+   * keys on this; templates MUST NOT write it.
+   */
+  readonly figuresRev: number
+
+  /**
+   * Invalidate the cached figure result — call after mutating extendData in
+   * place (inside performEvent* callbacks) when using the drawings figure
+   * cache wrapper.
+   */
+  invalidateFigures: () => void
 }
 
-export type OverlayTemplate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, 'id' | 'groupId' | 'paneId' | 'points' | 'currentStep' | 'isDrawing' | 'isStart' | 'forceComplete'>, 'name'>
+export type OverlayTemplate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, 'id' | 'groupId' | 'paneId' | 'points' | 'currentStep' | 'isDrawing' | 'isStart' | 'forceComplete' | 'invalidateFigures' | 'figuresRev'>, 'name'>
 
-export type OverlayCreate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, 'currentStep' | 'totalStep' | 'createPointFigures' | 'createXAxisFigures' | 'createYAxisFigures' | 'performEventPressedMove' | 'performEventMoveForDrawing' | 'isDrawing' | 'isStart' | 'forceComplete'>, 'name'>
-export type OverlayOverride<E = unknown> = Partial<Omit<Overlay<E>, 'currentStep' | 'totalStep' | 'createPointFigures' | 'createXAxisFigures' | 'createYAxisFigures' | 'performEventPressedMove' | 'performEventMoveForDrawing' | 'isDrawing' | 'isStart' | 'forceComplete'>>
+export type OverlayCreate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, 'currentStep' | 'totalStep' | 'createPointFigures' | 'createXAxisFigures' | 'createYAxisFigures' | 'performEventPressedMove' | 'performEventMoveForDrawing' | 'isDrawing' | 'isStart' | 'forceComplete' | 'invalidateFigures' | 'figuresRev'>, 'name'>
+export type OverlayOverride<E = unknown> = Partial<Omit<Overlay<E>, 'currentStep' | 'totalStep' | 'createPointFigures' | 'createXAxisFigures' | 'createYAxisFigures' | 'performEventPressedMove' | 'performEventMoveForDrawing' | 'isDrawing' | 'isStart' | 'forceComplete' | 'invalidateFigures' | 'figuresRev'>>
 
 /**
  * Lifecycle stream emitted through the `onOverlayChange` action.
@@ -370,6 +433,15 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
   onSelected: Nullable<OverlayEventCallback<E>> = null
   onDeselected: Nullable<OverlayEventCallback<E>> = null
 
+  freehand = false
+  freehandMinDistance = 4
+
+  // Plain field (not a getter) — merge() assigns source props directly, so a
+  // getter-only accessor would throw if a caller ever passes figuresRev in.
+  figuresRev = 0
+
+  invalidateFigures (): void { this.figuresRev++ }
+
   private _prevZLevel = 0
 
   private _prevOverlay: Pick<Overlay<E>, 'zLevel' | 'visible' | 'points' | 'extendData'> & { stylesJson?: string }
@@ -422,6 +494,7 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
       } else {
         this.extendData = clone(extendData)
       }
+      this.figuresRev++
     }
 
     if (!isString(this.name)) {
@@ -438,6 +511,7 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
       } else {
         merge(this.styles, styles)
       }
+      this.figuresRev++
     }
 
     if (isArray(points) && points.length > 0) {
@@ -533,7 +607,7 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
     return this.currentStep === OVERLAY_DRAW_STEP_START
   }
 
-  eventMoveForDrawing (point: Partial<Point>): void {
+  eventMoveForDrawing (point: Partial<Point>, event?: Partial<MouseTouchEvent>): void {
     const pointIndex = this.currentStep - 1
     const newPoint: Partial<Point> = {}
     if (isNumber(point.timestamp)) {
@@ -552,14 +626,28 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
       points: this.points,
       performPointIndex: pointIndex,
       performPoint: newPoint,
-      prevPoints: this._prevPressedPoints
+      prevPoints: this._prevPressedPoints,
+      event
     })
   }
 
-  eventPressedPointMove (point: Partial<Point>, pointIndex: number, figureKey?: string): void {
+  eventPressedPointMove (point: Partial<Point>, pointIndex: number, figureKey?: string, moveDirection?: OverlayFigureMoveDirection, event?: Partial<MouseTouchEvent>): void {
     if (pointIndex >= this.points.length) {
       while (this.points.length <= pointIndex) {
         this.points.push({})
+      }
+    }
+    // PossibleMovingDirections constraint (TradingView parity): a 'horz'
+    // figure drags horizontally only — keep the point's value; 'vert' keeps
+    // its time/index. Applied BEFORE assignment so performEventPressedMove
+    // sees the constrained point.
+    if (moveDirection === 'horz') {
+      point = { ...point, value: this.points[pointIndex].value }
+    } else if (moveDirection === 'vert') {
+      point = {
+        ...point,
+        timestamp: this.points[pointIndex].timestamp,
+        dataIndex: this.points[pointIndex].dataIndex
       }
     }
     this.points[pointIndex].timestamp = point.timestamp
@@ -576,7 +664,8 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
       performPointIndex: pointIndex,
       performPoint: this.points[pointIndex],
       prevPoints: this._prevPressedPoints,
-      figureKey
+      figureKey,
+      event
     })
   }
 
@@ -585,14 +674,14 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
     this._prevPressedPoints = clone(this.points)
   }
 
-  eventPressedOtherMove (point: Partial<Point>, chartStore: ChartStore): void {
+  eventPressedOtherMove (point: Partial<Point>, chartStore: ChartStore, moveDirection?: OverlayFigureMoveDirection): void {
     if (this._prevPressedPoint !== null) {
       let difDataIndex: Nullable<number> = null
-      if (isNumber(point.dataIndex) && isNumber(this._prevPressedPoint.dataIndex)) {
+      if (moveDirection !== 'vert' && isNumber(point.dataIndex) && isNumber(this._prevPressedPoint.dataIndex)) {
         difDataIndex = point.dataIndex - this._prevPressedPoint.dataIndex
       }
       let difValue: Nullable<number> = null
-      if (isNumber(point.value) && isNumber(this._prevPressedPoint.value)) {
+      if (moveDirection !== 'horz' && isNumber(point.value) && isNumber(this._prevPressedPoint.value)) {
         difValue = point.value - this._prevPressedPoint.value
       }
       this.points = this._prevPressedPoints.map(p => {

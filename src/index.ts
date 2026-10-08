@@ -48,7 +48,8 @@ import type { ActionType } from './common/Action'
 import type { IndicatorSeries } from './component/Indicator'
 import type {
   OverlayMode, Overlay, OverlayCreate, OverlayChangeEvent, OverlayChangeEventType,
-  OverlayTemplate, OverlayFigure, OverlayEvent, OverlayEventCallback,
+  OverlayTemplate, OverlayFigure, OverlayFigureMoveDirection, OverlayFigureBounds,
+  OverlayEvent, OverlayEventCallback,
   OverlayCreateFiguresCallback, OverlayCreateFiguresCallbackParams,
   OverlayPerformEventParams, OverlayFilter, OverlayOverride, OverlayConstructor
 } from './component/Overlay'
@@ -234,7 +235,8 @@ export {
   type CandleType, type FormatDateType, type ZoomAnchor,
   type DomPosition, type ActionType, type IndicatorSeries, type OverlayMode,
   type Overlay, type OverlayCreate, type OverlayChangeEvent, type OverlayChangeEventType,
-  type OverlayTemplate, type OverlayFigure, type OverlayEvent, type OverlayEventCallback,
+  type OverlayTemplate, type OverlayFigure, type OverlayFigureMoveDirection, type OverlayFigureBounds,
+  type OverlayEvent, type OverlayEventCallback,
   type OverlayCreateFiguresCallback, type OverlayCreateFiguresCallbackParams,
   type OverlayPerformEventParams, type OverlayFilter, type OverlayOverride, type OverlayConstructor,
   checkOverlayFigureEvent, OVERLAY_ID_PREFIX, OVERLAY_FIGURE_KEY_PREFIX,
@@ -259,3 +261,37 @@ export {
   type EllipseLineStyle,
   type EllipseVisibilityRange
 }
+
+// ─── Drawings subsystem (DP-0b): shared state + interaction contract ─────────
+export {
+  ANCHOR_KEY_PREFIX,
+  ANCHOR_MID_KEY,
+  ANCHOR_HALF_MOUSE,
+  ANCHOR_HALF_TOUCH,
+  createAnchorFigures,
+  createSelectionOutlineFigures,
+  computeResizeCursor,
+  getDrawingInteractionState,
+  setAlign45Enabled,
+  isAlign45Enabled,
+  isSnap45Active,
+  snap45Coordinate,
+  bindDrawingKeyboard,
+  withFigureCache,
+  withViewportCull,
+  withPerfPipeline,
+  getCommonState,
+  isVisibleOnInterval
+} from './drawings'
+
+export type {
+  DrawingCommonState,
+  DrawingExtendData,
+  AnchorFiguresParams,
+  AnchorFigureStyle,
+  DrawingInteractionState,
+  DrawingKeyboardHandlers,
+  DrawingKeyboardOptions,
+  FigureCacheOptions,
+  ViewportCullOptions
+} from './drawings'

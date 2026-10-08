@@ -659,6 +659,12 @@ export interface OverlayPerformEventParams {
 	prevPoints: Array<Partial<Point>>;
 	/** Key of the figure that triggered the drag (from OverlayFigure.key) */
 	figureKey?: string;
+	/**
+	 * Raw mouse/touch event for the move — carries modifier keys so templates
+	 * can implement Shift-snapping, axis locks and clone drags.
+	 * Absent during restore/replay (override-driven perform calls).
+	 */
+	event?: Partial<MouseTouchEvent>;
 }
 export interface OverlayEventCollection<E> {
 	onDrawStart: Nullable<OverlayEventCallback<E>>;
@@ -678,6 +684,17 @@ export interface OverlayEventCollection<E> {
 	onDeselected: Nullable<OverlayEventCallback<E>>;
 }
 export declare function checkOverlayFigureEvent(targetEventType: keyof Omit<OverlayEventCollection<unknown>, "onDrawStart" | "onDrawing" | "onDrawEnd" | "onRemoved">, figure: Nullable<OverlayFigure>): boolean;
+export type OverlayFigureMoveDirection = "both" | "horz" | "vert";
+/**
+ * Pixel-space axis-aligned rect a figure may declare for viewport culling.
+ * Opt-in — figures without bounds are never culled.
+ */
+export interface OverlayFigureBounds {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+}
 export interface OverlayFigure {
 	key?: string;
 	type: string;
@@ -690,10 +707,21 @@ export interface OverlayFigure {
 	 */
 	pointIndex?: number;
 	/**
+	 * Axis constraint applied when this figure is dragged: 'horz' keeps the
+	 * dragged value (y) unchanged, 'vert' keeps the dragged time/index (x)
+	 * unchanged. Mirrors TradingView's PossibleMovingDirections.
+	 */
+	moveDirection?: OverlayFigureMoveDirection;
+	/**
 	 * Custom CSS cursor when hovering over this figure.
 	 * Defaults to 'pointer' if not set.
 	 */
 	cursor?: string;
+	/**
+	 * Declared pixel-space bounds — used by the drawings viewport-cull
+	 * pipeline to skip off-screen figures. Optional.
+	 */
+	bounds?: OverlayFigureBounds;
 }
 export interface OverlayCreateFiguresCallbackParams<E> {
 	chart: Chart;
@@ -712,6 +740,11 @@ export interface OverlayCreateFiguresCallbackParams<E> {
 	 * Whether the pointer is currently hovering over the overlay.
 	 */
 	isHovered?: boolean;
+	/**
+	 * `key` of the figure currently under the pointer, if the pointer is over
+	 * a figure of this overlay. Lets templates render per-anchor hover rings.
+	 */
+	hoveredFigureKey?: string;
 }
 export interface OverlayEvent<E> extends Partial<MouseTouchEvent> {
 	figure?: OverlayFigure;
@@ -855,10 +888,34 @@ export interface Overlay<E = unknown> extends OverlayEventCollection<E> {
 	 * like path/polyline completing on Esc or double-click).
 	 */
 	forceComplete: () => void;
+	/**
+	 * Freehand drawing mode (brush/highlighter/measure): the overlay collects
+	 * points while the pointer is PRESSED instead of per click. Mouse-down
+	 * starts the stroke, moves append points (decimated by
+	 * `freehandMinDistance`), mouse-up force-completes.
+	 */
+	freehand?: boolean;
+	/**
+	 * Minimum pointer distance (px) between appended points in freehand mode.
+	 * Default 4.
+	 */
+	freehandMinDistance?: number;
+	/**
+	 * Figure-cache revision — bumped by override() whenever styles/extendData
+	 * change and by invalidateFigures(). The drawings subsystem's figure cache
+	 * keys on this; templates MUST NOT write it.
+	 */
+	readonly figuresRev: number;
+	/**
+	 * Invalidate the cached figure result — call after mutating extendData in
+	 * place (inside performEvent* callbacks) when using the drawings figure
+	 * cache wrapper.
+	 */
+	invalidateFigures: () => void;
 }
-export type OverlayTemplate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, "id" | "groupId" | "paneId" | "points" | "currentStep" | "isDrawing" | "isStart" | "forceComplete">, "name">;
-export type OverlayCreate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, "currentStep" | "totalStep" | "createPointFigures" | "createXAxisFigures" | "createYAxisFigures" | "performEventPressedMove" | "performEventMoveForDrawing" | "isDrawing" | "isStart" | "forceComplete">, "name">;
-export type OverlayOverride<E = unknown> = Partial<Omit<Overlay<E>, "currentStep" | "totalStep" | "createPointFigures" | "createXAxisFigures" | "createYAxisFigures" | "performEventPressedMove" | "performEventMoveForDrawing" | "isDrawing" | "isStart" | "forceComplete">>;
+export type OverlayTemplate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, "id" | "groupId" | "paneId" | "points" | "currentStep" | "isDrawing" | "isStart" | "forceComplete" | "invalidateFigures" | "figuresRev">, "name">;
+export type OverlayCreate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, "currentStep" | "totalStep" | "createPointFigures" | "createXAxisFigures" | "createYAxisFigures" | "performEventPressedMove" | "performEventMoveForDrawing" | "isDrawing" | "isStart" | "forceComplete" | "invalidateFigures" | "figuresRev">, "name">;
+export type OverlayOverride<E = unknown> = Partial<Omit<Overlay<E>, "currentStep" | "totalStep" | "createPointFigures" | "createXAxisFigures" | "createYAxisFigures" | "performEventPressedMove" | "performEventMoveForDrawing" | "isDrawing" | "isStart" | "forceComplete" | "invalidateFigures" | "figuresRev">>;
 /**
  * Lifecycle stream emitted through the `onOverlayChange` action.
  * `create`   — an overlay was created (armed for drawing or already finished).
@@ -1418,6 +1475,253 @@ export interface ChartSync {
  * (crosshair, drags, drawing progress) propagate without a render loop.
  */
 export declare function createChartSync(options?: ChartSyncOptions): ChartSync;
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * Shared drawing-state contract (DP-0b). Every rebuilt drawing tool carries
+ * this state on `overlay.extendData.common` so persistence, the floating
+ * toolbar, and interval-visibility menus can treat tools uniformly.
+ *
+ * The full serialized record (schema v2) is defined by the persistence
+ * layer (DP-5); this is the runtime shape tools rely on.
+ */
+export interface DrawingCommonState {
+	/**
+	 * Timeframes/resolutions the drawing is visible on, e.g. ['1m','5m','1D'].
+	 * `undefined` or empty = visible on all intervals (TradingView
+	 * intervalsVisibilities default).
+	 */
+	visibleIntervals?: string[];
+	/**
+	 * Optional per-point interval pinning — point i is only meaningful on
+	 * these resolutions. Used by timeframe-tied tools (alerts, markers).
+	 */
+	pointIntervals?: Array<string[] | undefined>;
+	/**
+	 * Display z-order hint within the overlay zLevel — mirrors TradingView's
+	 * visual-order zorder field. The overlay's `zLevel` remains the render
+	 * authority; this preserves the user's "bring forward/back" stack order.
+	 */
+	visualOrder?: number;
+}
+/**
+ * ExtendData envelope every library-owned drawing uses: tool payloads live
+ * under `extendData` directly, shared cross-tool state under `.common`.
+ * Helpers below keep access type-safe.
+ */
+export interface DrawingExtendData<T = unknown> {
+	common?: DrawingCommonState;
+	data?: T;
+}
+export declare function getCommonState(overlay: {
+	extendData?: unknown;
+}): DrawingCommonState;
+export declare function isVisibleOnInterval(overlay: {
+	extendData?: unknown;
+}, interval: string): boolean;
+export declare const ANCHOR_KEY_PREFIX = "anchor_";
+export declare const ANCHOR_MID_KEY = "anchor_mid";
+/**
+ * TradingView anchor sizing: ~6px grab radius on mouse, ~13px on touch.
+ * The figure IS the hit target, so touch anchors are physically bigger —
+ * no separate tolerance plumbing needed.
+ */
+export declare const ANCHOR_HALF_MOUSE = 6;
+export declare const ANCHOR_HALF_TOUCH = 13;
+export interface AnchorFigureStyle {
+	/** Anchor border color (default '#1592E6'). */
+	borderColor?: string;
+	/** Anchor fill (default '#ffffff'). */
+	backColor?: string;
+	/** Border width px (default 1.5). */
+	borderSize?: number;
+	/** Locked-selection marker color (default '#787B86'). */
+	lockedBorderColor?: string;
+}
+export interface AnchorFiguresParams {
+	/**
+	 * Point coordinates in pane space — one anchor per entry.
+	 */
+	coordinates: Coordinate[];
+	isSelected?: boolean;
+	isHovered?: boolean;
+	/**
+	 * Locked overlays render a non-interactive selection outline instead of
+	 * draggable anchors (TradingView `SelectionRenderer` behavior).
+	 */
+	lock?: boolean;
+	/**
+	 * While the overlay is still drawing, the last (in-progress) point's
+	 * anchor is suppressed (TradingView `lineBeingCreated` behavior).
+	 */
+	isDrawing?: boolean;
+	/**
+	 * Use touch-sized anchors (13px half-size instead of 6px).
+	 */
+	isTouch?: boolean;
+	/**
+	 * Draw a midpoint translate handle between the two points of a 2-point
+	 * tool. The handle is an 'other'-type figure — dragging it translates
+	 * the whole overlay.
+	 */
+	midPoint?: boolean;
+	/**
+	 * Anchor shape. 'square' = resize handles (default), 'circle' = round.
+	 */
+	shape?: "square" | "circle";
+	/**
+	 * Per-point CSS cursor (e.g. from computeResizeCursor). Falls back to
+	 * 'pointer'.
+	 */
+	cursors?: Array<string | undefined>;
+	/**
+	 * Per-point axis-constrained drag direction. Falls back to 'both'.
+	 */
+	moveDirections?: Array<OverlayFigureMoveDirection | undefined>;
+	styles?: AnchorFigureStyle;
+	/**
+	 * Key prefix for generated figures (default 'anchor_'); the midpoint
+	 * handle uses `${prefix}mid` unless overridden.
+	 */
+	keyPrefix?: string;
+	/**
+	 * Which point indexes get anchors. Defaults to all coordinates.
+	 */
+	pointIndexes?: number[];
+}
+/**
+ * Build the draggable control-point figures for an overlay. Returns [] when
+ * the overlay should show no anchors (not selected, not hovered-unlocked).
+ * For a LOCKED selected overlay call {@link createSelectionOutlineFigures}.
+ */
+export declare function createAnchorFigures(params: AnchorFiguresParams): OverlayFigure[];
+/**
+ * Locked-selection outline: non-interactive corner markers so a locked
+ * drawing still reads as "selected but frozen" — TradingView renders a
+ * SelectionRenderer instead of LineAnchorRenderer for locked sources.
+ */
+export declare function createSelectionOutlineFigures(params: {
+	coordinates: Coordinate[];
+	isTouch?: boolean;
+	styles?: AnchorFigureStyle;
+	keyPrefix?: string;
+}): OverlayFigure[];
+/**
+ * 8-way resize cursor for a handle of a segment: buckets the segment angle
+ * into 22.5° steps and maps it to a CSS directional cursor — the TradingView
+ * `anchorResizeCursorType` behavior.
+ */
+export declare function computeResizeCursor(from: Coordinate, to: Coordinate): string;
+/**
+ * Persistent per-chart interaction state. Kept in a WeakMap so the kernel
+ * `Chart`/`Store` types stay untouched; the floating toolbar toggles
+ * `align45` through setAlign45Enabled().
+ */
+export interface DrawingInteractionState {
+	/**
+	 * TradingView's "snap to 45°" persistent toggle (toolbar magnet menu).
+	 * When true, every drawn/dragged point snaps — as if Shift were held.
+	 */
+	align45: boolean;
+}
+export declare function getDrawingInteractionState(chart: Chart): DrawingInteractionState;
+export declare function setAlign45Enabled(chart: Chart, enabled: boolean): void;
+export declare function isAlign45Enabled(chart: Chart): boolean;
+/**
+ * Whether a move should snap to 45° increments — Shift held during the
+ * gesture, or the persistent toolbar toggle.
+ */
+export declare function isSnap45Active(chart: Chart, event?: Partial<MouseTouchEvent>): boolean;
+/**
+ * Snap `to` onto the nearest 45° ray from `from`, preserving distance.
+ * Operates in pixel space — convert Point↔Coordinate at the call site.
+ */
+export declare function snap45Coordinate(to: Coordinate, from: Coordinate): Coordinate;
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * Shared drawing keyboard layer. One binding feeds the drawings manager;
+ * individual tools never attach their own listeners.
+ *
+ * TradingView key map:
+ *   Esc               — cancel in-progress drawing (unlimited-step tools
+ *                       complete instead); commit open text edits
+ *   Delete/Backspace  — remove the selected drawing
+ *   Ctrl/Cmd+Z        — undo last committed gesture
+ *   Ctrl/Cmd+Shift+Z  — redo
+ *   Ctrl/Cmd+C / V    — copy / paste-clone the selection
+ */
+export interface DrawingKeyboardHandlers {
+	onEscape?: () => void;
+	onDelete?: () => void;
+	onUndo?: () => void;
+	onRedo?: () => void;
+	onCopy?: () => void;
+	onPaste?: () => void;
+}
+export interface DrawingKeyboardOptions {
+	/**
+	 * Optional gate — return false to skip dispatch (e.g. chart not focused,
+	 * another pane owns the keys). Defaults to always dispatch.
+	 */
+	isActive?: () => boolean;
+	/** Binding target — defaults to `document` (SSR-safe no-op). */
+	target?: Document | HTMLElement;
+}
+/**
+ * Bind the shared keyboard layer. Returns an unbind function.
+ * Guards: editable DOM targets and IME composition never reach handlers.
+ */
+export declare function bindDrawingKeyboard(handlers: DrawingKeyboardHandlers, options?: DrawingKeyboardOptions): () => void;
+export interface FigureCacheOptions<E> {
+	/**
+	 * Extra signature material — include anything the template reads that is
+	 * NOT covered by coordinates/figuresRev/selection (e.g. derived style
+	 * flags computed outside override()).
+	 */
+	extraKey?: (params: OverlayCreateFiguresCallbackParams<E>) => string;
+}
+export declare function withFigureCache<E>(fn: OverlayCreateFiguresCallback<E>, options?: FigureCacheOptions<E>): OverlayCreateFiguresCallback<E>;
+export interface ViewportCullOptions {
+	/**
+	 * Expand the viewport by this many px before dropping figures — keeps
+	 * partially-visible decorations (labels, line caps) alive near edges.
+	 * Default 24.
+	 */
+	margin?: number;
+}
+/**
+ * Drop figures that declare `bounds` fully outside the viewport. Figures
+ * without bounds are always kept (opt-in per figure).
+ */
+export declare function withViewportCull<E>(fn: OverlayCreateFiguresCallback<E>, options?: ViewportCullOptions): OverlayCreateFiguresCallback<E>;
+/**
+ * Convenience: cache → cull. The composition order matters — cull is inner
+ * so off-screen figures never enter the cache output.
+ */
+export declare function withPerfPipeline<E>(fn: OverlayCreateFiguresCallback<E>, options?: FigureCacheOptions<E> & ViewportCullOptions): OverlayCreateFiguresCallback<E>;
 /**
  * Chart version
  * @return {string}

@@ -16,7 +16,7 @@ import type Nullable from '../common/Nullable'
 import type Coordinate from '../common/Coordinate'
 import type Point from '../common/Point'
 import type { EventHandler, EventName, MouseTouchEvent, MouseTouchEventCallback } from '../common/EventHandler'
-import { isFunction, isNumber, isValid } from '../common/utils/typeChecks'
+import { isFunction, isNumber, isValid, clone } from '../common/utils/typeChecks'
 
 import type { Axis } from '../component/Axis'
 import type { YAxis } from '../component/YAxis'
@@ -54,6 +54,7 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
     const paneId = pane.getId()
     const chart = pane.getChart()
     const chartStore = chart.getChartStore()
+    let freehandLastCoord: Coordinate | null = null
     this.registerEvent('mouseMoveEvent', event => {
       const progressOverlayInfo = chartStore.getProgressOverlayInfo()
       if (progressOverlayInfo !== null) {
@@ -65,7 +66,7 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
         }
         const index = overlay.points.length - 1
         if (overlay.isDrawing() && progressOverlayPaneId === paneId) {
-          overlay.eventMoveForDrawing(this._coordinateToPoint(overlay, event))
+          overlay.eventMoveForDrawing(this._coordinateToPoint(overlay, event), event)
           overlay.onDrawing?.({ chart, overlay, ...event })
           chartStore.executeAction('onOverlayChange', { type: 'progress', overlay })
         }
@@ -100,7 +101,7 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
         }
         const index = overlay.points.length - 1
         if (overlay.isDrawing() && progressOverlayPaneId === paneId) {
-          overlay.eventMoveForDrawing(this._coordinateToPoint(overlay, event))
+          overlay.eventMoveForDrawing(this._coordinateToPoint(overlay, event), event)
           overlay.onDrawing?.({ chart, overlay, ...event })
           overlay.nextStep()
           chartStore.executeAction('onOverlayChange', { type: 'progress', overlay })
@@ -176,15 +177,43 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
         }
       }
       return false
-    }).registerEvent('mouseUpEvent', event => {
-      const { overlay, figure } = chartStore.getPressedOverlayInfo()
-      if (overlay !== null) {
-        if (checkOverlayFigureEvent('onPressedMoveEnd', figure)) {
-          overlay.onPressedMoveEnd?.({ chart, overlay, figure: figure ?? undefined, ...event })
-        }
-        // Gesture commit boundary — pairs with 'editStart' emitted on press.
-        chartStore.executeAction('onOverlayChange', { type: 'editEnd', overlay })
+    }).registerEvent('mouseDownEvent', event => {
+      // Freehand stroke start: a press while a freehand overlay is armed
+      // commits the first point and arms the pressed-move collector.
+      const overlay = chartStore.getProgressOverlayInfo()?.overlay ?? null
+      if (overlay === null || !overlay.freehand || !overlay.isDrawing() || overlay.lock) {
+        return false
       }
+      overlay.eventMoveForDrawing(this._coordinateToPoint(overlay, event), event)
+      overlay.nextStep()
+      overlay.onDrawing?.({ chart, overlay, ...event })
+      chartStore.executeAction('onOverlayChange', { type: 'progress', overlay })
+      chartStore.setPressedOverlayInfo({
+        paneId,
+        overlay,
+        figureType: 'none',
+        figureIndex: -1,
+        figure: null
+      })
+      freehandLastCoord = { x: event.x, y: event.y }
+      return true
+    }).registerEvent('mouseUpEvent', event => {
+      const { overlay, figure, figureType } = chartStore.getPressedOverlayInfo()
+      if (overlay !== null) {
+        if (overlay.freehand && overlay.isDrawing() && figureType === 'none') {
+          // Freehand stroke end — complete and commit the overlay.
+          overlay.forceComplete()
+          chartStore.progressOverlayComplete()
+          overlay.onDrawEnd?.({ chart, overlay, ...event })
+        } else {
+          if (checkOverlayFigureEvent('onPressedMoveEnd', figure)) {
+            overlay.onPressedMoveEnd?.({ chart, overlay, figure: figure ?? undefined, ...event })
+          }
+          // Gesture commit boundary — pairs with 'editStart' emitted on press.
+          chartStore.executeAction('onOverlayChange', { type: 'editEnd', overlay })
+        }
+      }
+      freehandLastCoord = null
       chartStore.setPressedOverlayInfo({
         paneId,
         overlay: null,
@@ -196,13 +225,34 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
     }).registerEvent('pressedMouseMoveEvent', event => {
       const { overlay, figureType, figureIndex, figure } = chartStore.getPressedOverlayInfo()
       if (overlay !== null) {
+        if (overlay.freehand && overlay.isDrawing() && figureType === 'none') {
+          // Freehand stroke — append a point once the pointer travels past
+          // the decimation distance, then advance the write slot.
+          const minDist = overlay.freehandMinDistance
+          const dx = event.x - (freehandLastCoord?.x ?? event.x)
+          const dy = event.y - (freehandLastCoord?.y ?? event.y)
+          if (dx * dx + dy * dy >= minDist * minDist) {
+            overlay.eventMoveForDrawing(this._coordinateToPoint(overlay, event), event)
+            overlay.nextStep()
+            overlay.onDrawing?.({ chart, overlay, ...event })
+            chartStore.executeAction('onOverlayChange', { type: 'progress', overlay })
+            freehandLastCoord = { x: event.x, y: event.y }
+            if (!overlay.isDrawing()) {
+              // A finite-step freehand tool finished mid-stroke.
+              chartStore.progressOverlayComplete()
+              overlay.onDrawEnd?.({ chart, overlay, ...event })
+            }
+          }
+          this.getWidget().setForceCursor('crosshair')
+          return true
+        }
         if (checkOverlayFigureEvent('onPressedMoving', figure)) {
           if (!overlay.lock) {
             const point = this._coordinateToPoint(overlay, event)
             if (figureType === 'point') {
-              overlay.eventPressedPointMove(point, figureIndex, figure?.key ?? undefined)
+              overlay.eventPressedPointMove(point, figureIndex, figure?.key ?? undefined, figure?.moveDirection, event)
             } else {
-              overlay.eventPressedOtherMove(point, this.getWidget().getPane().getChart().getChartStore())
+              overlay.eventPressedOtherMove(point, this.getWidget().getPane().getChart().getChartStore(), figure?.moveDirection)
             }
             chartStore.executeAction('onOverlayChange', { type: 'progress', overlay })
             let prevented = false
@@ -303,14 +353,42 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
       }
       const pane = this.getWidget().getPane()
       const paneId = pane.getId()
-      overlay.startPressedMove(this._coordinateToPoint(overlay, event))
+      const chartStore = pane.getChart().getChartStore()
+      // Ctrl/Cmd+drag clones the overlay and drags the clone (TradingView).
+      let dragOverlay = overlay
+      if ((event.ctrlKey === true || event.metaKey === true) && !overlay.isDrawing()) {
+        const ids = chartStore.addOverlays([{
+          name: overlay.name,
+          paneId: overlay.paneId,
+          points: clone(overlay.points),
+          extendData: isValid(overlay.extendData) ? clone(overlay.extendData) : undefined,
+          styles: isValid(overlay.styles) ? clone(overlay.styles) : undefined,
+          lock: false,
+          visible: overlay.visible,
+          mode: overlay.mode,
+          modeSensitivity: overlay.modeSensitivity,
+          zLevel: overlay.zLevel
+        }], [false])
+        const cloneOverlay = chartStore.getOverlayById(ids[0] ?? null)
+        if (cloneOverlay === null) {
+          return false
+        }
+        if (cloneOverlay.isDrawing()) {
+          // Unlimited-step sources (freehand) create below totalStep — land
+          // the clone as a finished overlay rather than the drawing slot.
+          cloneOverlay.forceComplete()
+          chartStore.progressOverlayComplete()
+        }
+        dragOverlay = cloneOverlay
+      }
+      dragOverlay.startPressedMove(this._coordinateToPoint(dragOverlay, event))
       if (checkOverlayFigureEvent('onPressedMoveStart', figure)) {
-        overlay.onPressedMoveStart?.({ chart: pane.getChart(), overlay, figure, ...event })
-        pane.getChart().getChartStore().setPressedOverlayInfo({ paneId, overlay, figureType, figureIndex, figure })
+        dragOverlay.onPressedMoveStart?.({ chart: pane.getChart(), overlay: dragOverlay, figure, ...event })
+        chartStore.setPressedOverlayInfo({ paneId, overlay: dragOverlay, figureType, figureIndex, figure })
         // Gesture commit boundary — everything between editStart/editEnd is
         // one undo/persistence unit (drag gestures emit many 'progress').
-        pane.getChart().getChartStore().executeAction('onOverlayChange', { type: 'editStart', overlay })
-        return !overlay.isDrawing()
+        chartStore.executeAction('onOverlayChange', { type: 'editStart', overlay: dragOverlay })
+        return !dragOverlay.isDrawing()
       }
       return false
     }
@@ -511,9 +589,11 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
         const pointIdx = figure.pointIndex
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- pointIndex may be undefined at runtime
         const isBoundPoint = pointIdx !== undefined && pointIdx !== null
-        const events = this._createFigureEvents(
-          overlay, isBoundPoint ? 'point' : 'other', isBoundPoint ? pointIdx : figureIndex, figure
-        )
+        const events = figure.ignoreEvent === true
+          ? null
+          : this._createFigureEvents(
+            overlay, isBoundPoint ? 'point' : 'other', isBoundPoint ? pointIdx : figureIndex, figure
+          )
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment -- ignore
         // @ts-expect-error
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- ignore
@@ -560,7 +640,10 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
       xAxis,
       yAxis,
       isSelected: clickInfo.overlay?.id === o.id && clickInfo.figureType !== 'none',
-      isHovered: hoverInfo.overlay?.id === o.id && hoverInfo.figureType !== 'none'
+      isHovered: hoverInfo.overlay?.id === o.id && hoverInfo.figureType !== 'none',
+      hoveredFigureKey: hoverInfo.overlay?.id === o.id && hoverInfo.figureType !== 'none'
+        ? hoverInfo.figure?.key
+        : undefined
     }) ?? []
   }
 

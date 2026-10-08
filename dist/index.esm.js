@@ -517,11 +517,17 @@ var OverlayImp = /** @class */ (function () {
         this.onRemoved = null;
         this.onSelected = null;
         this.onDeselected = null;
+        this.freehand = false;
+        this.freehandMinDistance = 4;
+        // Plain field (not a getter) — merge() assigns source props directly, so a
+        // getter-only accessor would throw if a caller ever passes figuresRev in.
+        this.figuresRev = 0;
         this._prevZLevel = 0;
         this._prevPressedPoint = null;
         this._prevPressedPoints = [];
         this.override(overlay);
     }
+    OverlayImp.prototype.invalidateFigures = function () { this.figuresRev++; };
     OverlayImp.prototype.override = function (overlay) {
         var _a;
         // Snapshot only the fields shouldUpdate() compares — a deep clone of the
@@ -553,6 +559,7 @@ var OverlayImp = /** @class */ (function () {
             else {
                 this.extendData = clone(extendData);
             }
+            this.figuresRev++;
         }
         if (!isString(this.name)) {
             this.name = name !== null && name !== void 0 ? name : '';
@@ -567,6 +574,7 @@ var OverlayImp = /** @class */ (function () {
             else {
                 merge(this.styles, styles);
             }
+            this.figuresRev++;
         }
         if (isArray(points) && points.length > 0) {
             var repeatTotalStep = 0;
@@ -651,7 +659,7 @@ var OverlayImp = /** @class */ (function () {
     OverlayImp.prototype.isStart = function () {
         return this.currentStep === OVERLAY_DRAW_STEP_START;
     };
-    OverlayImp.prototype.eventMoveForDrawing = function (point) {
+    OverlayImp.prototype.eventMoveForDrawing = function (point, event) {
         var _a;
         var pointIndex = this.currentStep - 1;
         var newPoint = {};
@@ -671,15 +679,26 @@ var OverlayImp = /** @class */ (function () {
             points: this.points,
             performPointIndex: pointIndex,
             performPoint: newPoint,
-            prevPoints: this._prevPressedPoints
+            prevPoints: this._prevPressedPoints,
+            event: event
         });
     };
-    OverlayImp.prototype.eventPressedPointMove = function (point, pointIndex, figureKey) {
+    OverlayImp.prototype.eventPressedPointMove = function (point, pointIndex, figureKey, moveDirection, event) {
         var _a;
         if (pointIndex >= this.points.length) {
             while (this.points.length <= pointIndex) {
                 this.points.push({});
             }
+        }
+        // PossibleMovingDirections constraint (TradingView parity): a 'horz'
+        // figure drags horizontally only — keep the point's value; 'vert' keeps
+        // its time/index. Applied BEFORE assignment so performEventPressedMove
+        // sees the constrained point.
+        if (moveDirection === 'horz') {
+            point = __assign(__assign({}, point), { value: this.points[pointIndex].value });
+        }
+        else if (moveDirection === 'vert') {
+            point = __assign(__assign({}, point), { timestamp: this.points[pointIndex].timestamp, dataIndex: this.points[pointIndex].dataIndex });
         }
         this.points[pointIndex].timestamp = point.timestamp;
         if (isNumber(point.dataIndex)) {
@@ -695,21 +714,22 @@ var OverlayImp = /** @class */ (function () {
             performPointIndex: pointIndex,
             performPoint: this.points[pointIndex],
             prevPoints: this._prevPressedPoints,
-            figureKey: figureKey
+            figureKey: figureKey,
+            event: event
         });
     };
     OverlayImp.prototype.startPressedMove = function (point) {
         this._prevPressedPoint = __assign({}, point);
         this._prevPressedPoints = clone(this.points);
     };
-    OverlayImp.prototype.eventPressedOtherMove = function (point, chartStore) {
+    OverlayImp.prototype.eventPressedOtherMove = function (point, chartStore, moveDirection) {
         if (this._prevPressedPoint !== null) {
             var difDataIndex_1 = null;
-            if (isNumber(point.dataIndex) && isNumber(this._prevPressedPoint.dataIndex)) {
+            if (moveDirection !== 'vert' && isNumber(point.dataIndex) && isNumber(this._prevPressedPoint.dataIndex)) {
                 difDataIndex_1 = point.dataIndex - this._prevPressedPoint.dataIndex;
             }
             var difValue_1 = null;
-            if (isNumber(point.value) && isNumber(this._prevPressedPoint.value)) {
+            if (moveDirection !== 'horz' && isNumber(point.value) && isNumber(this._prevPressedPoint.value)) {
                 difValue_1 = point.value - this._prevPressedPoint.value;
             }
             this.points = this._prevPressedPoints.map(function (p) {
@@ -18881,6 +18901,14 @@ var StoreImp = /** @class */ (function () {
         return this._clickOverlayInfo;
     };
     /**
+     * O(1) overlay lookup by id — covers both finished overlays and the
+     * in-progress drawing slot.
+     */
+    StoreImp.prototype.getOverlayById = function (id) {
+        var _a;
+        return isString(id) ? (_a = this._overlayById.get(id)) !== null && _a !== void 0 ? _a : null : null;
+    };
+    /**
      * Programmatic selection — drives the same click-info pipeline a mouse
      * click does (onSelected/onDeselected hooks + select/deselect change
      * events + pane repaints). Pass null/undefined to deselect.
@@ -21210,6 +21238,7 @@ var OverlayView = /** @class */ (function (_super) {
         var paneId = pane.getId();
         var chart = pane.getChart();
         var chartStore = chart.getChartStore();
+        var freehandLastCoord = null;
         this.registerEvent('mouseMoveEvent', function (event) {
             var _a;
             var progressOverlayInfo = chartStore.getProgressOverlayInfo();
@@ -21222,7 +21251,7 @@ var OverlayView = /** @class */ (function (_super) {
                 }
                 var index = overlay.points.length - 1;
                 if (overlay.isDrawing() && progressOverlayPaneId === paneId) {
-                    overlay.eventMoveForDrawing(_this._coordinateToPoint(overlay, event));
+                    overlay.eventMoveForDrawing(_this._coordinateToPoint(overlay, event), event);
                     (_a = overlay.onDrawing) === null || _a === void 0 ? void 0 : _a.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
                     chartStore.executeAction('onOverlayChange', { type: 'progress', overlay: overlay });
                 }
@@ -21249,7 +21278,7 @@ var OverlayView = /** @class */ (function (_super) {
                 }
                 var index = overlay.points.length - 1;
                 if (overlay.isDrawing() && progressOverlayPaneId === paneId) {
-                    overlay.eventMoveForDrawing(_this._coordinateToPoint(overlay, event));
+                    overlay.eventMoveForDrawing(_this._coordinateToPoint(overlay, event), event);
                     (_a = overlay.onDrawing) === null || _a === void 0 ? void 0 : _a.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
                     overlay.nextStep();
                     chartStore.executeAction('onOverlayChange', { type: 'progress', overlay: overlay });
@@ -21307,16 +21336,46 @@ var OverlayView = /** @class */ (function (_super) {
                 }
             }
             return false;
-        }).registerEvent('mouseUpEvent', function (event) {
-            var _a;
-            var _b = chartStore.getPressedOverlayInfo(), overlay = _b.overlay, figure = _b.figure;
-            if (overlay !== null) {
-                if (checkOverlayFigureEvent('onPressedMoveEnd', figure)) {
-                    (_a = overlay.onPressedMoveEnd) === null || _a === void 0 ? void 0 : _a.call(overlay, __assign({ chart: chart, overlay: overlay, figure: figure !== null && figure !== void 0 ? figure : undefined }, event));
-                }
-                // Gesture commit boundary — pairs with 'editStart' emitted on press.
-                chartStore.executeAction('onOverlayChange', { type: 'editEnd', overlay: overlay });
+        }).registerEvent('mouseDownEvent', function (event) {
+            var _a, _b, _c;
+            // Freehand stroke start: a press while a freehand overlay is armed
+            // commits the first point and arms the pressed-move collector.
+            var overlay = (_b = (_a = chartStore.getProgressOverlayInfo()) === null || _a === void 0 ? void 0 : _a.overlay) !== null && _b !== void 0 ? _b : null;
+            if (overlay === null || !overlay.freehand || !overlay.isDrawing() || overlay.lock) {
+                return false;
             }
+            overlay.eventMoveForDrawing(_this._coordinateToPoint(overlay, event), event);
+            overlay.nextStep();
+            (_c = overlay.onDrawing) === null || _c === void 0 ? void 0 : _c.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
+            chartStore.executeAction('onOverlayChange', { type: 'progress', overlay: overlay });
+            chartStore.setPressedOverlayInfo({
+                paneId: paneId,
+                overlay: overlay,
+                figureType: 'none',
+                figureIndex: -1,
+                figure: null
+            });
+            freehandLastCoord = { x: event.x, y: event.y };
+            return true;
+        }).registerEvent('mouseUpEvent', function (event) {
+            var _a, _b;
+            var _c = chartStore.getPressedOverlayInfo(), overlay = _c.overlay, figure = _c.figure, figureType = _c.figureType;
+            if (overlay !== null) {
+                if (overlay.freehand && overlay.isDrawing() && figureType === 'none') {
+                    // Freehand stroke end — complete and commit the overlay.
+                    overlay.forceComplete();
+                    chartStore.progressOverlayComplete();
+                    (_a = overlay.onDrawEnd) === null || _a === void 0 ? void 0 : _a.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
+                }
+                else {
+                    if (checkOverlayFigureEvent('onPressedMoveEnd', figure)) {
+                        (_b = overlay.onPressedMoveEnd) === null || _b === void 0 ? void 0 : _b.call(overlay, __assign({ chart: chart, overlay: overlay, figure: figure !== null && figure !== void 0 ? figure : undefined }, event));
+                    }
+                    // Gesture commit boundary — pairs with 'editStart' emitted on press.
+                    chartStore.executeAction('onOverlayChange', { type: 'editEnd', overlay: overlay });
+                }
+            }
+            freehandLastCoord = null;
             chartStore.setPressedOverlayInfo({
                 paneId: paneId,
                 overlay: null,
@@ -21326,27 +21385,48 @@ var OverlayView = /** @class */ (function (_super) {
             });
             return false;
         }).registerEvent('pressedMouseMoveEvent', function (event) {
-            var _a, _b, _c;
-            var _d = chartStore.getPressedOverlayInfo(), overlay = _d.overlay, figureType = _d.figureType, figureIndex = _d.figureIndex, figure = _d.figure;
+            var _a, _b, _c, _d, _e, _f, _g;
+            var _h = chartStore.getPressedOverlayInfo(), overlay = _h.overlay, figureType = _h.figureType, figureIndex = _h.figureIndex, figure = _h.figure;
             if (overlay !== null) {
+                if (overlay.freehand && overlay.isDrawing() && figureType === 'none') {
+                    // Freehand stroke — append a point once the pointer travels past
+                    // the decimation distance, then advance the write slot.
+                    var minDist = overlay.freehandMinDistance;
+                    var dx = event.x - ((_a = freehandLastCoord === null || freehandLastCoord === void 0 ? void 0 : freehandLastCoord.x) !== null && _a !== void 0 ? _a : event.x);
+                    var dy = event.y - ((_b = freehandLastCoord === null || freehandLastCoord === void 0 ? void 0 : freehandLastCoord.y) !== null && _b !== void 0 ? _b : event.y);
+                    if (dx * dx + dy * dy >= minDist * minDist) {
+                        overlay.eventMoveForDrawing(_this._coordinateToPoint(overlay, event), event);
+                        overlay.nextStep();
+                        (_c = overlay.onDrawing) === null || _c === void 0 ? void 0 : _c.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
+                        chartStore.executeAction('onOverlayChange', { type: 'progress', overlay: overlay });
+                        freehandLastCoord = { x: event.x, y: event.y };
+                        if (!overlay.isDrawing()) {
+                            // A finite-step freehand tool finished mid-stroke.
+                            chartStore.progressOverlayComplete();
+                            (_d = overlay.onDrawEnd) === null || _d === void 0 ? void 0 : _d.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
+                        }
+                    }
+                    _this.getWidget().setForceCursor('crosshair');
+                    return true;
+                }
                 if (checkOverlayFigureEvent('onPressedMoving', figure)) {
                     if (!overlay.lock) {
                         var point = _this._coordinateToPoint(overlay, event);
                         if (figureType === 'point') {
-                            overlay.eventPressedPointMove(point, figureIndex, (_a = figure === null || figure === void 0 ? void 0 : figure.key) !== null && _a !== void 0 ? _a : undefined);
+                            overlay.eventPressedPointMove(point, figureIndex, (_e = figure === null || figure === void 0 ? void 0 : figure.key) !== null && _e !== void 0 ? _e : undefined, figure === null || figure === void 0 ? void 0 : figure.moveDirection, event);
                         }
                         else {
-                            overlay.eventPressedOtherMove(point, _this.getWidget().getPane().getChart().getChartStore());
+                            overlay.eventPressedOtherMove(point, _this.getWidget().getPane().getChart().getChartStore(), figure === null || figure === void 0 ? void 0 : figure.moveDirection);
                         }
                         chartStore.executeAction('onOverlayChange', { type: 'progress', overlay: overlay });
                         var prevented_1 = false;
-                        (_b = overlay.onPressedMoving) === null || _b === void 0 ? void 0 : _b.call(overlay, __assign(__assign({ chart: chart, overlay: overlay, figure: figure !== null && figure !== void 0 ? figure : undefined }, event), { preventDefault: function () { prevented_1 = true; } }));
+                        (_f = overlay.onPressedMoving) === null || _f === void 0 ? void 0 : _f.call(overlay, __assign(__assign({ chart: chart, overlay: overlay, figure: figure !== null && figure !== void 0 ? figure : undefined }, event), { preventDefault: function () { prevented_1 = true; } }));
                         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- ignore
                         if (prevented_1) {
                             _this.getWidget().setForceCursor(null);
                         }
                         else {
-                            _this.getWidget().setForceCursor((_c = figure === null || figure === void 0 ? void 0 : figure.cursor) !== null && _c !== void 0 ? _c : 'pointer');
+                            _this.getWidget().setForceCursor((_g = figure === null || figure === void 0 ? void 0 : figure.cursor) !== null && _g !== void 0 ? _g : 'pointer');
                         }
                     }
                     return true;
@@ -21422,20 +21502,48 @@ var OverlayView = /** @class */ (function (_super) {
     OverlayView.prototype._figureMouseDownEvent = function (overlay, figureType, figureIndex, figure) {
         var _this = this;
         return function (event) {
-            var _a;
+            var _a, _b;
             if (overlay.ghost || overlay.lock) {
                 return false;
             }
             var pane = _this.getWidget().getPane();
             var paneId = pane.getId();
-            overlay.startPressedMove(_this._coordinateToPoint(overlay, event));
+            var chartStore = pane.getChart().getChartStore();
+            // Ctrl/Cmd+drag clones the overlay and drags the clone (TradingView).
+            var dragOverlay = overlay;
+            if ((event.ctrlKey === true || event.metaKey === true) && !overlay.isDrawing()) {
+                var ids = chartStore.addOverlays([{
+                        name: overlay.name,
+                        paneId: overlay.paneId,
+                        points: clone(overlay.points),
+                        extendData: isValid(overlay.extendData) ? clone(overlay.extendData) : undefined,
+                        styles: isValid(overlay.styles) ? clone(overlay.styles) : undefined,
+                        lock: false,
+                        visible: overlay.visible,
+                        mode: overlay.mode,
+                        modeSensitivity: overlay.modeSensitivity,
+                        zLevel: overlay.zLevel
+                    }], [false]);
+                var cloneOverlay = chartStore.getOverlayById((_a = ids[0]) !== null && _a !== void 0 ? _a : null);
+                if (cloneOverlay === null) {
+                    return false;
+                }
+                if (cloneOverlay.isDrawing()) {
+                    // Unlimited-step sources (freehand) create below totalStep — land
+                    // the clone as a finished overlay rather than the drawing slot.
+                    cloneOverlay.forceComplete();
+                    chartStore.progressOverlayComplete();
+                }
+                dragOverlay = cloneOverlay;
+            }
+            dragOverlay.startPressedMove(_this._coordinateToPoint(dragOverlay, event));
             if (checkOverlayFigureEvent('onPressedMoveStart', figure)) {
-                (_a = overlay.onPressedMoveStart) === null || _a === void 0 ? void 0 : _a.call(overlay, __assign({ chart: pane.getChart(), overlay: overlay, figure: figure }, event));
-                pane.getChart().getChartStore().setPressedOverlayInfo({ paneId: paneId, overlay: overlay, figureType: figureType, figureIndex: figureIndex, figure: figure });
+                (_b = dragOverlay.onPressedMoveStart) === null || _b === void 0 ? void 0 : _b.call(dragOverlay, __assign({ chart: pane.getChart(), overlay: dragOverlay, figure: figure }, event));
+                chartStore.setPressedOverlayInfo({ paneId: paneId, overlay: dragOverlay, figureType: figureType, figureIndex: figureIndex, figure: figure });
                 // Gesture commit boundary — everything between editStart/editEnd is
                 // one undo/persistence unit (drag gestures emit many 'progress').
-                pane.getChart().getChartStore().executeAction('onOverlayChange', { type: 'editStart', overlay: overlay });
-                return !overlay.isDrawing();
+                chartStore.executeAction('onOverlayChange', { type: 'editStart', overlay: dragOverlay });
+                return !dragOverlay.isDrawing();
             }
             return false;
         };
@@ -21632,7 +21740,9 @@ var OverlayView = /** @class */ (function (_super) {
                 var pointIdx = figure.pointIndex;
                 // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- pointIndex may be undefined at runtime
                 var isBoundPoint = pointIdx !== undefined && pointIdx !== null;
-                var events = _this._createFigureEvents(overlay, isBoundPoint ? 'point' : 'other', isBoundPoint ? pointIdx : figureIndex, figure);
+                var events = figure.ignoreEvent === true
+                    ? null
+                    : _this._createFigureEvents(overlay, isBoundPoint ? 'point' : 'other', isBoundPoint ? pointIdx : figureIndex, figure);
                 // eslint-disable-next-line @typescript-eslint/ban-ts-comment -- ignore
                 // @ts-expect-error
                 // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- ignore
@@ -21656,7 +21766,7 @@ var OverlayView = /** @class */ (function (_super) {
         return null;
     };
     OverlayView.prototype.getFigures = function (o, coordinates) {
-        var _a, _b, _c, _d;
+        var _a, _b, _c, _d, _e, _f;
         var widget = this.getWidget();
         var pane = widget.getPane();
         var chart = pane.getChart();
@@ -21666,7 +21776,7 @@ var OverlayView = /** @class */ (function (_super) {
         var bounding = widget.getBounding();
         var clickInfo = chartStore.getClickOverlayInfo();
         var hoverInfo = chartStore.getHoverOverlayInfo();
-        return (_d = (_a = o.createPointFigures) === null || _a === void 0 ? void 0 : _a.call(o, {
+        return (_f = (_a = o.createPointFigures) === null || _a === void 0 ? void 0 : _a.call(o, {
             chart: chart,
             overlay: o,
             coordinates: coordinates,
@@ -21674,8 +21784,11 @@ var OverlayView = /** @class */ (function (_super) {
             xAxis: xAxis,
             yAxis: yAxis,
             isSelected: ((_b = clickInfo.overlay) === null || _b === void 0 ? void 0 : _b.id) === o.id && clickInfo.figureType !== 'none',
-            isHovered: ((_c = hoverInfo.overlay) === null || _c === void 0 ? void 0 : _c.id) === o.id && hoverInfo.figureType !== 'none'
-        })) !== null && _d !== void 0 ? _d : [];
+            isHovered: ((_c = hoverInfo.overlay) === null || _c === void 0 ? void 0 : _c.id) === o.id && hoverInfo.figureType !== 'none',
+            hoveredFigureKey: ((_d = hoverInfo.overlay) === null || _d === void 0 ? void 0 : _d.id) === o.id && hoverInfo.figureType !== 'none'
+                ? (_e = hoverInfo.figure) === null || _e === void 0 ? void 0 : _e.key
+                : undefined
+        })) !== null && _f !== void 0 ? _f : [];
     };
     OverlayView.prototype.drawDefaultFigures = function (ctx, overlay, coordinates) {
         var _this = this;
@@ -29052,6 +29165,411 @@ function createChartSync(options) {
 }
 
 /**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+function getCommonState(overlay) {
+    var _a;
+    var ed = overlay.extendData;
+    return (_a = ed === null || ed === void 0 ? void 0 : ed.common) !== null && _a !== void 0 ? _a : {};
+}
+function isVisibleOnInterval(overlay, interval) {
+    var visibleIntervals = getCommonState(overlay).visibleIntervals;
+    return visibleIntervals === undefined || visibleIntervals.length === 0 || visibleIntervals.includes(interval);
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var ANCHOR_KEY_PREFIX = 'anchor_';
+var ANCHOR_MID_KEY = 'anchor_mid';
+/**
+ * TradingView anchor sizing: ~6px grab radius on mouse, ~13px on touch.
+ * The figure IS the hit target, so touch anchors are physically bigger —
+ * no separate tolerance plumbing needed.
+ */
+var ANCHOR_HALF_MOUSE = 6;
+var ANCHOR_HALF_TOUCH = 13;
+function anchorVisible(isSelected, isHovered, lock) {
+    // TradingView rule: anchors show on selection always, on hover only when
+    // the source is not locked.
+    return isSelected || (isHovered && !lock);
+}
+/**
+ * Build the draggable control-point figures for an overlay. Returns [] when
+ * the overlay should show no anchors (not selected, not hovered-unlocked).
+ * For a LOCKED selected overlay call {@link createSelectionOutlineFigures}.
+ */
+function createAnchorFigures(params) {
+    var e_1, _a;
+    var _b, _c, _d, _e, _f;
+    var coordinates = params.coordinates, _g = params.isSelected, isSelected = _g === void 0 ? false : _g, _h = params.isHovered, isHovered = _h === void 0 ? false : _h, _j = params.lock, lock = _j === void 0 ? false : _j, _k = params.isDrawing, isDrawing = _k === void 0 ? false : _k, _l = params.isTouch, isTouch = _l === void 0 ? false : _l, _m = params.midPoint, midPoint = _m === void 0 ? false : _m, _o = params.shape, shape = _o === void 0 ? 'square' : _o, cursors = params.cursors, moveDirections = params.moveDirections, styles = params.styles, _p = params.keyPrefix, keyPrefix = _p === void 0 ? ANCHOR_KEY_PREFIX : _p, pointIndexes = params.pointIndexes;
+    if (!anchorVisible(isSelected, isHovered, lock)) {
+        return [];
+    }
+    if (lock) {
+        return createSelectionOutlineFigures({ coordinates: coordinates, styles: styles });
+    }
+    var half = isTouch ? ANCHOR_HALF_TOUCH : ANCHOR_HALF_MOUSE;
+    var borderColor = (_b = styles === null || styles === void 0 ? void 0 : styles.borderColor) !== null && _b !== void 0 ? _b : '#1592E6';
+    var backColor = (_c = styles === null || styles === void 0 ? void 0 : styles.backColor) !== null && _c !== void 0 ? _c : '#ffffff';
+    var borderSize = (_d = styles === null || styles === void 0 ? void 0 : styles.borderSize) !== null && _d !== void 0 ? _d : 1.5;
+    var indexes = pointIndexes !== null && pointIndexes !== void 0 ? pointIndexes : coordinates.map(function (_, i) { return i; });
+    var figures = [];
+    var lastIndex = coordinates.length - 1;
+    try {
+        for (var indexes_1 = __values(indexes), indexes_1_1 = indexes_1.next(); !indexes_1_1.done; indexes_1_1 = indexes_1.next()) {
+            var index = indexes_1_1.value;
+            // Suppress the in-progress point's anchor while the overlay is drawn.
+            if (isDrawing && index === lastIndex) {
+                continue;
+            }
+            var _q = coordinates[index], x = _q.x, y = _q.y;
+            var cx = Math.round(x) - 0.5;
+            var cy = Math.round(y) - 0.5;
+            var figure = {
+                key: "".concat(keyPrefix).concat(index),
+                type: shape === 'square' ? 'rect' : 'circle',
+                attrs: shape === 'square'
+                    ? { x: cx - half, y: cy - half, width: half * 2, height: half * 2 }
+                    : { x: cx, y: cy, r: half },
+                styles: {
+                    style: 'stroke_fill',
+                    color: backColor,
+                    borderColor: borderColor,
+                    borderSize: borderSize
+                },
+                pointIndex: index,
+                cursor: (_e = cursors === null || cursors === void 0 ? void 0 : cursors[index]) !== null && _e !== void 0 ? _e : 'pointer',
+                moveDirection: (_f = moveDirections === null || moveDirections === void 0 ? void 0 : moveDirections[index]) !== null && _f !== void 0 ? _f : 'both'
+            };
+            figures.push(figure);
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (indexes_1_1 && !indexes_1_1.done && (_a = indexes_1.return)) _a.call(indexes_1);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    if (midPoint && coordinates.length === 2 && !isDrawing) {
+        var _r = __read(coordinates, 2), a = _r[0], b = _r[1];
+        var mx = Math.round((a.x + b.x) / 2) - 0.5;
+        var my = Math.round((a.y + b.y) / 2) - 0.5;
+        figures.push({
+            key: "".concat(keyPrefix, "mid"),
+            type: 'circle',
+            attrs: { x: mx, y: my, r: half * 0.7 },
+            styles: {
+                style: 'stroke_fill',
+                color: backColor,
+                borderColor: borderColor,
+                borderSize: borderSize
+            },
+            cursor: 'move'
+        });
+    }
+    return figures;
+}
+/**
+ * Locked-selection outline: non-interactive corner markers so a locked
+ * drawing still reads as "selected but frozen" — TradingView renders a
+ * SelectionRenderer instead of LineAnchorRenderer for locked sources.
+ */
+function createSelectionOutlineFigures(params) {
+    var _a;
+    var coordinates = params.coordinates, _b = params.isTouch, isTouch = _b === void 0 ? false : _b, styles = params.styles, _c = params.keyPrefix, keyPrefix = _c === void 0 ? ANCHOR_KEY_PREFIX : _c;
+    var half = isTouch ? ANCHOR_HALF_TOUCH * 0.7 : ANCHOR_HALF_MOUSE * 0.7;
+    var borderColor = (_a = styles === null || styles === void 0 ? void 0 : styles.lockedBorderColor) !== null && _a !== void 0 ? _a : '#787B86';
+    return coordinates.map(function (_a, index) {
+        var _b;
+        var x = _a.x, y = _a.y;
+        return ({
+            key: "".concat(keyPrefix, "sel_").concat(index),
+            type: 'rect',
+            attrs: {
+                x: Math.round(x) - 0.5 - half,
+                y: Math.round(y) - 0.5 - half,
+                width: half * 2,
+                height: half * 2
+            },
+            styles: {
+                style: 'stroke',
+                color: (_b = styles === null || styles === void 0 ? void 0 : styles.backColor) !== null && _b !== void 0 ? _b : '#ffffff',
+                borderColor: borderColor,
+                borderSize: 1
+            },
+            // Selection markers are display-only — never interactive.
+            ignoreEvent: true
+        });
+    });
+}
+/**
+ * 8-way resize cursor for a handle of a segment: buckets the segment angle
+ * into 22.5° steps and maps it to a CSS directional cursor — the TradingView
+ * `anchorResizeCursorType` behavior.
+ */
+function computeResizeCursor(from, to) {
+    var angle = Math.atan2(to.y - from.y, to.x - from.x);
+    // Canvas y-axis points down, so +45° is down-right → the handle drags a
+    // NW-SE axis. +π/−π collapse to the horizontal bucket.
+    var bucket = ((Math.round(angle / (Math.PI / 4)) % 4) + 4) % 4;
+    switch (bucket) {
+        case 0: return 'ew-resize';
+        case 1: return 'nwse-resize';
+        case 2: return 'ns-resize';
+        default: return 'nesw-resize';
+    }
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var states = new WeakMap();
+function getDrawingInteractionState(chart) {
+    var state = states.get(chart);
+    if (state === undefined) {
+        state = { align45: false };
+        states.set(chart, state);
+    }
+    return state;
+}
+function setAlign45Enabled(chart, enabled) {
+    getDrawingInteractionState(chart).align45 = enabled;
+}
+function isAlign45Enabled(chart) {
+    return getDrawingInteractionState(chart).align45;
+}
+/**
+ * Whether a move should snap to 45° increments — Shift held during the
+ * gesture, or the persistent toolbar toggle.
+ */
+function isSnap45Active(chart, event) {
+    return (event === null || event === void 0 ? void 0 : event.shiftKey) === true || isAlign45Enabled(chart);
+}
+/**
+ * Snap `to` onto the nearest 45° ray from `from`, preserving distance.
+ * Operates in pixel space — convert Point↔Coordinate at the call site.
+ */
+function snap45Coordinate(to, from) {
+    var dx = to.x - from.x;
+    var dy = to.y - from.y;
+    var distance = Math.sqrt(dx * dx + dy * dy);
+    if (distance === 0) {
+        return to;
+    }
+    var angle = Math.atan2(dy, dx);
+    var snapped = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+    return {
+        x: from.x + distance * Math.cos(snapped),
+        y: from.y + distance * Math.sin(snapped)
+    };
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+function isEditableTarget(target) {
+    if (!(target instanceof Element)) {
+        return false;
+    }
+    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) {
+        return true;
+    }
+    if (target instanceof HTMLElement && target.isContentEditable) {
+        return true;
+    }
+    return target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]') !== null;
+}
+/**
+ * Bind the shared keyboard layer. Returns an unbind function.
+ * Guards: editable DOM targets and IME composition never reach handlers.
+ */
+function bindDrawingKeyboard(handlers, options) {
+    var _a;
+    var target = (_a = options === null || options === void 0 ? void 0 : options.target) !== null && _a !== void 0 ? _a : (typeof document !== 'undefined' ? document : undefined);
+    if (target === undefined) {
+        return function () {
+            // SSR — nothing bound, nothing to unbind.
+        };
+    }
+    var onKeyDown = function (e) {
+        var _a, _b, _c, _d;
+        if (!(e instanceof KeyboardEvent)) {
+            return;
+        }
+        // Never intercept typing — inputs, textareas, contenteditable, IME.
+        if (isEditableTarget(e.target) || e.isComposing) {
+            return;
+        }
+        if (((_a = options === null || options === void 0 ? void 0 : options.isActive) === null || _a === void 0 ? void 0 : _a.call(options)) === false) {
+            return;
+        }
+        var mod = e.ctrlKey || e.metaKey;
+        if (mod) {
+            var key = e.key.toLowerCase();
+            if (key === 'z') {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    (_b = handlers.onRedo) === null || _b === void 0 ? void 0 : _b.call(handlers);
+                }
+                else {
+                    (_c = handlers.onUndo) === null || _c === void 0 ? void 0 : _c.call(handlers);
+                }
+            }
+            else if (key === 'c' && handlers.onCopy !== undefined) {
+                e.preventDefault();
+                handlers.onCopy();
+            }
+            else if (key === 'v' && handlers.onPaste !== undefined) {
+                e.preventDefault();
+                handlers.onPaste();
+            }
+            else if (key === 'y') {
+                // Windows redo convention alongside Cmd+Shift+Z.
+                e.preventDefault();
+                (_d = handlers.onRedo) === null || _d === void 0 ? void 0 : _d.call(handlers);
+            }
+            return;
+        }
+        if (e.key === 'Escape' && handlers.onEscape !== undefined) {
+            handlers.onEscape();
+        }
+        else if ((e.key === 'Delete' || e.key === 'Backspace') && handlers.onDelete !== undefined) {
+            e.preventDefault();
+            handlers.onDelete();
+        }
+    };
+    target.addEventListener('keydown', onKeyDown);
+    return function () {
+        target.removeEventListener('keydown', onKeyDown);
+    };
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var cache = new WeakMap();
+function coordsSignature(coordinates) {
+    var e_1, _a;
+    // Quarter-pixel rounding absorbs sub-pixel jitter from axis math without
+    // masking real moves.
+    var sig = '';
+    try {
+        for (var coordinates_1 = __values(coordinates), coordinates_1_1 = coordinates_1.next(); !coordinates_1_1.done; coordinates_1_1 = coordinates_1.next()) {
+            var c = coordinates_1_1.value;
+            sig += "".concat(Math.round(c.x * 4), ",").concat(Math.round(c.y * 4), ";");
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (coordinates_1_1 && !coordinates_1_1.done && (_a = coordinates_1.return)) _a.call(coordinates_1);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    return sig;
+}
+function withFigureCache(fn, options) {
+    return function (params) {
+        var _a, _b;
+        var signature = coordsSignature(params.coordinates) +
+            "|r".concat(params.overlay.figuresRev) +
+            "|s".concat(params.isSelected === true ? 1 : 0, "h").concat(params.isHovered === true ? 1 : 0) +
+            "|c".concat(params.overlay.currentStep) +
+            "|k".concat((_b = (_a = options === null || options === void 0 ? void 0 : options.extraKey) === null || _a === void 0 ? void 0 : _a.call(options, params)) !== null && _b !== void 0 ? _b : '');
+        var entry = cache.get(params.overlay);
+        if (entry !== undefined && entry.signature === signature) {
+            return entry.figures;
+        }
+        var result = fn(params);
+        var figures = Array.isArray(result) ? result : [result];
+        cache.set(params.overlay, { signature: signature, figures: figures });
+        return figures;
+    };
+}
+function boundsOutside(bounds, bounding, margin) {
+    return (bounds.x + bounds.width < -margin ||
+        bounds.x > bounding.width + margin ||
+        bounds.y + bounds.height < -margin ||
+        bounds.y > bounding.height + margin);
+}
+/**
+ * Drop figures that declare `bounds` fully outside the viewport. Figures
+ * without bounds are always kept (opt-in per figure).
+ */
+function withViewportCull(fn, options) {
+    var _a;
+    var margin = (_a = options === null || options === void 0 ? void 0 : options.margin) !== null && _a !== void 0 ? _a : 24;
+    return function (params) {
+        var result = fn(params);
+        var figures = Array.isArray(result) ? result : [result];
+        var bounding = params.bounding;
+        return figures.filter(function (figure) {
+            var bounds = figure.bounds;
+            return bounds === undefined || !boundsOutside(bounds, bounding, margin);
+        });
+    };
+}
+/**
+ * Convenience: cache → cull. The composition order matters — cull is inner
+ * so off-screen figures never enter the cache output.
+ */
+function withPerfPipeline(fn, options) {
+    return withFigureCache(withViewportCull(fn, options), options);
+}
+
+/**
  *       ___           ___                   ___           ___           ___           ___           ___           ___           ___
  *      /\__\         /\__\      ___        /\__\         /\  \         /\  \         /\__\         /\  \         /\  \         /\  \
  *     /:/  /        /:/  /     /\  \      /::|  |       /::\  \       /::\  \       /:/  /        /::\  \       /::\  \        \:\  \
@@ -29169,4 +29687,4 @@ var utils = {
     checkCoordinateOnText: checkCoordinateOnText
 };
 
-export { KCX_PERIOD, KTR_STEP_PERCENT, OVERLAY_FIGURE_KEY_PREFIX, OVERLAY_ID_PREFIX, SYNC_GROUP_COLORS, checkOverlayFigureEvent, createChartSync, dispose, getFigureClass, getOverlayClass, getSupportedFigures, getSupportedIndicators, getSupportedLocales, getSupportedOverlays, init, registerFigure, registerIndicator, registerLocale, registerOverlay, registerStyles, registerXAxis, registerYAxis, utils, version };
+export { ANCHOR_HALF_MOUSE, ANCHOR_HALF_TOUCH, ANCHOR_KEY_PREFIX, ANCHOR_MID_KEY, KCX_PERIOD, KTR_STEP_PERCENT, OVERLAY_FIGURE_KEY_PREFIX, OVERLAY_ID_PREFIX, SYNC_GROUP_COLORS, bindDrawingKeyboard, checkOverlayFigureEvent, computeResizeCursor, createAnchorFigures, createChartSync, createSelectionOutlineFigures, dispose, getCommonState, getDrawingInteractionState, getFigureClass, getOverlayClass, getSupportedFigures, getSupportedIndicators, getSupportedLocales, getSupportedOverlays, init, isAlign45Enabled, isSnap45Active, isVisibleOnInterval, registerFigure, registerIndicator, registerLocale, registerOverlay, registerStyles, registerXAxis, registerYAxis, setAlign45Enabled, snap45Coordinate, utils, version, withFigureCache, withPerfPipeline, withViewportCull };

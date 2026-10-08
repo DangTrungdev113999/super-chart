@@ -1703,6 +1703,14 @@ export default class StoreImp implements Store {
   }
 
   /**
+   * O(1) overlay lookup by id — covers both finished overlays and the
+   * in-progress drawing slot.
+   */
+  getOverlayById (id: Nullable<string>): Nullable<OverlayImp> {
+    return isString(id) ? this._overlayById.get(id) ?? null : null
+  }
+
+  /**
    * Programmatic selection — drives the same click-info pipeline a mouse
    * click does (onSelected/onDeselected hooks + select/deselect change
    * events + pane repaints). Pass null/undefined to deselect.
