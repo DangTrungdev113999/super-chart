@@ -66,6 +66,15 @@ export interface ProgressOverlayInfo {
   appointPaneFlag: boolean
 }
 
+/**
+ * Which part of an overlay a pointer event hit:
+ * - `'none'`  — no figure hit. Also the sentinel for whole-gesture state:
+ *               freehand strokes and pressed drags that own the pointer but
+ *               map to no single figure use `{ figureType: 'none',
+ *               figureIndex: -1, figure: null }`.
+ * - `'point'` — a point anchor (figureIndex = the point index).
+ * - `'other'` — a non-anchor figure (body segment, label, handle).
+ */
 export type EventOverlayInfoFigureType = 'none' | 'point' | 'other'
 
 export interface EventOverlayInfo {

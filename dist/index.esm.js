@@ -501,6 +501,7 @@ var OverlayImp = /** @class */ (function () {
         this.createXAxisFigures = null;
         this.createYAxisFigures = null;
         this.performEventPressedMove = null;
+        this.performEventBodyMove = null;
         this.performEventMoveForDrawing = null;
         this.onDrawStart = null;
         this.onDrawing = null;
@@ -546,7 +547,11 @@ var OverlayImp = /** @class */ (function () {
             extendData: this.extendData,
             stylesJson: stylesJson
         };
-        var id = overlay.id, name = overlay.name; overlay.currentStep; var points = overlay.points, styles = overlay.styles, extendData = overlay.extendData, skipDrawReplay = overlay.skipDrawReplay, others = __rest(overlay, ["id", "name", "currentStep", "points", "styles", "extendData", "skipDrawReplay"]);
+        var id = overlay.id, name = overlay.name; overlay.currentStep; var points = overlay.points, styles = overlay.styles, extendData = overlay.extendData, skipDrawReplay = overlay.skipDrawReplay; 
+        // Kernel-owned members must never be merge-clobbered by a spread of
+        // an overlay snapshot (regressed figuresRev poisons the figure cache;
+        // shadowed methods break the instance).
+        overlay.figuresRev; overlay.invalidateFigures; overlay.isDrawing; overlay.isStart; overlay.forceComplete; var others = __rest(overlay, ["id", "name", "currentStep", "points", "styles", "extendData", "skipDrawReplay", "figuresRev", "invalidateFigures", "isDrawing", "isStart", "forceComplete"]);
         merge(this, others);
         // Handle extendData separately — always produce a mutable merged result
         // (frozen objects from Immer/store and their sub-objects cannot be mutated)
@@ -722,7 +727,8 @@ var OverlayImp = /** @class */ (function () {
         this._prevPressedPoint = __assign({}, point);
         this._prevPressedPoints = clone(this.points);
     };
-    OverlayImp.prototype.eventPressedOtherMove = function (point, chartStore, moveDirection) {
+    OverlayImp.prototype.eventPressedOtherMove = function (point, chartStore, moveDirection, figureKey, event) {
+        var _a;
         if (this._prevPressedPoint !== null) {
             var difDataIndex_1 = null;
             if (moveDirection !== 'vert' && isNumber(point.dataIndex) && isNumber(this._prevPressedPoint.dataIndex)) {
@@ -746,6 +752,14 @@ var OverlayImp = /** @class */ (function () {
                     newPoint.value = p.value + difValue_1;
                 }
                 return newPoint;
+            });
+            (_a = this.performEventBodyMove) === null || _a === void 0 ? void 0 : _a.call(this, {
+                currentStep: this.currentStep,
+                points: this.points,
+                mode: this.mode,
+                prevPoints: this._prevPressedPoints,
+                figureKey: figureKey,
+                event: event
             });
         }
     };
@@ -21309,6 +21323,19 @@ var OverlayView = /** @class */ (function (_super) {
                 var progressOverlayPaneId = progressOverlayInfo.paneId;
                 if (overlay.isDrawing() && progressOverlayPaneId === paneId) {
                     overlay.forceComplete();
+                    // TradingView semantics: a force-completed drawing that never
+                    // collected its minimum points is CANCELLED, not committed —
+                    // otherwise double-click strands a degenerate zombie (a 1-point
+                    // polyline, a 2-point channel missing its third anchor).
+                    // Unlimited-step tools declare totalStep: MAX_SAFE_INTEGER and
+                    // need at least 2 points to render meaningfully.
+                    var minPoints = overlay.totalStep >= Number.MAX_SAFE_INTEGER
+                        ? 2
+                        : Math.max(1, overlay.totalStep - 1);
+                    if (overlay.points.length < minPoints) {
+                        chartStore.removeOverlay({ id: overlay.id });
+                        return true;
+                    }
                     if (!overlay.isDrawing()) {
                         chartStore.progressOverlayComplete();
                         (_a = overlay.onDrawEnd) === null || _a === void 0 ? void 0 : _a.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
@@ -21340,14 +21367,33 @@ var OverlayView = /** @class */ (function (_super) {
             var _a, _b, _c;
             // Freehand stroke start: a press while a freehand overlay is armed
             // commits the first point and arms the pressed-move collector.
-            var overlay = (_b = (_a = chartStore.getProgressOverlayInfo()) === null || _a === void 0 ? void 0 : _a.overlay) !== null && _b !== void 0 ? _b : null;
-            if (overlay === null || !overlay.freehand || !overlay.isDrawing() || overlay.lock) {
+            var progressOverlayInfo = chartStore.getProgressOverlayInfo();
+            var overlay = (_a = progressOverlayInfo === null || progressOverlayInfo === void 0 ? void 0 : progressOverlayInfo.overlay) !== null && _a !== void 0 ? _a : null;
+            if (progressOverlayInfo === null || overlay === null || !overlay.freehand || !overlay.isDrawing() || overlay.lock) {
+                return false;
+            }
+            // Axis widgets convert only half a point — never let them start a stroke.
+            if (!_this.coordinateToPointValueFlag() || !_this.coordinateToPointTimestampDataIndexFlag()) {
+                return false;
+            }
+            var progressOverlayPaneId = progressOverlayInfo.paneId;
+            if (overlay.isStart()) {
+                chartStore.updateProgressOverlayInfo(paneId);
+                progressOverlayPaneId = paneId;
+            }
+            if (progressOverlayPaneId !== paneId) {
                 return false;
             }
             overlay.eventMoveForDrawing(_this._coordinateToPoint(overlay, event), event);
             overlay.nextStep();
-            (_c = overlay.onDrawing) === null || _c === void 0 ? void 0 : _c.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
+            (_b = overlay.onDrawing) === null || _b === void 0 ? void 0 : _b.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
             chartStore.executeAction('onOverlayChange', { type: 'progress', overlay: overlay });
+            if (!overlay.isDrawing()) {
+                // A finite-step freehand finished on the first point.
+                chartStore.progressOverlayComplete();
+                (_c = overlay.onDrawEnd) === null || _c === void 0 ? void 0 : _c.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
+                return true;
+            }
             chartStore.setPressedOverlayInfo({
                 paneId: paneId,
                 overlay: overlay,
@@ -21360,12 +21406,21 @@ var OverlayView = /** @class */ (function (_super) {
         }).registerEvent('mouseUpEvent', function (event) {
             var _a, _b;
             var _c = chartStore.getPressedOverlayInfo(), overlay = _c.overlay, figure = _c.figure, figureType = _c.figureType;
+            var consumed = false;
             if (overlay !== null) {
                 if (overlay.freehand && overlay.isDrawing() && figureType === 'none') {
-                    // Freehand stroke end — complete and commit the overlay.
+                    // Freehand stroke end — complete and commit the overlay. A
+                    // press-release with zero travel leaves a single-point stroke
+                    // that renders nothing — cancel it like a degenerate dblclick.
                     overlay.forceComplete();
-                    chartStore.progressOverlayComplete();
-                    (_a = overlay.onDrawEnd) === null || _a === void 0 ? void 0 : _a.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
+                    if (overlay.points.length < 2) {
+                        chartStore.removeOverlay({ id: overlay.id });
+                    }
+                    else {
+                        chartStore.progressOverlayComplete();
+                        (_a = overlay.onDrawEnd) === null || _a === void 0 ? void 0 : _a.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
+                    }
+                    consumed = true;
                 }
                 else {
                     if (checkOverlayFigureEvent('onPressedMoveEnd', figure)) {
@@ -21383,10 +21438,10 @@ var OverlayView = /** @class */ (function (_super) {
                 figureIndex: -1,
                 figure: null
             });
-            return false;
+            return consumed;
         }).registerEvent('pressedMouseMoveEvent', function (event) {
-            var _a, _b, _c, _d, _e, _f, _g;
-            var _h = chartStore.getPressedOverlayInfo(), overlay = _h.overlay, figureType = _h.figureType, figureIndex = _h.figureIndex, figure = _h.figure;
+            var _a, _b, _c, _d, _e, _f, _g, _h;
+            var _j = chartStore.getPressedOverlayInfo(), overlay = _j.overlay, figureType = _j.figureType, figureIndex = _j.figureIndex, figure = _j.figure;
             if (overlay !== null) {
                 if (overlay.freehand && overlay.isDrawing() && figureType === 'none') {
                     // Freehand stroke — append a point once the pointer travels past
@@ -21401,9 +21456,19 @@ var OverlayView = /** @class */ (function (_super) {
                         chartStore.executeAction('onOverlayChange', { type: 'progress', overlay: overlay });
                         freehandLastCoord = { x: event.x, y: event.y };
                         if (!overlay.isDrawing()) {
-                            // A finite-step freehand tool finished mid-stroke.
+                            // A finite-step freehand tool finished mid-stroke — release
+                            // the pressed slot so later moves can't misroute into
+                            // eventPressedOtherMove (stale _prevPressedPoint teleport).
                             chartStore.progressOverlayComplete();
                             (_d = overlay.onDrawEnd) === null || _d === void 0 ? void 0 : _d.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
+                            chartStore.setPressedOverlayInfo({
+                                paneId: paneId,
+                                overlay: null,
+                                figureType: 'none',
+                                figureIndex: -1,
+                                figure: null
+                            });
+                            freehandLastCoord = null;
                         }
                     }
                     _this.getWidget().setForceCursor('crosshair');
@@ -21416,17 +21481,17 @@ var OverlayView = /** @class */ (function (_super) {
                             overlay.eventPressedPointMove(point, figureIndex, (_e = figure === null || figure === void 0 ? void 0 : figure.key) !== null && _e !== void 0 ? _e : undefined, figure === null || figure === void 0 ? void 0 : figure.moveDirection, event);
                         }
                         else {
-                            overlay.eventPressedOtherMove(point, _this.getWidget().getPane().getChart().getChartStore(), figure === null || figure === void 0 ? void 0 : figure.moveDirection);
+                            overlay.eventPressedOtherMove(point, _this.getWidget().getPane().getChart().getChartStore(), figure === null || figure === void 0 ? void 0 : figure.moveDirection, (_f = figure === null || figure === void 0 ? void 0 : figure.key) !== null && _f !== void 0 ? _f : undefined, event);
                         }
                         chartStore.executeAction('onOverlayChange', { type: 'progress', overlay: overlay });
                         var prevented_1 = false;
-                        (_f = overlay.onPressedMoving) === null || _f === void 0 ? void 0 : _f.call(overlay, __assign(__assign({ chart: chart, overlay: overlay, figure: figure !== null && figure !== void 0 ? figure : undefined }, event), { preventDefault: function () { prevented_1 = true; } }));
+                        (_g = overlay.onPressedMoving) === null || _g === void 0 ? void 0 : _g.call(overlay, __assign(__assign({ chart: chart, overlay: overlay, figure: figure !== null && figure !== void 0 ? figure : undefined }, event), { preventDefault: function () { prevented_1 = true; } }));
                         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- ignore
                         if (prevented_1) {
                             _this.getWidget().setForceCursor(null);
                         }
                         else {
-                            _this.getWidget().setForceCursor((_g = figure === null || figure === void 0 ? void 0 : figure.cursor) !== null && _g !== void 0 ? _g : 'pointer');
+                            _this.getWidget().setForceCursor((_h = figure === null || figure === void 0 ? void 0 : figure.cursor) !== null && _h !== void 0 ? _h : 'pointer');
                         }
                     }
                     return true;
@@ -21509,7 +21574,16 @@ var OverlayView = /** @class */ (function (_super) {
             var pane = _this.getWidget().getPane();
             var paneId = pane.getId();
             var chartStore = pane.getChart().getChartStore();
+            // Check FIRST — a figure whose spec ignores onPressedMoveStart must not
+            // spawn an orphan clone below.
+            if (!checkOverlayFigureEvent('onPressedMoveStart', figure)) {
+                return false;
+            }
             // Ctrl/Cmd+drag clones the overlay and drags the clone (TradingView).
+            // Lifecycle asymmetry is intentional and matches TV: the clone is
+            // committed to the store at drag START, not on first move — a
+            // modifier-press without movement leaves a duplicate under the
+            // original, exactly as Ctrl+click-drag does on tradingview.com.
             var dragOverlay = overlay;
             if ((event.ctrlKey === true || event.metaKey === true) && !overlay.isDrawing()) {
                 var ids = chartStore.addOverlays([{
@@ -21537,15 +21611,12 @@ var OverlayView = /** @class */ (function (_super) {
                 dragOverlay = cloneOverlay;
             }
             dragOverlay.startPressedMove(_this._coordinateToPoint(dragOverlay, event));
-            if (checkOverlayFigureEvent('onPressedMoveStart', figure)) {
-                (_b = dragOverlay.onPressedMoveStart) === null || _b === void 0 ? void 0 : _b.call(dragOverlay, __assign({ chart: pane.getChart(), overlay: dragOverlay, figure: figure }, event));
-                chartStore.setPressedOverlayInfo({ paneId: paneId, overlay: dragOverlay, figureType: figureType, figureIndex: figureIndex, figure: figure });
-                // Gesture commit boundary — everything between editStart/editEnd is
-                // one undo/persistence unit (drag gestures emit many 'progress').
-                chartStore.executeAction('onOverlayChange', { type: 'editStart', overlay: dragOverlay });
-                return !dragOverlay.isDrawing();
-            }
-            return false;
+            (_b = dragOverlay.onPressedMoveStart) === null || _b === void 0 ? void 0 : _b.call(dragOverlay, __assign({ chart: pane.getChart(), overlay: dragOverlay, figure: figure }, event));
+            chartStore.setPressedOverlayInfo({ paneId: paneId, overlay: dragOverlay, figureType: figureType, figureIndex: figureIndex, figure: figure });
+            // Gesture commit boundary — everything between editStart/editEnd is
+            // one undo/persistence unit (drag gestures emit many 'progress').
+            chartStore.executeAction('onOverlayChange', { type: 'editStart', overlay: dragOverlay });
+            return !dragOverlay.isDrawing();
         };
     };
     OverlayView.prototype._figureMouseClickEvent = function (overlay, figureType, figureIndex, figure) {
@@ -26558,16 +26629,20 @@ var Event = /** @class */ (function () {
     };
     Event.prototype.mouseUpEvent = function (e) {
         var widget = this._findWidgetByEvent(e).widget;
+        // Released outside every pane/widget — still deliver the mouseup to the
+        // widget the gesture started on, or pressed overlay state (freehand
+        // stroke, figure drag editStart/editEnd pair) dangles forever.
+        var target = widget !== null && widget !== void 0 ? widget : this._mouseDownWidget;
         var consumed = false;
-        if (widget !== null) {
-            var event_4 = this._makeWidgetEvent(e, widget);
-            var name_4 = widget.getName();
+        if (target !== null) {
+            var event_4 = this._makeWidgetEvent(e, target);
+            var name_4 = target.getName();
             switch (name_4) {
                 case WidgetNameConstants.MAIN:
                 case WidgetNameConstants.SEPARATOR:
                 case WidgetNameConstants.X_AXIS:
                 case WidgetNameConstants.Y_AXIS: {
-                    consumed = widget.dispatchEvent('mouseUpEvent', event_4);
+                    consumed = target.dispatchEvent('mouseUpEvent', event_4);
                     break;
                 }
             }
@@ -26664,6 +26739,7 @@ var Event = /** @class */ (function () {
     Event.prototype.touchStartEvent = function (e) {
         var _a;
         var _b = this._findWidgetByEvent(e), pane = _b.pane, widget = _b.widget;
+        this._mouseDownWidget = widget;
         if (widget !== null) {
             var event_8 = this._makeWidgetEvent(e, widget);
             (_a = event_8.preventDefault) === null || _a === void 0 ? void 0 : _a.call(event_8);
@@ -26755,12 +26831,15 @@ var Event = /** @class */ (function () {
     Event.prototype.touchEndEvent = function (e) {
         var _this = this;
         var widget = this._findWidgetByEvent(e).widget;
-        if (widget !== null) {
-            var event_10 = this._makeWidgetEvent(e, widget);
-            var name_9 = widget.getName();
+        // Same fallback as mouseUpEvent — touchend off-chart must still close
+        // the gesture on the widget it started on.
+        var target = widget !== null && widget !== void 0 ? widget : this._mouseDownWidget;
+        if (target !== null) {
+            var event_10 = this._makeWidgetEvent(e, target);
+            var name_9 = target.getName();
             switch (name_9) {
                 case WidgetNameConstants.MAIN: {
-                    widget.dispatchEvent('mouseUpEvent', event_10);
+                    target.dispatchEvent('mouseUpEvent', event_10);
                     if (this._startScrollCoordinate !== null) {
                         var time = new Date().getTime() - this._flingStartTime;
                         var distance = event_10.x - this._startScrollCoordinate.x;
@@ -26790,7 +26869,7 @@ var Event = /** @class */ (function () {
                 }
                 case WidgetNameConstants.X_AXIS:
                 case WidgetNameConstants.Y_AXIS: {
-                    var consumed = widget.dispatchEvent('mouseUpEvent', event_10);
+                    var consumed = target.dispatchEvent('mouseUpEvent', event_10);
                     if (consumed) {
                         this._chart.updatePane(1 /* UpdateLevel.Overlay */);
                     }
@@ -26803,6 +26882,7 @@ var Event = /** @class */ (function () {
             this._xAxisScale = 1;
             this._yAxisStartScaleDistance = 0;
         }
+        this._mouseDownWidget = null;
         return false;
     };
     Event.prototype.tapEvent = function (e) {
@@ -29999,7 +30079,9 @@ function createAnchorFigures(params) {
         figures.push({
             key: "".concat(keyPrefix, "mid"),
             type: 'circle',
-            attrs: { x: mx, y: my, r: half * 0.7 },
+            // Full anchor-sized hit area — a 0.7× visual radius was a ~8px grab
+            // target (circle hit-tests use the exact radius, no tolerance).
+            attrs: { x: mx, y: my, r: half },
             styles: {
                 style: 'stroke_fill',
                 color: backColor,
@@ -30018,10 +30100,13 @@ function createAnchorFigures(params) {
  */
 function createSelectionOutlineFigures(params) {
     var _a;
-    var coordinates = params.coordinates, _b = params.isTouch, isTouch = _b === void 0 ? false : _b, styles = params.styles, _c = params.keyPrefix, keyPrefix = _c === void 0 ? ANCHOR_KEY_PREFIX : _c;
+    var coordinates = params.coordinates, _b = params.isTouch, isTouch = _b === void 0 ? false : _b, _c = params.isDrawing, isDrawing = _c === void 0 ? false : _c, styles = params.styles, _d = params.keyPrefix, keyPrefix = _d === void 0 ? ANCHOR_KEY_PREFIX : _d;
     var half = isTouch ? ANCHOR_HALF_TOUCH * 0.7 : ANCHOR_HALF_MOUSE * 0.7;
     var borderColor = (_a = styles === null || styles === void 0 ? void 0 : styles.lockedBorderColor) !== null && _a !== void 0 ? _a : '#787B86';
-    return coordinates.map(function (_a, index) {
+    // While drawing, the last coordinate is the cursor-follow point — marking
+    // it would draw a selection box under the user's cursor.
+    var lastIndex = isDrawing ? coordinates.length - 1 : coordinates.length;
+    return coordinates.slice(0, lastIndex).map(function (_a, index) {
         var _b;
         var x = _a.x, y = _a.y;
         return ({
@@ -30154,27 +30239,33 @@ function bindDrawingKeyboard(handlers, options) {
         };
     }
     var onKeyDown = function (e) {
-        var _a, _b, _c, _d;
+        var _a, _b;
         if (!(e instanceof KeyboardEvent)) {
             return;
         }
         // Never intercept typing — inputs, textareas, contenteditable, IME.
-        if (isEditableTarget(e.target) || e.isComposing) {
+        // Shadow DOM retargets e.target to the host — composedPath()[0] is the
+        // real target inside the shadow root.
+        var realTarget = (_a = (typeof e.composedPath === 'function' ? e.composedPath()[0] : undefined)) !== null && _a !== void 0 ? _a : e.target;
+        if (isEditableTarget(realTarget) || e.isComposing) {
             return;
         }
-        if (((_a = options === null || options === void 0 ? void 0 : options.isActive) === null || _a === void 0 ? void 0 : _a.call(options)) === false) {
+        if (((_b = options === null || options === void 0 ? void 0 : options.isActive) === null || _b === void 0 ? void 0 : _b.call(options)) === false) {
             return;
         }
         var mod = e.ctrlKey || e.metaKey;
         if (mod) {
             var key = e.key.toLowerCase();
             if (key === 'z') {
-                e.preventDefault();
-                if (e.shiftKey) {
-                    (_b = handlers.onRedo) === null || _b === void 0 ? void 0 : _b.call(handlers);
+                // Only swallow the keybinding when a handler claims it — otherwise
+                // let the host/browser keep its own undo.
+                if (e.shiftKey && handlers.onRedo !== undefined) {
+                    e.preventDefault();
+                    handlers.onRedo();
                 }
-                else {
-                    (_c = handlers.onUndo) === null || _c === void 0 ? void 0 : _c.call(handlers);
+                else if (!e.shiftKey && handlers.onUndo !== undefined) {
+                    e.preventDefault();
+                    handlers.onUndo();
                 }
             }
             else if (key === 'c' && handlers.onCopy !== undefined) {
@@ -30185,10 +30276,10 @@ function bindDrawingKeyboard(handlers, options) {
                 e.preventDefault();
                 handlers.onPaste();
             }
-            else if (key === 'y') {
+            else if (key === 'y' && handlers.onRedo !== undefined) {
                 // Windows redo convention alongside Cmd+Shift+Z.
                 e.preventDefault();
-                (_d = handlers.onRedo) === null || _d === void 0 ? void 0 : _d.call(handlers);
+                handlers.onRedo();
             }
             return;
         }
@@ -30240,12 +30331,20 @@ function coordsSignature(coordinates) {
     }
     return sig;
 }
+/**
+ * CONTRACT: the returned array is SHARED — the view and every subsequent
+ * createFigures call see the same instance until the signature changes.
+ * Templates must treat it as read-only (never push/splice/mutate figure
+ * attrs on the result).
+ */
 function withFigureCache(fn, options) {
     return function (params) {
         var _a, _b;
         var signature = coordsSignature(params.coordinates) +
             "|r".concat(params.overlay.figuresRev) +
             "|s".concat(params.isSelected === true ? 1 : 0, "h").concat(params.isHovered === true ? 1 : 0) +
+            "|l".concat(params.overlay.lock ? 1 : 0) +
+            "|b".concat(params.bounding.width, "x").concat(params.bounding.height) +
             "|c".concat(params.overlay.currentStep) +
             "|k".concat((_b = (_a = options === null || options === void 0 ? void 0 : options.extraKey) === null || _a === void 0 ? void 0 : _a.call(options, params)) !== null && _b !== void 0 ? _b : '');
         var entry = cache.get(params.overlay);

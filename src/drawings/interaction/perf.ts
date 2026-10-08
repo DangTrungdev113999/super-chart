@@ -52,13 +52,20 @@ function coordsSignature (coordinates: Coordinate[]): string {
 
 export interface FigureCacheOptions<E> {
   /**
-   * Extra signature material — include anything the template reads that is
-   * NOT covered by coordinates/figuresRev/selection (e.g. derived style
-   * flags computed outside override()).
+   * Extra signature material — MANDATORY for anything the template reads
+   * that is NOT covered by coordinates/figuresRev/selection/lock/bounding/
+   * currentStep (e.g. textual values that change sub-pixel, time-derived
+   * labels, external flags).
    */
   extraKey?: (params: OverlayCreateFiguresCallbackParams<E>) => string
 }
 
+/**
+ * CONTRACT: the returned array is SHARED — the view and every subsequent
+ * createFigures call see the same instance until the signature changes.
+ * Templates must treat it as read-only (never push/splice/mutate figure
+ * attrs on the result).
+ */
 export function withFigureCache<E> (
   fn: OverlayCreateFiguresCallback<E>,
   options?: FigureCacheOptions<E>
@@ -68,6 +75,8 @@ export function withFigureCache<E> (
       coordsSignature(params.coordinates) +
       `|r${params.overlay.figuresRev}` +
       `|s${params.isSelected === true ? 1 : 0}h${params.isHovered === true ? 1 : 0}` +
+      `|l${params.overlay.lock ? 1 : 0}` +
+      `|b${params.bounding.width}x${params.bounding.height}` +
       `|c${params.overlay.currentStep}` +
       `|k${options?.extraKey?.(params) ?? ''}`
 

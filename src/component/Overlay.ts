@@ -120,7 +120,17 @@ export interface OverlayFigure {
 export interface OverlayCreateFiguresCallbackParams<E> {
   chart: Chart
   overlay: Overlay<E>
+  /**
+   * Point positions converted to pane-local CSS pixels — same space that
+   * figure `attrs` are drawn in. NOT device pixels (DPR scaling is applied
+   * by the view) and NOT data values.
+   */
   coordinates: Coordinate[]
+  /**
+   * The pane's visible rect in CSS pixels (`width`/`height` only — the
+   * origin is always the pane's top-left). Use for viewport culling, not
+   * for positioning: figure attrs are already pane-local.
+   */
   bounding: Bounding
   xAxis: Nullable<XAxis>
   yAxis: Nullable<YAxis>
@@ -183,7 +193,10 @@ export interface Overlay<E = unknown> extends OverlayEventCollection<E> {
   currentStep: number
 
   /**
-   * Whether it is locked. When it is true, it will not respond to events
+   * Whether it is locked. Locked overlays skip ALL pointer interaction —
+   * no hover, no press/drag, no freehand stroke, no anchor figures. They
+   * still render and are still selectable via API (TradingView shows a
+   * non-interactive selection outline instead of anchors).
    */
   lock: boolean
 
@@ -296,6 +309,16 @@ export interface Overlay<E = unknown> extends OverlayEventCollection<E> {
   performEventPressedMove: Nullable<(params: OverlayPerformEventParams) => void>
 
   /**
+   * Whole-body translate hook — fired while a non-point figure (e.g. a
+   * midpoint handle) drags the overlay, AFTER the kernel has applied the
+   * axis-constrained point diff. Templates use it to maintain derived
+   * extendData during body moves and to read `event` modifier keys (e.g.
+   * Shift → 45° snap). performPointIndex/performPoint are omitted — they
+   * are meaningless for a translate.
+   */
+  performEventBodyMove: Nullable<(params: Omit<OverlayPerformEventParams, 'performPointIndex' | 'performPoint'>) => void>
+
+  /**
    * In drawing, special handling callback when moving events
    */
   performEventMoveForDrawing: Nullable<(params: OverlayPerformEventParams) => void>
@@ -347,8 +370,8 @@ export interface Overlay<E = unknown> extends OverlayEventCollection<E> {
 
 export type OverlayTemplate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, 'id' | 'groupId' | 'paneId' | 'points' | 'currentStep' | 'isDrawing' | 'isStart' | 'forceComplete' | 'invalidateFigures' | 'figuresRev'>, 'name'>
 
-export type OverlayCreate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, 'currentStep' | 'totalStep' | 'createPointFigures' | 'createXAxisFigures' | 'createYAxisFigures' | 'performEventPressedMove' | 'performEventMoveForDrawing' | 'isDrawing' | 'isStart' | 'forceComplete' | 'invalidateFigures' | 'figuresRev'>, 'name'>
-export type OverlayOverride<E = unknown> = Partial<Omit<Overlay<E>, 'currentStep' | 'totalStep' | 'createPointFigures' | 'createXAxisFigures' | 'createYAxisFigures' | 'performEventPressedMove' | 'performEventMoveForDrawing' | 'isDrawing' | 'isStart' | 'forceComplete' | 'invalidateFigures' | 'figuresRev'>>
+export type OverlayCreate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, 'currentStep' | 'totalStep' | 'createPointFigures' | 'createXAxisFigures' | 'createYAxisFigures' | 'performEventPressedMove' | 'performEventBodyMove' | 'performEventMoveForDrawing' | 'isDrawing' | 'isStart' | 'forceComplete' | 'invalidateFigures' | 'figuresRev'>, 'name'>
+export type OverlayOverride<E = unknown> = Partial<Omit<Overlay<E>, 'currentStep' | 'totalStep' | 'createPointFigures' | 'createXAxisFigures' | 'createYAxisFigures' | 'performEventPressedMove' | 'performEventBodyMove' | 'performEventMoveForDrawing' | 'isDrawing' | 'isStart' | 'forceComplete' | 'invalidateFigures' | 'figuresRev'>>
 
 /**
  * Lifecycle stream emitted through the `onOverlayChange` action.
@@ -416,6 +439,8 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
   createXAxisFigures: Nullable<OverlayCreateFiguresCallback<E>> = null
   createYAxisFigures: Nullable<OverlayCreateFiguresCallback<E>> = null
   performEventPressedMove: Nullable<(params: OverlayPerformEventParams) => void> = null
+
+  performEventBodyMove: Nullable<(params: Omit<OverlayPerformEventParams, 'performPointIndex' | 'performPoint'>) => void> = null
   performEventMoveForDrawing: Nullable<(params: OverlayPerformEventParams) => void> = null
   onDrawStart: Nullable<OverlayEventCallback<E>> = null
   onDrawing: Nullable<OverlayEventCallback<E>> = null
@@ -479,6 +504,14 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
       styles,
       extendData,
       skipDrawReplay,
+      // Kernel-owned members must never be merge-clobbered by a spread of
+      // an overlay snapshot (regressed figuresRev poisons the figure cache;
+      // shadowed methods break the instance).
+      figuresRev: _fr,
+      invalidateFigures: _inf,
+      isDrawing: _d,
+      isStart: _s,
+      forceComplete: _fc,
       ...others
     } = overlay
 
@@ -674,7 +707,7 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
     this._prevPressedPoints = clone(this.points)
   }
 
-  eventPressedOtherMove (point: Partial<Point>, chartStore: ChartStore, moveDirection?: OverlayFigureMoveDirection): void {
+  eventPressedOtherMove (point: Partial<Point>, chartStore: ChartStore, moveDirection?: OverlayFigureMoveDirection, figureKey?: string, event?: MouseTouchEvent): void {
     if (this._prevPressedPoint !== null) {
       let difDataIndex: Nullable<number> = null
       if (moveDirection !== 'vert' && isNumber(point.dataIndex) && isNumber(this._prevPressedPoint.dataIndex)) {
@@ -697,6 +730,14 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
           newPoint.value = p.value + difValue
         }
         return newPoint
+      })
+      this.performEventBodyMove?.({
+        currentStep: this.currentStep,
+        points: this.points,
+        mode: this.mode,
+        prevPoints: this._prevPressedPoints,
+        figureKey,
+        event
       })
     }
   }

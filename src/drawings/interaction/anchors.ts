@@ -167,7 +167,9 @@ export function createAnchorFigures (params: AnchorFiguresParams): OverlayFigure
     figures.push({
       key: `${keyPrefix}mid`,
       type: 'circle',
-      attrs: { x: mx, y: my, r: half * 0.7 },
+      // Full anchor-sized hit area — a 0.7× visual radius was a ~8px grab
+      // target (circle hit-tests use the exact radius, no tolerance).
+      attrs: { x: mx, y: my, r: half },
       styles: {
         style: 'stroke_fill',
         color: backColor,
@@ -189,18 +191,24 @@ export function createAnchorFigures (params: AnchorFiguresParams): OverlayFigure
 export function createSelectionOutlineFigures (params: {
   coordinates: Coordinate[]
   isTouch?: boolean
+  /** Suppress the in-progress tail marker while drawing. */
+  isDrawing?: boolean
   styles?: AnchorFigureStyle
   keyPrefix?: string
 }): OverlayFigure[] {
   const {
     coordinates,
     isTouch = false,
+    isDrawing = false,
     styles,
     keyPrefix = ANCHOR_KEY_PREFIX
   } = params
   const half = isTouch ? ANCHOR_HALF_TOUCH * 0.7 : ANCHOR_HALF_MOUSE * 0.7
   const borderColor = styles?.lockedBorderColor ?? '#787B86'
-  return coordinates.map(({ x, y }, index) => ({
+  // While drawing, the last coordinate is the cursor-follow point — marking
+  // it would draw a selection box under the user's cursor.
+  const lastIndex = isDrawing ? coordinates.length - 1 : coordinates.length
+  return coordinates.slice(0, lastIndex).map(({ x, y }, index) => ({
     key: `${keyPrefix}sel_${index}`,
     type: 'rect',
     attrs: {

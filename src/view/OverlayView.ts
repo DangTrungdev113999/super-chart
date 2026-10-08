@@ -140,6 +140,19 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
         const progressOverlayPaneId = progressOverlayInfo.paneId
         if (overlay.isDrawing() && progressOverlayPaneId === paneId) {
           overlay.forceComplete()
+          // TradingView semantics: a force-completed drawing that never
+          // collected its minimum points is CANCELLED, not committed —
+          // otherwise double-click strands a degenerate zombie (a 1-point
+          // polyline, a 2-point channel missing its third anchor).
+          // Unlimited-step tools declare totalStep: MAX_SAFE_INTEGER and
+          // need at least 2 points to render meaningfully.
+          const minPoints = overlay.totalStep >= Number.MAX_SAFE_INTEGER
+            ? 2
+            : Math.max(1, overlay.totalStep - 1)
+          if (overlay.points.length < minPoints) {
+            chartStore.removeOverlay({ id: overlay.id })
+            return true
+          }
           if (!overlay.isDrawing()) {
             chartStore.progressOverlayComplete()
             overlay.onDrawEnd?.({ chart, overlay, ...event })
@@ -180,14 +193,33 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
     }).registerEvent('mouseDownEvent', event => {
       // Freehand stroke start: a press while a freehand overlay is armed
       // commits the first point and arms the pressed-move collector.
-      const overlay = chartStore.getProgressOverlayInfo()?.overlay ?? null
-      if (overlay === null || !overlay.freehand || !overlay.isDrawing() || overlay.lock) {
+      const progressOverlayInfo = chartStore.getProgressOverlayInfo()
+      const overlay = progressOverlayInfo?.overlay ?? null
+      if (progressOverlayInfo === null || overlay === null || !overlay.freehand || !overlay.isDrawing() || overlay.lock) {
+        return false
+      }
+      // Axis widgets convert only half a point — never let them start a stroke.
+      if (!this.coordinateToPointValueFlag() || !this.coordinateToPointTimestampDataIndexFlag()) {
+        return false
+      }
+      let progressOverlayPaneId = progressOverlayInfo.paneId
+      if (overlay.isStart()) {
+        chartStore.updateProgressOverlayInfo(paneId)
+        progressOverlayPaneId = paneId
+      }
+      if (progressOverlayPaneId !== paneId) {
         return false
       }
       overlay.eventMoveForDrawing(this._coordinateToPoint(overlay, event), event)
       overlay.nextStep()
       overlay.onDrawing?.({ chart, overlay, ...event })
       chartStore.executeAction('onOverlayChange', { type: 'progress', overlay })
+      if (!overlay.isDrawing()) {
+        // A finite-step freehand finished on the first point.
+        chartStore.progressOverlayComplete()
+        overlay.onDrawEnd?.({ chart, overlay, ...event })
+        return true
+      }
       chartStore.setPressedOverlayInfo({
         paneId,
         overlay,
@@ -199,12 +231,20 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
       return true
     }).registerEvent('mouseUpEvent', event => {
       const { overlay, figure, figureType } = chartStore.getPressedOverlayInfo()
+      let consumed = false
       if (overlay !== null) {
         if (overlay.freehand && overlay.isDrawing() && figureType === 'none') {
-          // Freehand stroke end — complete and commit the overlay.
+          // Freehand stroke end — complete and commit the overlay. A
+          // press-release with zero travel leaves a single-point stroke
+          // that renders nothing — cancel it like a degenerate dblclick.
           overlay.forceComplete()
-          chartStore.progressOverlayComplete()
-          overlay.onDrawEnd?.({ chart, overlay, ...event })
+          if (overlay.points.length < 2) {
+            chartStore.removeOverlay({ id: overlay.id })
+          } else {
+            chartStore.progressOverlayComplete()
+            overlay.onDrawEnd?.({ chart, overlay, ...event })
+          }
+          consumed = true
         } else {
           if (checkOverlayFigureEvent('onPressedMoveEnd', figure)) {
             overlay.onPressedMoveEnd?.({ chart, overlay, figure: figure ?? undefined, ...event })
@@ -221,7 +261,7 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
         figureIndex: -1,
         figure: null
       })
-      return false
+      return consumed
     }).registerEvent('pressedMouseMoveEvent', event => {
       const { overlay, figureType, figureIndex, figure } = chartStore.getPressedOverlayInfo()
       if (overlay !== null) {
@@ -238,9 +278,19 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
             chartStore.executeAction('onOverlayChange', { type: 'progress', overlay })
             freehandLastCoord = { x: event.x, y: event.y }
             if (!overlay.isDrawing()) {
-              // A finite-step freehand tool finished mid-stroke.
+              // A finite-step freehand tool finished mid-stroke — release
+              // the pressed slot so later moves can't misroute into
+              // eventPressedOtherMove (stale _prevPressedPoint teleport).
               chartStore.progressOverlayComplete()
               overlay.onDrawEnd?.({ chart, overlay, ...event })
+              chartStore.setPressedOverlayInfo({
+                paneId,
+                overlay: null,
+                figureType: 'none',
+                figureIndex: -1,
+                figure: null
+              })
+              freehandLastCoord = null
             }
           }
           this.getWidget().setForceCursor('crosshair')
@@ -252,7 +302,7 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
             if (figureType === 'point') {
               overlay.eventPressedPointMove(point, figureIndex, figure?.key ?? undefined, figure?.moveDirection, event)
             } else {
-              overlay.eventPressedOtherMove(point, this.getWidget().getPane().getChart().getChartStore(), figure?.moveDirection)
+              overlay.eventPressedOtherMove(point, this.getWidget().getPane().getChart().getChartStore(), figure?.moveDirection, figure?.key ?? undefined, event)
             }
             chartStore.executeAction('onOverlayChange', { type: 'progress', overlay })
             let prevented = false
@@ -354,7 +404,16 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
       const pane = this.getWidget().getPane()
       const paneId = pane.getId()
       const chartStore = pane.getChart().getChartStore()
+      // Check FIRST — a figure whose spec ignores onPressedMoveStart must not
+      // spawn an orphan clone below.
+      if (!checkOverlayFigureEvent('onPressedMoveStart', figure)) {
+        return false
+      }
       // Ctrl/Cmd+drag clones the overlay and drags the clone (TradingView).
+      // Lifecycle asymmetry is intentional and matches TV: the clone is
+      // committed to the store at drag START, not on first move — a
+      // modifier-press without movement leaves a duplicate under the
+      // original, exactly as Ctrl+click-drag does on tradingview.com.
       let dragOverlay = overlay
       if ((event.ctrlKey === true || event.metaKey === true) && !overlay.isDrawing()) {
         const ids = chartStore.addOverlays([{
@@ -382,15 +441,12 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
         dragOverlay = cloneOverlay
       }
       dragOverlay.startPressedMove(this._coordinateToPoint(dragOverlay, event))
-      if (checkOverlayFigureEvent('onPressedMoveStart', figure)) {
-        dragOverlay.onPressedMoveStart?.({ chart: pane.getChart(), overlay: dragOverlay, figure, ...event })
-        chartStore.setPressedOverlayInfo({ paneId, overlay: dragOverlay, figureType, figureIndex, figure })
-        // Gesture commit boundary — everything between editStart/editEnd is
-        // one undo/persistence unit (drag gestures emit many 'progress').
-        chartStore.executeAction('onOverlayChange', { type: 'editStart', overlay: dragOverlay })
-        return !dragOverlay.isDrawing()
-      }
-      return false
+      dragOverlay.onPressedMoveStart?.({ chart: pane.getChart(), overlay: dragOverlay, figure, ...event })
+      chartStore.setPressedOverlayInfo({ paneId, overlay: dragOverlay, figureType, figureIndex, figure })
+      // Gesture commit boundary — everything between editStart/editEnd is
+      // one undo/persistence unit (drag gestures emit many 'progress').
+      chartStore.executeAction('onOverlayChange', { type: 'editStart', overlay: dragOverlay })
+      return !dragOverlay.isDrawing()
     }
   }
 

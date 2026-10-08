@@ -524,8 +524,13 @@ export interface VisibleRange {
 	readonly realTo: number;
 }
 export interface MouseTouchEvent extends Coordinate {
+	/** Viewport (page) coordinates — for DOM overlays positioned outside canvas space. */
 	pageX: number;
 	pageY: number;
+	/**
+	 * True for touch-originated events. Touch hits need larger targets —
+	 * templates should use ~13px anchor half-size vs ~6px for mouse.
+	 */
 	isTouch?: boolean;
 	shiftKey?: boolean;
 	ctrlKey?: boolean;
@@ -726,7 +731,17 @@ export interface OverlayFigure {
 export interface OverlayCreateFiguresCallbackParams<E> {
 	chart: Chart;
 	overlay: Overlay<E>;
+	/**
+	 * Point positions converted to pane-local CSS pixels — same space that
+	 * figure `attrs` are drawn in. NOT device pixels (DPR scaling is applied
+	 * by the view) and NOT data values.
+	 */
 	coordinates: Coordinate[];
+	/**
+	 * The pane's visible rect in CSS pixels (`width`/`height` only — the
+	 * origin is always the pane's top-left). Use for viewport culling, not
+	 * for positioning: figure attrs are already pane-local.
+	 */
 	bounding: Bounding;
 	xAxis: Nullable<XAxis>;
 	yAxis: Nullable<YAxis>;
@@ -779,7 +794,10 @@ export interface Overlay<E = unknown> extends OverlayEventCollection<E> {
 	 */
 	currentStep: number;
 	/**
-	 * Whether it is locked. When it is true, it will not respond to events
+	 * Whether it is locked. Locked overlays skip ALL pointer interaction —
+	 * no hover, no press/drag, no freehand stroke, no anchor figures. They
+	 * still render and are still selectable via API (TradingView shows a
+	 * non-interactive selection outline instead of anchors).
 	 */
 	lock: boolean;
 	/**
@@ -872,6 +890,15 @@ export interface Overlay<E = unknown> extends OverlayEventCollection<E> {
 	 */
 	performEventPressedMove: Nullable<(params: OverlayPerformEventParams) => void>;
 	/**
+	 * Whole-body translate hook — fired while a non-point figure (e.g. a
+	 * midpoint handle) drags the overlay, AFTER the kernel has applied the
+	 * axis-constrained point diff. Templates use it to maintain derived
+	 * extendData during body moves and to read `event` modifier keys (e.g.
+	 * Shift → 45° snap). performPointIndex/performPoint are omitted — they
+	 * are meaningless for a translate.
+	 */
+	performEventBodyMove: Nullable<(params: Omit<OverlayPerformEventParams, "performPointIndex" | "performPoint">) => void>;
+	/**
 	 * In drawing, special handling callback when moving events
 	 */
 	performEventMoveForDrawing: Nullable<(params: OverlayPerformEventParams) => void>;
@@ -914,8 +941,8 @@ export interface Overlay<E = unknown> extends OverlayEventCollection<E> {
 	invalidateFigures: () => void;
 }
 export type OverlayTemplate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, "id" | "groupId" | "paneId" | "points" | "currentStep" | "isDrawing" | "isStart" | "forceComplete" | "invalidateFigures" | "figuresRev">, "name">;
-export type OverlayCreate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, "currentStep" | "totalStep" | "createPointFigures" | "createXAxisFigures" | "createYAxisFigures" | "performEventPressedMove" | "performEventMoveForDrawing" | "isDrawing" | "isStart" | "forceComplete" | "invalidateFigures" | "figuresRev">, "name">;
-export type OverlayOverride<E = unknown> = Partial<Omit<Overlay<E>, "currentStep" | "totalStep" | "createPointFigures" | "createXAxisFigures" | "createYAxisFigures" | "performEventPressedMove" | "performEventMoveForDrawing" | "isDrawing" | "isStart" | "forceComplete" | "invalidateFigures" | "figuresRev">>;
+export type OverlayCreate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, "currentStep" | "totalStep" | "createPointFigures" | "createXAxisFigures" | "createYAxisFigures" | "performEventPressedMove" | "performEventBodyMove" | "performEventMoveForDrawing" | "isDrawing" | "isStart" | "forceComplete" | "invalidateFigures" | "figuresRev">, "name">;
+export type OverlayOverride<E = unknown> = Partial<Omit<Overlay<E>, "currentStep" | "totalStep" | "createPointFigures" | "createXAxisFigures" | "createYAxisFigures" | "performEventPressedMove" | "performEventBodyMove" | "performEventMoveForDrawing" | "isDrawing" | "isStart" | "forceComplete" | "invalidateFigures" | "figuresRev">>;
 /**
  * Lifecycle stream emitted through the `onOverlayChange` action.
  * `create`   — an overlay was created (armed for drawing or already finished).
@@ -1614,6 +1641,8 @@ export declare function createAnchorFigures(params: AnchorFiguresParams): Overla
 export declare function createSelectionOutlineFigures(params: {
 	coordinates: Coordinate[];
 	isTouch?: boolean;
+	/** Suppress the in-progress tail marker while drawing. */
+	isDrawing?: boolean;
 	styles?: AnchorFigureStyle;
 	keyPrefix?: string;
 }): OverlayFigure[];
@@ -1697,12 +1726,19 @@ export interface DrawingKeyboardOptions {
 export declare function bindDrawingKeyboard(handlers: DrawingKeyboardHandlers, options?: DrawingKeyboardOptions): () => void;
 export interface FigureCacheOptions<E> {
 	/**
-	 * Extra signature material — include anything the template reads that is
-	 * NOT covered by coordinates/figuresRev/selection (e.g. derived style
-	 * flags computed outside override()).
+	 * Extra signature material — MANDATORY for anything the template reads
+	 * that is NOT covered by coordinates/figuresRev/selection/lock/bounding/
+	 * currentStep (e.g. textual values that change sub-pixel, time-derived
+	 * labels, external flags).
 	 */
 	extraKey?: (params: OverlayCreateFiguresCallbackParams<E>) => string;
 }
+/**
+ * CONTRACT: the returned array is SHARED — the view and every subsequent
+ * createFigures call see the same instance until the signature changes.
+ * Templates must treat it as read-only (never push/splice/mutate figure
+ * attrs on the result).
+ */
 export declare function withFigureCache<E>(fn: OverlayCreateFiguresCallback<E>, options?: FigureCacheOptions<E>): OverlayCreateFiguresCallback<E>;
 export interface ViewportCullOptions {
 	/**

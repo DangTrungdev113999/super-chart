@@ -73,7 +73,10 @@ export function bindDrawingKeyboard (handlers: DrawingKeyboardHandlers, options?
       return
     }
     // Never intercept typing — inputs, textareas, contenteditable, IME.
-    if (isEditableTarget(e.target) || e.isComposing) {
+    // Shadow DOM retargets e.target to the host — composedPath()[0] is the
+    // real target inside the shadow root.
+    const realTarget = (typeof e.composedPath === 'function' ? e.composedPath()[0] : undefined) ?? e.target
+    if (isEditableTarget(realTarget) || e.isComposing) {
       return
     }
     if (options?.isActive?.() === false) {
@@ -84,11 +87,14 @@ export function bindDrawingKeyboard (handlers: DrawingKeyboardHandlers, options?
     if (mod) {
       const key = e.key.toLowerCase()
       if (key === 'z') {
-        e.preventDefault()
-        if (e.shiftKey) {
-          handlers.onRedo?.()
-        } else {
-          handlers.onUndo?.()
+        // Only swallow the keybinding when a handler claims it — otherwise
+        // let the host/browser keep its own undo.
+        if (e.shiftKey && handlers.onRedo !== undefined) {
+          e.preventDefault()
+          handlers.onRedo()
+        } else if (!e.shiftKey && handlers.onUndo !== undefined) {
+          e.preventDefault()
+          handlers.onUndo()
         }
       } else if (key === 'c' && handlers.onCopy !== undefined) {
         e.preventDefault()
@@ -96,10 +102,10 @@ export function bindDrawingKeyboard (handlers: DrawingKeyboardHandlers, options?
       } else if (key === 'v' && handlers.onPaste !== undefined) {
         e.preventDefault()
         handlers.onPaste()
-      } else if (key === 'y') {
+      } else if (key === 'y' && handlers.onRedo !== undefined) {
         // Windows redo convention alongside Cmd+Shift+Z.
         e.preventDefault()
-        handlers.onRedo?.()
+        handlers.onRedo()
       }
       return
     }

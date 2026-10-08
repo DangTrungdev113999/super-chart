@@ -30,8 +30,13 @@ import { isFF, isIOS } from './utils/platform'
 import { isValid } from './utils/typeChecks'
 
 export interface MouseTouchEvent extends Coordinate {
+  /** Viewport (page) coordinates — for DOM overlays positioned outside canvas space. */
   pageX: number
   pageY: number
+  /**
+   * True for touch-originated events. Touch hits need larger targets —
+   * templates should use ~13px anchor half-size vs ~6px for mouse.
+   */
   isTouch?: boolean
   shiftKey?: boolean
   ctrlKey?: boolean

@@ -397,16 +397,20 @@ export default class Event implements EventHandler {
 
   mouseUpEvent (e: MouseTouchEvent): boolean {
     const { widget } = this._findWidgetByEvent(e)
+    // Released outside every pane/widget — still deliver the mouseup to the
+    // widget the gesture started on, or pressed overlay state (freehand
+    // stroke, figure drag editStart/editEnd pair) dangles forever.
+    const target = widget ?? this._mouseDownWidget
     let consumed = false
-    if (widget !== null) {
-      const event = this._makeWidgetEvent(e, widget)
-      const name = widget.getName()
+    if (target !== null) {
+      const event = this._makeWidgetEvent(e, target)
+      const name = target.getName()
       switch (name) {
         case WidgetNameConstants.MAIN:
         case WidgetNameConstants.SEPARATOR:
         case WidgetNameConstants.X_AXIS:
         case WidgetNameConstants.Y_AXIS: {
-          consumed = widget.dispatchEvent('mouseUpEvent', event)
+          consumed = target.dispatchEvent('mouseUpEvent', event)
           break
         }
       }
@@ -507,6 +511,7 @@ export default class Event implements EventHandler {
 
   touchStartEvent (e: MouseTouchEvent): boolean {
     const { pane, widget } = this._findWidgetByEvent(e)
+    this._mouseDownWidget = widget
     if (widget !== null) {
       const event = this._makeWidgetEvent(e, widget)
       event.preventDefault?.()
@@ -596,12 +601,15 @@ export default class Event implements EventHandler {
 
   touchEndEvent (e: MouseTouchEvent): boolean {
     const { widget } = this._findWidgetByEvent(e)
-    if (widget !== null) {
-      const event = this._makeWidgetEvent(e, widget)
-      const name = widget.getName()
+    // Same fallback as mouseUpEvent — touchend off-chart must still close
+    // the gesture on the widget it started on.
+    const target = widget ?? this._mouseDownWidget
+    if (target !== null) {
+      const event = this._makeWidgetEvent(e, target)
+      const name = target.getName()
       switch (name) {
         case WidgetNameConstants.MAIN: {
-          widget.dispatchEvent('mouseUpEvent', event)
+          target.dispatchEvent('mouseUpEvent', event)
           if (this._startScrollCoordinate !== null) {
             const time = new Date().getTime() - this._flingStartTime
             const distance = event.x - this._startScrollCoordinate.x
@@ -630,7 +638,7 @@ export default class Event implements EventHandler {
         }
         case WidgetNameConstants.X_AXIS:
         case WidgetNameConstants.Y_AXIS: {
-          const consumed = widget.dispatchEvent('mouseUpEvent', event)
+          const consumed = target.dispatchEvent('mouseUpEvent', event)
           if (consumed) {
             this._chart.updatePane(UpdateLevel.Overlay)
           }
@@ -643,6 +651,7 @@ export default class Event implements EventHandler {
       this._xAxisScale = 1
       this._yAxisStartScaleDistance = 0
     }
+    this._mouseDownWidget = null
     return false
   }
 
