@@ -25,7 +25,7 @@ import { findCatalogItemByOverlay, type ToolbarControl } from '../catalog'
 import { getDrawingIcon } from '../icons'
 import { isAlign45Enabled, setAlign45Enabled } from '../interaction/snap45'
 import { serializeOverlay, serializedToOverlayCreate } from '../serialize'
-import { injectDrawingStyles } from './styles'
+import { injectDrawingStyles, PALETTE } from './styles'
 
 /**
  * Floating quick-settings toolbar (DP-6b). Lives on the pane DOM layer and
@@ -36,14 +36,6 @@ import { injectDrawingStyles } from './styles'
  * recipe decides which swatches/dropdowns/toggles appear, and actions
  * (clone/remove/lock/hide/more-menu) are wired here once for every tool.
  */
-
-/** TV-style preset palette — colors that read on any chart theme. */
-const PALETTE = [
-  '#787b86', '#9e9e9e', '#ffffff', '#000000',
-  '#2962ff', '#00bcd4', '#089981', '#2dc08e',
-  '#ffeb3b', '#ff9800', '#f23645', '#e91e63',
-  '#9c27b0', '#673ab7'
-]
 
 const LINE_WIDTHS = [1, 2, 3, 4]
 const LINE_STYLES: Array<{ value: string, title: string }> = [

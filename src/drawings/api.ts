@@ -26,6 +26,7 @@ import { getDrawingCatalog, findCatalogItem, type DrawingToolGroup } from './cat
 import type { DrawingStore } from './persistence'
 import { serializeOverlay, serializedToOverlayCreate, type SerializedDrawing, type SerializedDrawingPoint } from './serialize'
 import { attachFloatingToolbar, type FloatingToolbar, type FloatingToolbarHooks } from './ui/floatingToolbar'
+import { attachSettingsDialog, type SettingsDialog } from './ui/settingsDialog'
 import { bindDrawingKeyboard } from './interaction/keyboard'
 
 /**
@@ -126,6 +127,9 @@ export interface DrawingsApi extends DrawingManager {
   /** Bulk remove — returns removed ids. Locked drawings are skipped by default. */
   clear: (filter?: DrawingClearFilter) => string[]
 
+  /** Open the library settings dialog for a drawing (DP-6c). */
+  openSettings: (id: string) => boolean
+
   configure: (opts: DrawingsConfigureOptions) => void
 }
 
@@ -181,10 +185,14 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
     ...options,
     store: options?.store ?? undefined
   })
+  const settingsDialog: SettingsDialog = attachSettingsDialog(chart, manager)
   const toolbarOption = options?.toolbar
+  const toolbarHooks: FloatingToolbarHooks | undefined = typeof toolbarOption === 'object'
+    ? { onSettings: overlay => { settingsDialog.open(overlay) }, ...toolbarOption }
+    : { onSettings: overlay => { settingsDialog.open(overlay) } }
   const toolbar: FloatingToolbar | null = toolbarOption === false
     ? null
-    : attachFloatingToolbar(chart, manager, typeof toolbarOption === 'object' ? toolbarOption : undefined)
+    : attachFloatingToolbar(chart, manager, toolbarHooks)
 
   let selectedId: string | null = null
   const unbindSelection = [
@@ -452,6 +460,15 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
       return removed
     },
 
+    openSettings (id) {
+      const overlay = chart.getOverlayById(id)
+      if (overlay === null) {
+        return false
+      }
+      settingsDialog.open(overlay)
+      return true
+    },
+
     configure (opts) {
       if ('store' in opts) {
         manager.attachStore(opts.store ?? null)
@@ -464,6 +481,7 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
         unsub()
       })
       toolbar?.destroy()
+      settingsDialog.destroy()
       clipboard = null
       manager.destroy()
     }

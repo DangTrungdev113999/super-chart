@@ -20,6 +20,14 @@
 
 const STYLE_ID = 'sc-drawings-styles'
 
+/** TV-style preset palette — colors that read on any chart theme. */
+export const PALETTE = [
+  '#787b86', '#9e9e9e', '#ffffff', '#000000',
+  '#2962ff', '#00bcd4', '#089981', '#2dc08e',
+  '#ffeb3b', '#ff9800', '#f23645', '#e91e63',
+  '#9c27b0', '#673ab7'
+]
+
 const CSS = `
 .sc-drw-toolbar {
   position: absolute;
@@ -133,6 +141,128 @@ const CSS = `
   cursor: pointer;
 }
 .sc-drw-palette-cell:hover { transform: scale(1.15); border-color: #ffffff; }
+.sc-drw-palette--inline {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: #1e222d;
+  border: 1px solid #2a2e39;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  z-index: 5;
+}
+.sc-drw-field:hover .sc-drw-palette--inline { display: grid; }
+.sc-drw-dialog {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 240px;
+  background: #1e222d;
+  border: 1px solid #2a2e39;
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+  color: #d1d4dc;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 11px;
+  user-select: none;
+  will-change: transform;
+  z-index: 20;
+}
+.sc-drw-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  font-weight: 600;
+  cursor: grab;
+  border-bottom: 1px solid #2a2e39;
+}
+.sc-drw-dialog-header:active { cursor: grabbing; }
+.sc-drw-dialog-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 4px 6px 0;
+  border-bottom: 1px solid #2a2e39;
+}
+.sc-drw-dialog-tab {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 3px 3px 0 0;
+  background: transparent;
+  color: #787b86;
+  font: inherit;
+  cursor: pointer;
+}
+.sc-drw-dialog-tab:hover { color: #d1d4dc; }
+.sc-drw-dialog-tab[data-on="true"] {
+  color: #ffffff;
+  background: #2a2e39;
+}
+.sc-drw-dialog-body {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 8px;
+}
+.sc-drw-section {
+  padding: 6px 2px 3px;
+  color: #787b86;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.sc-drw-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 2px;
+  min-height: 24px;
+}
+.sc-drw-field-label {
+  flex: 1;
+  color: #9aa0ae;
+}
+.sc-drw-field-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sc-drw-input {
+  width: 110px;
+  padding: 3px 6px;
+  border: 1px solid #2a2e39;
+  border-radius: 3px;
+  background: #131722;
+  color: #d1d4dc;
+  font: inherit;
+}
+.sc-drw-input:focus { outline: none; border-color: #2962ff; }
+.sc-drw-input--narrow { width: 64px; }
+.sc-drw-color {
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #2a2e39;
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+}
+.sc-drw-levels {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+}
+.sc-drw-level-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
 `
 
 let injected = false

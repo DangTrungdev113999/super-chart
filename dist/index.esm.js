@@ -10383,7 +10383,14 @@ function snap45Coordinate(to, from) {
  * stays UMD-safe and multiple charts on one page share a single sheet.
  */
 var STYLE_ID$1 = 'sc-drawings-styles';
-var CSS = "\n.sc-drw-toolbar {\n  position: absolute;\n  top: 0;\n  left: 0;\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  padding: 2px 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  line-height: 1;\n  user-select: none;\n  white-space: nowrap;\n  will-change: transform;\n}\n.sc-drw-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 26px;\n  height: 26px;\n  padding: 0;\n  margin: 0;\n  border: none;\n  border-radius: 3px;\n  background: transparent;\n  color: #d1d4dc;\n  cursor: pointer;\n}\n.sc-drw-btn:hover { background: #2a2e39; color: #ffffff; }\n.sc-drw-btn:active { background: #363c4e; }\n.sc-drw-btn[data-on=\"true\"] { color: #2962ff; }\n.sc-drw-btn[data-on=\"true\"]:hover { color: #4c7dff; }\n.sc-drw-btn svg { display: block; width: 16px; height: 16px; }\n.sc-drw-btn--wide { width: auto; padding: 0 6px; font-size: 11px; }\n.sc-drw-grip {\n  cursor: grab;\n  color: #5d6372;\n  width: 14px;\n}\n.sc-drw-grip:active { cursor: grabbing; }\n.sc-drw-sep {\n  width: 1px;\n  height: 18px;\n  margin: 0 2px;\n  background: #2a2e39;\n}\n.sc-drw-swatch {\n  width: 14px;\n  height: 14px;\n  border-radius: 2px;\n  border: 1px solid rgba(255, 255, 255, 0.25);\n}\n.sc-drw-menu {\n  position: absolute;\n  top: 0;\n  left: 0;\n  min-width: 120px;\n  padding: 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  z-index: 10;\n}\n.sc-drw-menu-item {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  width: 100%;\n  padding: 5px 8px;\n  border: none;\n  border-radius: 3px;\n  background: transparent;\n  color: inherit;\n  font: inherit;\n  text-align: left;\n  cursor: pointer;\n}\n.sc-drw-menu-item:hover { background: #2a2e39; }\n.sc-drw-menu-item[data-on=\"true\"] { color: #4c7dff; }\n.sc-drw-menu-item svg { width: 14px; height: 14px; flex: none; }\n.sc-drw-menu-label {\n  padding: 4px 8px 2px;\n  color: #787b86;\n  font-size: 10px;\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n}\n.sc-drw-palette {\n  display: grid;\n  grid-template-columns: repeat(7, 18px);\n  gap: 4px;\n  padding: 4px;\n}\n.sc-drw-palette-cell {\n  width: 18px;\n  height: 18px;\n  padding: 0;\n  border: 1px solid rgba(255, 255, 255, 0.12);\n  border-radius: 2px;\n  cursor: pointer;\n}\n.sc-drw-palette-cell:hover { transform: scale(1.15); border-color: #ffffff; }\n";
+/** TV-style preset palette — colors that read on any chart theme. */
+var PALETTE = [
+    '#787b86', '#9e9e9e', '#ffffff', '#000000',
+    '#2962ff', '#00bcd4', '#089981', '#2dc08e',
+    '#ffeb3b', '#ff9800', '#f23645', '#e91e63',
+    '#9c27b0', '#673ab7'
+];
+var CSS = "\n.sc-drw-toolbar {\n  position: absolute;\n  top: 0;\n  left: 0;\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  padding: 2px 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  line-height: 1;\n  user-select: none;\n  white-space: nowrap;\n  will-change: transform;\n}\n.sc-drw-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 26px;\n  height: 26px;\n  padding: 0;\n  margin: 0;\n  border: none;\n  border-radius: 3px;\n  background: transparent;\n  color: #d1d4dc;\n  cursor: pointer;\n}\n.sc-drw-btn:hover { background: #2a2e39; color: #ffffff; }\n.sc-drw-btn:active { background: #363c4e; }\n.sc-drw-btn[data-on=\"true\"] { color: #2962ff; }\n.sc-drw-btn[data-on=\"true\"]:hover { color: #4c7dff; }\n.sc-drw-btn svg { display: block; width: 16px; height: 16px; }\n.sc-drw-btn--wide { width: auto; padding: 0 6px; font-size: 11px; }\n.sc-drw-grip {\n  cursor: grab;\n  color: #5d6372;\n  width: 14px;\n}\n.sc-drw-grip:active { cursor: grabbing; }\n.sc-drw-sep {\n  width: 1px;\n  height: 18px;\n  margin: 0 2px;\n  background: #2a2e39;\n}\n.sc-drw-swatch {\n  width: 14px;\n  height: 14px;\n  border-radius: 2px;\n  border: 1px solid rgba(255, 255, 255, 0.25);\n}\n.sc-drw-menu {\n  position: absolute;\n  top: 0;\n  left: 0;\n  min-width: 120px;\n  padding: 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  z-index: 10;\n}\n.sc-drw-menu-item {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  width: 100%;\n  padding: 5px 8px;\n  border: none;\n  border-radius: 3px;\n  background: transparent;\n  color: inherit;\n  font: inherit;\n  text-align: left;\n  cursor: pointer;\n}\n.sc-drw-menu-item:hover { background: #2a2e39; }\n.sc-drw-menu-item[data-on=\"true\"] { color: #4c7dff; }\n.sc-drw-menu-item svg { width: 14px; height: 14px; flex: none; }\n.sc-drw-menu-label {\n  padding: 4px 8px 2px;\n  color: #787b86;\n  font-size: 10px;\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n}\n.sc-drw-palette {\n  display: grid;\n  grid-template-columns: repeat(7, 18px);\n  gap: 4px;\n  padding: 4px;\n}\n.sc-drw-palette-cell {\n  width: 18px;\n  height: 18px;\n  padding: 0;\n  border: 1px solid rgba(255, 255, 255, 0.12);\n  border-radius: 2px;\n  cursor: pointer;\n}\n.sc-drw-palette-cell:hover { transform: scale(1.15); border-color: #ffffff; }\n.sc-drw-palette--inline {\n  display: none;\n  position: absolute;\n  top: 100%;\n  left: 0;\n  margin-top: 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);\n  z-index: 5;\n}\n.sc-drw-field:hover .sc-drw-palette--inline { display: grid; }\n.sc-drw-dialog {\n  position: absolute;\n  top: 0;\n  left: 0;\n  width: 240px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 6px;\n  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  user-select: none;\n  will-change: transform;\n  z-index: 20;\n}\n.sc-drw-dialog-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 6px 8px;\n  font-weight: 600;\n  cursor: grab;\n  border-bottom: 1px solid #2a2e39;\n}\n.sc-drw-dialog-header:active { cursor: grabbing; }\n.sc-drw-dialog-tabs {\n  display: flex;\n  gap: 2px;\n  padding: 4px 6px 0;\n  border-bottom: 1px solid #2a2e39;\n}\n.sc-drw-dialog-tab {\n  padding: 4px 8px;\n  border: none;\n  border-radius: 3px 3px 0 0;\n  background: transparent;\n  color: #787b86;\n  font: inherit;\n  cursor: pointer;\n}\n.sc-drw-dialog-tab:hover { color: #d1d4dc; }\n.sc-drw-dialog-tab[data-on=\"true\"] {\n  color: #ffffff;\n  background: #2a2e39;\n}\n.sc-drw-dialog-body {\n  max-height: 320px;\n  overflow-y: auto;\n  padding: 8px;\n}\n.sc-drw-section {\n  padding: 6px 2px 3px;\n  color: #787b86;\n  font-size: 10px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n}\n.sc-drw-field {\n  position: relative;\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  padding: 3px 2px;\n  min-height: 24px;\n}\n.sc-drw-field-label {\n  flex: 1;\n  color: #9aa0ae;\n}\n.sc-drw-field-control {\n  position: relative;\n  display: flex;\n  align-items: center;\n  gap: 6px;\n}\n.sc-drw-input {\n  width: 110px;\n  padding: 3px 6px;\n  border: 1px solid #2a2e39;\n  border-radius: 3px;\n  background: #131722;\n  color: #d1d4dc;\n  font: inherit;\n}\n.sc-drw-input:focus { outline: none; border-color: #2962ff; }\n.sc-drw-input--narrow { width: 64px; }\n.sc-drw-color {\n  width: 26px;\n  height: 22px;\n  padding: 0;\n  border: 1px solid #2a2e39;\n  border-radius: 3px;\n  background: transparent;\n  cursor: pointer;\n}\n.sc-drw-levels {\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n  width: 100%;\n}\n.sc-drw-level-row {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  padding: 2px 0;\n}\n";
 var injected = false;
 /** Inject the drawings UI stylesheet — idempotent, SSR-safe. */
 function injectDrawingStyles() {
@@ -10423,13 +10430,6 @@ function injectDrawingStyles() {
  * recipe decides which swatches/dropdowns/toggles appear, and actions
  * (clone/remove/lock/hide/more-menu) are wired here once for every tool.
  */
-/** TV-style preset palette — colors that read on any chart theme. */
-var PALETTE = [
-    '#787b86', '#9e9e9e', '#ffffff', '#000000',
-    '#2962ff', '#00bcd4', '#089981', '#2dc08e',
-    '#ffeb3b', '#ff9800', '#f23645', '#e91e63',
-    '#9c27b0', '#673ab7'
-];
 var LINE_WIDTHS = [1, 2, 3, 4];
 var LINE_STYLES = [
     { value: 'solid', title: 'Solid' },
@@ -11059,6 +11059,818 @@ function attachFloatingToolbar(chart, manager, hooks) {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+var LINE_STYLE_OPTIONS = [
+    { value: 'solid', label: 'Solid' },
+    { value: 'dashed', label: 'Dashed' },
+    { value: 'dotted', label: 'Dotted' }
+];
+var TEXT_ALIGN_OPTIONS = [
+    { value: 'left', label: 'Left' },
+    { value: 'center', label: 'Center' },
+    { value: 'right', label: 'Right' }
+];
+/** TV interval-visibility matrix — matches the resolutions TV offers. */
+var VISIBLE_INTERVALS = [
+    '1m', '3m', '5m', '15m', '30m', '45m',
+    '1h', '2h', '3h', '4h',
+    '1D', '1W', '1M'
+];
+var DASHED_VALUE = {
+    solid: [6, 6],
+    dashed: [6, 6],
+    dotted: [2, 4]
+};
+function readPath(root, path) {
+    var e_1, _a;
+    var node = root;
+    try {
+        for (var path_1 = __values(path), path_1_1 = path_1.next(); !path_1_1.done; path_1_1 = path_1.next()) {
+            var key = path_1_1.value;
+            if (node === null || typeof node !== 'object') {
+                return undefined;
+            }
+            node = node[key];
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (path_1_1 && !path_1_1.done && (_a = path_1.return)) _a.call(path_1);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    return node;
+}
+function hasRecipeControl(item, kind, role) {
+    if (item === undefined) {
+        return false;
+    }
+    return item.toolbarRecipe.some(function (control) {
+        if (control.kind !== kind) {
+            return false;
+        }
+        if (role === undefined) {
+            return true;
+        }
+        return 'role' in control && control.role === role;
+    });
+}
+/** Locate a levels array on extendData — `levels` or `data.levels`. */
+function findLevelsPath(extendData) {
+    var e_2, _a;
+    if (extendData === null || typeof extendData !== 'object') {
+        return null;
+    }
+    var ed = extendData;
+    var candidates = [{ owner: ed, key: 'levels' }];
+    if (ed.data !== null && typeof ed.data === 'object') {
+        candidates.push({ owner: ed.data, key: 'levels' });
+    }
+    try {
+        for (var candidates_1 = __values(candidates), candidates_1_1 = candidates_1.next(); !candidates_1_1.done; candidates_1_1 = candidates_1.next()) {
+            var _b = candidates_1_1.value, owner = _b.owner, key = _b.key;
+            var value = owner[key];
+            if (isArray(value) && value.length > 0) {
+                var first = value[0];
+                if (first !== null && typeof first === 'object') {
+                    return { owner: owner, key: key, levels: value };
+                }
+            }
+        }
+    }
+    catch (e_2_1) { e_2 = { error: e_2_1 }; }
+    finally {
+        try {
+            if (candidates_1_1 && !candidates_1_1.done && (_a = candidates_1.return)) _a.call(candidates_1);
+        }
+        finally { if (e_2) throw e_2.error; }
+    }
+    return null;
+}
+function styleFields(overlay, item, draft) {
+    var _a;
+    var styles = ((_a = overlay.styles) !== null && _a !== void 0 ? _a : {});
+    var fields = [];
+    var hasLine = styles.line !== undefined || hasRecipeControl(item, 'color', 'line') || hasRecipeControl(item, 'style', 'line');
+    var hasText = (item === null || item === void 0 ? void 0 : item.capabilities.hasText) === true || styles.text !== undefined;
+    var hasFill = hasRecipeControl(item, 'color', 'fill') || styles.polygon !== undefined;
+    if (hasLine) {
+        fields.push({
+            id: 'lineColor',
+            kind: 'color',
+            label: 'Line color',
+            get: function () { return readPath(styles, ['line', 'color']); },
+            set: function (v) { draft.style(['line', 'color'], v); }
+        }, {
+            id: 'lineWidth',
+            kind: 'number',
+            label: 'Width',
+            min: 1,
+            max: 8,
+            step: 1,
+            get: function () { return readPath(styles, ['line', 'size']); },
+            set: function (v) { draft.style(['line', 'size'], v); }
+        }, {
+            id: 'lineStyle',
+            kind: 'select',
+            label: 'Style',
+            options: LINE_STYLE_OPTIONS,
+            get: function () { var _a; return (_a = readPath(styles, ['line', 'style'])) !== null && _a !== void 0 ? _a : 'solid'; },
+            set: function (v) {
+                draft.style(['line', 'style'], v);
+                if (typeof v === 'string' && v in DASHED_VALUE) {
+                    draft.style(['line', 'dashedValue'], DASHED_VALUE[v]);
+                }
+            }
+        });
+    }
+    if (hasFill) {
+        fields.push({
+            id: 'fillColor',
+            kind: 'color',
+            label: 'Fill color',
+            get: function () { return readPath(styles, ['polygon', 'color']); },
+            set: function (v) { draft.style(['polygon', 'color'], v); }
+        });
+    }
+    if (hasRecipeControl(item, 'color', 'background')) {
+        fields.push({
+            id: 'backgroundColor',
+            kind: 'color',
+            label: 'Background',
+            get: function () { return readPath(styles, ['rect', 'color']); },
+            set: function (v) { draft.style(['rect', 'color'], v); }
+        });
+    }
+    if (hasText) {
+        fields.push({
+            id: 'textColor',
+            kind: 'color',
+            label: 'Text color',
+            get: function () { return readPath(styles, ['text', 'color']); },
+            set: function (v) { draft.style(['text', 'color'], v); }
+        }, {
+            id: 'textSize',
+            kind: 'number',
+            label: 'Font size',
+            min: 8,
+            max: 64,
+            step: 1,
+            get: function () { return readPath(styles, ['text', 'size']); },
+            set: function (v) { draft.style(['text', 'size'], v); }
+        }, {
+            id: 'textBold',
+            kind: 'checkbox',
+            label: 'Bold',
+            get: function () { return readPath(styles, ['text', 'weight']) === 'bold'; },
+            set: function (v) { draft.style(['text', 'weight'], v === true ? 'bold' : 'normal'); }
+        }, {
+            id: 'textItalic',
+            kind: 'checkbox',
+            label: 'Italic',
+            get: function () { return readPath(styles, ['text', 'style']) === 'italic'; },
+            set: function (v) { draft.style(['text', 'style'], v === true ? 'italic' : 'normal'); }
+        }, {
+            id: 'textAlign',
+            kind: 'select',
+            label: 'Align',
+            options: TEXT_ALIGN_OPTIONS,
+            get: function () { var _a; return (_a = readPath(styles, ['text', 'align'])) !== null && _a !== void 0 ? _a : 'center'; },
+            set: function (v) { draft.style(['text', 'align'], v); }
+        });
+    }
+    return fields;
+}
+function optionFields(overlay, draft) {
+    // Top-level booleans on extendData become auto-labeled toggles — extend
+    // modes, fan/arc visibility flags etc. carried by rebuilt tools.
+    var ed = overlay.extendData;
+    if (ed === null || typeof ed !== 'object') {
+        return [];
+    }
+    var record = ed;
+    return Object.keys(record)
+        .filter(function (key) { return key !== 'common' && key !== 'data' && isBoolean(record[key]); })
+        .map(function (key) { return ({
+        id: "flag_".concat(key),
+        kind: 'checkbox',
+        label: key.replace(/([A-Z])/g, ' $1').replace(/^./, function (c) { return c.toUpperCase(); }),
+        get: function () { return overlay.extendData[key]; },
+        set: function (v) { draft.extendData([key], v); }
+    }); });
+}
+function levelsField(overlay, draft) {
+    var found = findLevelsPath(overlay.extendData);
+    if (found === null) {
+        return null;
+    }
+    var owner = found.owner, key = found.key;
+    return {
+        id: 'levels',
+        kind: 'levels',
+        label: 'Levels',
+        get: function () { return owner[key]; },
+        set: function (v) {
+            // Levels arrays are committed whole — deep-merging rows per index
+            // would leak stale entries on removal.
+            var parentPath = owner === overlay.extendData.data ? ['data', key] : [key];
+            draft.extendData(parentPath, v);
+        }
+    };
+}
+function coordinateFields(overlay, draft) {
+    var fields = [];
+    overlay.points.forEach(function (point, index) {
+        fields.push({
+            id: "point_".concat(index, "_header"),
+            kind: 'header',
+            label: "Point ".concat(index + 1)
+        });
+        if (isNumber(point.timestamp)) {
+            fields.push({
+                id: "point_".concat(index, "_time"),
+                kind: 'datetime',
+                label: 'Time',
+                get: function () { return overlay.points[index].timestamp; },
+                set: function (v) { draft.point(index, { timestamp: v }); }
+            });
+        }
+        if (isNumber(point.value)) {
+            fields.push({
+                id: "point_".concat(index, "_value"),
+                kind: 'number',
+                label: 'Price',
+                step: 0,
+                get: function () { return overlay.points[index].value; },
+                set: function (v) { draft.point(index, { value: v }); }
+            });
+        }
+    });
+    return fields;
+}
+function visibilityFields(overlay, draft) {
+    var current = function () {
+        var _a, _b;
+        var common = (_a = overlay.extendData) === null || _a === void 0 ? void 0 : _a.common;
+        return (_b = common === null || common === void 0 ? void 0 : common.visibleIntervals) !== null && _b !== void 0 ? _b : [];
+    };
+    return __spreadArray([
+        {
+            id: 'visibleIntervals_header',
+            kind: 'header',
+            label: 'Show on timeframes (empty = all)'
+        }
+    ], __read(VISIBLE_INTERVALS.map(function (interval) { return ({
+        id: "iv_".concat(interval),
+        kind: 'checkbox',
+        label: interval,
+        get: function () { return current().includes(interval); },
+        set: function (v) {
+            var next = new Set(current());
+            if (v === true) {
+                next.add(interval);
+            }
+            else {
+                next.delete(interval);
+            }
+            draft.extendData(['common', 'visibleIntervals'], __spreadArray([], __read(next), false));
+        }
+    }); })), false);
+}
+function buildSettingsTabs(overlay, item, draft) {
+    var style = __spreadArray([], __read(styleFields(overlay, item, draft)), false);
+    var levels = levelsField(overlay, draft);
+    if (levels !== null) {
+        style.push(levels);
+    }
+    style.push.apply(style, __spreadArray([], __read(optionFields(overlay, draft)), false));
+    var tabs = [];
+    if (style.length > 0) {
+        tabs.push({ id: 'style', title: 'Style', fields: style });
+    }
+    var coordinates = coordinateFields(overlay, draft);
+    if (coordinates.length > 0) {
+        tabs.push({ id: 'coordinates', title: 'Coordinates', fields: coordinates });
+    }
+    tabs.push({ id: 'visibility', title: 'Visibility', fields: visibilityFields(overlay, draft) });
+    return tabs;
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var LEVEL_NUMBER_KEYS = ['coeff', 'percent', 'level', 'value', 'ratio'];
+function toLocalInputValue(timestamp) {
+    var d = new Date(timestamp);
+    var pad = function (n) { return String(n).padStart(2, '0'); };
+    return "".concat(d.getFullYear(), "-").concat(pad(d.getMonth() + 1), "-").concat(pad(d.getDate()), "T").concat(pad(d.getHours()), ":").concat(pad(d.getMinutes()));
+}
+function fromLocalInputValue(value) {
+    var ms = new Date(value).getTime();
+    return Number.isNaN(ms) ? null : ms;
+}
+function attachSettingsDialog(chart, manager) {
+    injectDrawingStyles();
+    var element = null;
+    var unmount = null;
+    var layer = null;
+    var current = null;
+    var pos = { x: 40, y: 40 };
+    var dragState = null;
+    var activeTab = 'style';
+    var destroyed = false;
+    // ── draft ───────────────────────────────────────────────────────────────
+    function makeDraft() {
+        var styles = {};
+        var extendData = {};
+        var pointsPatch = new Map();
+        var stage = function (root, path, value) {
+            var node = root;
+            path.slice(0, -1).forEach(function (key) {
+                if (node[key] === null || typeof node[key] !== 'object') {
+                    node[key] = {};
+                }
+                node = node[key];
+            });
+            node[path[path.length - 1]] = value;
+        };
+        return {
+            style: function (path, value) { stage(styles, path, value); },
+            extendData: function (path, value) { stage(extendData, path, value); },
+            point: function (index, patch) {
+                pointsPatch.set(index, __assign(__assign({}, pointsPatch.get(index)), patch));
+            },
+            commit: function () {
+                var e_1, _a, e_2, _b;
+                if (current === null) {
+                    return;
+                }
+                var patch = {};
+                if (Object.keys(styles).length > 0) {
+                    patch.styles = styles;
+                }
+                if (Object.keys(extendData).length > 0) {
+                    patch.extendData = extendData;
+                }
+                if (pointsPatch.size > 0) {
+                    var next_1 = current.points.map(function (p) { return (__assign({}, p)); });
+                    pointsPatch.forEach(function (p, index) {
+                        if (index < next_1.length) {
+                            Object.assign(next_1[index], p);
+                        }
+                    });
+                    patch.points = next_1;
+                }
+                if (Object.keys(patch).length > 0) {
+                    manager.update(current.id, patch);
+                }
+                try {
+                    for (var _c = __values(Object.keys(styles)), _d = _c.next(); !_d.done; _d = _c.next()) {
+                        var k = _d.value;
+                        styles[k] = undefined;
+                    }
+                }
+                catch (e_1_1) { e_1 = { error: e_1_1 }; }
+                finally {
+                    try {
+                        if (_d && !_d.done && (_a = _c.return)) _a.call(_c);
+                    }
+                    finally { if (e_1) throw e_1.error; }
+                }
+                try {
+                    for (var _e = __values(Object.keys(extendData)), _f = _e.next(); !_f.done; _f = _e.next()) {
+                        var k = _f.value;
+                        extendData[k] = undefined;
+                    }
+                }
+                catch (e_2_1) { e_2 = { error: e_2_1 }; }
+                finally {
+                    try {
+                        if (_f && !_f.done && (_b = _e.return)) _b.call(_e);
+                    }
+                    finally { if (e_2) throw e_2.error; }
+                }
+                pointsPatch.clear();
+            }
+        };
+    }
+    var draft = makeDraft();
+    // ── field renderers ─────────────────────────────────────────────────────
+    function fieldRow(label) {
+        var row = createDom('div');
+        row.className = 'sc-drw-field';
+        var lab = createDom('label');
+        lab.className = 'sc-drw-field-label';
+        lab.textContent = label;
+        var control = createDom('div');
+        control.className = 'sc-drw-field-control';
+        row.appendChild(lab);
+        row.appendChild(control);
+        return { row: row, control: control };
+    }
+    function numberInput(field) {
+        var _a;
+        var _b = fieldRow(field.label), row = _b.row, control = _b.control;
+        var input = createDom('input');
+        input.className = 'sc-drw-input';
+        input.type = 'number';
+        if (field.min !== undefined) {
+            input.min = String(field.min);
+        }
+        if (field.max !== undefined) {
+            input.max = String(field.max);
+        }
+        if (field.step !== undefined && field.step !== 0) {
+            input.step = String(field.step);
+        }
+        var v = (_a = field.get) === null || _a === void 0 ? void 0 : _a.call(field);
+        input.value = isNumber(v) ? String(v) : '';
+        input.addEventListener('change', function () {
+            var _a;
+            var parsed = Number(input.value);
+            if (!Number.isNaN(parsed)) {
+                (_a = field.set) === null || _a === void 0 ? void 0 : _a.call(field, parsed);
+                draft.commit();
+            }
+        });
+        control.appendChild(input);
+        return row;
+    }
+    function colorInput(field) {
+        var _a = fieldRow(field.label), row = _a.row, control = _a.control;
+        var swatch = createDom('span');
+        swatch.className = 'sc-drw-swatch';
+        var paint = function () {
+            var _a;
+            var v = (_a = field.get) === null || _a === void 0 ? void 0 : _a.call(field);
+            swatch.style.background = typeof v === 'string' ? v : '#2962ff';
+        };
+        paint();
+        var grid = createDom('div');
+        grid.className = 'sc-drw-palette sc-drw-palette--inline';
+        PALETTE.forEach(function (color) {
+            var cell = createDom('button');
+            cell.className = 'sc-drw-palette-cell';
+            cell.style.background = color;
+            cell.title = color;
+            cell.addEventListener('click', function (e) {
+                var _a;
+                e.stopPropagation();
+                (_a = field.set) === null || _a === void 0 ? void 0 : _a.call(field, color);
+                draft.commit();
+                paint();
+            });
+            grid.appendChild(cell);
+        });
+        control.appendChild(swatch);
+        control.appendChild(grid);
+        return row;
+    }
+    function selectInput(field) {
+        var _a, _b;
+        var _c = fieldRow(field.label), row = _c.row, control = _c.control;
+        var select = createDom('select');
+        select.className = 'sc-drw-input';
+        (_a = field.options) === null || _a === void 0 ? void 0 : _a.forEach(function (opt) {
+            var o = createDom('option');
+            o.value = opt.value;
+            o.textContent = opt.label;
+            select.appendChild(o);
+        });
+        var v = (_b = field.get) === null || _b === void 0 ? void 0 : _b.call(field);
+        if (typeof v === 'string') {
+            select.value = v;
+        }
+        select.addEventListener('change', function () {
+            var _a;
+            (_a = field.set) === null || _a === void 0 ? void 0 : _a.call(field, select.value);
+            draft.commit();
+        });
+        control.appendChild(select);
+        return row;
+    }
+    function checkboxInput(field) {
+        var _a;
+        var _b = fieldRow(field.label), row = _b.row, control = _b.control;
+        var input = createDom('input');
+        input.type = 'checkbox';
+        input.checked = ((_a = field.get) === null || _a === void 0 ? void 0 : _a.call(field)) === true;
+        input.addEventListener('change', function () {
+            var _a;
+            (_a = field.set) === null || _a === void 0 ? void 0 : _a.call(field, input.checked);
+            draft.commit();
+        });
+        control.appendChild(input);
+        return row;
+    }
+    function datetimeInput(field) {
+        var _a;
+        var _b = fieldRow(field.label), row = _b.row, control = _b.control;
+        var input = createDom('input');
+        input.className = 'sc-drw-input';
+        input.type = 'datetime-local';
+        var v = (_a = field.get) === null || _a === void 0 ? void 0 : _a.call(field);
+        if (isNumber(v)) {
+            input.value = toLocalInputValue(v);
+        }
+        input.addEventListener('change', function () {
+            var _a;
+            var ms = fromLocalInputValue(input.value);
+            if (ms !== null) {
+                (_a = field.set) === null || _a === void 0 ? void 0 : _a.call(field, ms);
+                draft.commit();
+            }
+        });
+        control.appendChild(input);
+        return row;
+    }
+    function levelsEditor(field) {
+        var _a;
+        var wrap = createDom('div');
+        wrap.className = 'sc-drw-levels';
+        var levels = (_a = field.get) === null || _a === void 0 ? void 0 : _a.call(field);
+        if (!isArray(levels)) {
+            return wrap;
+        }
+        // Each row edits a clone of the whole array — removal/reorder can't
+        // leak through a per-index merge.
+        var writeRow = function (index, patch) {
+            var _a;
+            var next = levels.map(function (level, i) {
+                return i === index ? __assign(__assign({}, level), patch) : level;
+            });
+            (_a = field.set) === null || _a === void 0 ? void 0 : _a.call(field, next);
+            draft.commit();
+        };
+        levels.forEach(function (level, index) {
+            var _a;
+            var row = createDom('div');
+            row.className = 'sc-drw-level-row';
+            var vis = createDom('input');
+            vis.type = 'checkbox';
+            vis.checked = level.visible !== false;
+            vis.title = 'Show level';
+            vis.addEventListener('change', function () { writeRow(index, { visible: vis.checked }); });
+            row.appendChild(vis);
+            var numKey = (_a = LEVEL_NUMBER_KEYS.find(function (k) { return isNumber(level[k]); })) !== null && _a !== void 0 ? _a : null;
+            var num = createDom('input');
+            num.className = 'sc-drw-input sc-drw-input--narrow';
+            num.type = 'number';
+            num.step = '0.001';
+            num.value = numKey !== null ? String(level[numKey]) : '';
+            num.disabled = numKey === null;
+            num.addEventListener('change', function () {
+                var _a;
+                var parsed = Number(num.value);
+                if (!Number.isNaN(parsed) && numKey !== null) {
+                    writeRow(index, (_a = {}, _a[numKey] = parsed, _a));
+                }
+            });
+            row.appendChild(num);
+            if (typeof level.color === 'string' || 'color' in level) {
+                var color_1 = createDom('input');
+                color_1.type = 'color';
+                color_1.className = 'sc-drw-color';
+                color_1.value = typeof level.color === 'string' ? level.color : '#2962ff';
+                color_1.addEventListener('change', function () { writeRow(index, { color: color_1.value }); });
+                row.appendChild(color_1);
+            }
+            wrap.appendChild(row);
+        });
+        var header = createDom('div');
+        header.className = 'sc-drw-field-label';
+        header.textContent = field.label;
+        var box = createDom('div');
+        box.className = 'sc-drw-field';
+        box.appendChild(header);
+        box.appendChild(wrap);
+        return box;
+    }
+    function renderField(field) {
+        var _a;
+        switch (field.kind) {
+            case 'header': {
+                var h = createDom('div');
+                h.className = 'sc-drw-section';
+                h.textContent = field.label;
+                return h;
+            }
+            case 'color': return colorInput(field);
+            case 'number': return numberInput(field);
+            case 'select': return selectInput(field);
+            case 'checkbox': return checkboxInput(field);
+            case 'datetime': return datetimeInput(field);
+            case 'levels': return levelsEditor(field);
+            case 'text': {
+                var _b = fieldRow(field.label), row = _b.row, control = _b.control;
+                var input_1 = createDom('input');
+                input_1.className = 'sc-drw-input';
+                input_1.value = typeof ((_a = field.get) === null || _a === void 0 ? void 0 : _a.call(field)) === 'string' ? field.get() : '';
+                input_1.addEventListener('change', function () {
+                    var _a;
+                    (_a = field.set) === null || _a === void 0 ? void 0 : _a.call(field, input_1.value);
+                    draft.commit();
+                });
+                control.appendChild(input_1);
+                return row;
+            }
+        }
+        return null;
+    }
+    // ── panel ───────────────────────────────────────────────────────────────
+    function renderBody() {
+        var _a, _b;
+        if (element === null || current === null) {
+            return;
+        }
+        var body = element.querySelector('.sc-drw-dialog-body');
+        if (body === null) {
+            return;
+        }
+        body.innerHTML = '';
+        draft = makeDraft();
+        var tabs = buildSettingsTabs(current, (_a = findCatalogItemByOverlay(current.name)) !== null && _a !== void 0 ? _a : undefined, draft);
+        if (tabs.length === 0) {
+            return;
+        }
+        var tab = (_b = tabs.find(function (t) { return t.id === activeTab; })) !== null && _b !== void 0 ? _b : tabs[0];
+        activeTab = tab.id;
+        var tabBar = element.querySelector('.sc-drw-dialog-tabs');
+        if (tabBar !== null) {
+            tabBar.innerHTML = '';
+            tabs.forEach(function (t) {
+                var b = createDom('button');
+                b.className = 'sc-drw-dialog-tab';
+                b.textContent = t.title;
+                if (t.id === activeTab) {
+                    b.setAttribute('data-on', 'true');
+                }
+                b.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    activeTab = t.id;
+                    renderBody();
+                });
+                tabBar.appendChild(b);
+            });
+        }
+        tab.fields.forEach(function (field) {
+            var el = renderField(field);
+            if (el !== null) {
+                body.appendChild(el);
+            }
+        });
+    }
+    function onDocumentMouseDown(e) {
+        if (element !== null && !element.contains(e.target)) {
+            close();
+        }
+    }
+    function onDocumentKeyDown(e) {
+        if (e.key === 'Escape') {
+            close();
+        }
+    }
+    function onDragMove(e) {
+        if (dragState === null || element === null) {
+            return;
+        }
+        pos = {
+            x: dragState.baseX + (e.clientX - dragState.startX),
+            y: dragState.baseY + (e.clientY - dragState.startY)
+        };
+        element.style.transform = "translate3d(".concat(pos.x, "px, ").concat(pos.y, "px, 0)");
+    }
+    function onDragEnd() {
+        dragState = null;
+    }
+    var onOverlayChange = function (payload) {
+        var _a;
+        // 'change' covers remove/update/create — close only when the open
+        // overlay is actually gone, not on the updates this dialog commits.
+        if (current !== null && ((_a = payload.overlay) === null || _a === void 0 ? void 0 : _a.id) === current.id && chart.getOverlayById(current.id) === null) {
+            close();
+        }
+    };
+    var unsubRemove = null;
+    var docListenersBound = false;
+    function bindDocListeners() {
+        if (docListenersBound) {
+            return;
+        }
+        docListenersBound = true;
+        document.addEventListener('mousedown', onDocumentMouseDown, true);
+        document.addEventListener('keydown', onDocumentKeyDown, true);
+        document.addEventListener('mousemove', onDragMove);
+        document.addEventListener('mouseup', onDragEnd);
+        unsubRemove = manager.on('change', onOverlayChange);
+    }
+    function unbindDocListeners() {
+        if (!docListenersBound) {
+            return;
+        }
+        docListenersBound = false;
+        document.removeEventListener('mousedown', onDocumentMouseDown, true);
+        document.removeEventListener('keydown', onDocumentKeyDown, true);
+        document.removeEventListener('mousemove', onDragMove);
+        document.removeEventListener('mouseup', onDragEnd);
+        unsubRemove === null || unsubRemove === void 0 ? void 0 : unsubRemove();
+        unsubRemove = null;
+    }
+    function open(overlay) {
+        if (destroyed) {
+            return;
+        }
+        close();
+        current = overlay;
+        layer = getPaneDomLayer(chart, overlay.paneId);
+        if (layer === null) {
+            current = null;
+            return;
+        }
+        activeTab = 'style';
+        element = createDom('div');
+        element.className = 'sc-drw-dialog';
+        element.setAttribute('role', 'dialog');
+        element.style.transform = "translate3d(".concat(pos.x, "px, ").concat(pos.y, "px, 0)");
+        // Keep chart interaction events from bleeding through the panel.
+        var el = element;
+        ['mousedown', 'mouseup', 'mousemove', 'click', 'dblclick', 'wheel', 'touchstart', 'touchmove', 'touchend'].forEach(function (type) {
+            el.addEventListener(type, function (e) { e.stopPropagation(); });
+        });
+        var header = createDom('div');
+        header.className = 'sc-drw-dialog-header';
+        var title = createDom('span');
+        title.textContent = overlay.name;
+        var closeBtn = createDom('button');
+        closeBtn.className = 'sc-drw-btn';
+        closeBtn.textContent = '×';
+        closeBtn.title = 'Close';
+        closeBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            close();
+        });
+        header.appendChild(title);
+        header.appendChild(closeBtn);
+        header.addEventListener('mousedown', function (e) {
+            if (e.target === closeBtn) {
+                return;
+            }
+            dragState = { startX: e.clientX, startY: e.clientY, baseX: pos.x, baseY: pos.y };
+            e.preventDefault();
+        });
+        element.appendChild(header);
+        var tabs = createDom('div');
+        tabs.className = 'sc-drw-dialog-tabs';
+        element.appendChild(tabs);
+        var body = createDom('div');
+        body.className = 'sc-drw-dialog-body';
+        element.appendChild(body);
+        unmount = layer.mount(element);
+        bindDocListeners();
+        renderBody();
+    }
+    function close() {
+        unmount === null || unmount === void 0 ? void 0 : unmount();
+        unmount = null;
+        element = null;
+        current = null;
+        layer = null;
+        unbindDocListeners();
+    }
+    return {
+        open: open,
+        close: close,
+        isOpen: function () { return element !== null; },
+        destroy: function () {
+            destroyed = true;
+            close();
+        }
+    };
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 function isEditableTarget(target) {
     if (!(target instanceof Element)) {
         return false;
@@ -11194,10 +12006,13 @@ function expectedAnchors(name) {
 function createDrawingsApi(chart, options) {
     var _a;
     var manager = createDrawingManager(chart, __assign(__assign({}, options), { store: (_a = options === null || options === void 0 ? void 0 : options.store) !== null && _a !== void 0 ? _a : undefined }));
+    var settingsDialog = attachSettingsDialog(chart, manager);
     var toolbarOption = options === null || options === void 0 ? void 0 : options.toolbar;
+    var toolbarHooks = typeof toolbarOption === 'object'
+        ? __assign({ onSettings: function (overlay) { settingsDialog.open(overlay); } }, toolbarOption) : { onSettings: function (overlay) { settingsDialog.open(overlay); } };
     var toolbar = toolbarOption === false
         ? null
-        : attachFloatingToolbar(chart, manager, typeof toolbarOption === 'object' ? toolbarOption : undefined);
+        : attachFloatingToolbar(chart, manager, toolbarHooks);
     var selectedId = null;
     var unbindSelection = [
         manager.on('select', function (p) {
@@ -11426,6 +12241,13 @@ function createDrawingsApi(chart, options) {
                 }
             });
             return removed;
+        }, openSettings: function (id) {
+            var overlay = chart.getOverlayById(id);
+            if (overlay === null) {
+                return false;
+            }
+            settingsDialog.open(overlay);
+            return true;
         }, configure: function (opts) {
             var _a;
             if ('store' in opts) {
@@ -11437,6 +12259,7 @@ function createDrawingsApi(chart, options) {
                 unsub();
             });
             toolbar === null || toolbar === void 0 ? void 0 : toolbar.destroy();
+            settingsDialog.destroy();
             clipboard = null;
             manager.destroy();
         } });

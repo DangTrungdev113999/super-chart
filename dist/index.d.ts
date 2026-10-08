@@ -1404,6 +1404,8 @@ export interface DrawingsApi extends DrawingManager {
 	list: (filter?: DrawingListFilter) => SerializedDrawing[];
 	/** Bulk remove — returns removed ids. Locked drawings are skipped by default. */
 	clear: (filter?: DrawingClearFilter) => string[];
+	/** Open the library settings dialog for a drawing (DP-6c). */
+	openSettings: (id: string) => boolean;
 	configure: (opts: DrawingsConfigureOptions) => void;
 }
 export type DomPosition = "root" | "main" | "yAxis";

@@ -195,4 +195,15 @@ export type {
   FloatingToolbarHooks,
   ToolbarSourceAction
 } from './ui/floatingToolbar'
-export { injectDrawingStyles } from './ui/styles'
+export { injectDrawingStyles, PALETTE as DRAWING_PALETTE } from './ui/styles'
+
+// ─── Settings dialog (DP-6c) ─────────────────────────────────────────────────
+export { attachSettingsDialog } from './ui/settingsDialog'
+export type { SettingsDialog } from './ui/settingsDialog'
+export { buildSettingsTabs, VISIBLE_INTERVALS } from './ui/settingsSchema'
+export type {
+  SettingField,
+  SettingFieldKind,
+  SettingsTabSchema,
+  SettingsDraft
+} from './ui/settingsSchema'
