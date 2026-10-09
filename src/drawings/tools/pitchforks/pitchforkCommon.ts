@@ -173,8 +173,12 @@ function computeGeometry (variant: PitchforkVariant, p1: Coordinate, p2: Coordin
         // In-progress median: P1 → P2 (TradingView medianPoint = p2 at 2 points).
         return { median: { from: p1, to: p2, ray: true } }
       case 'schiff':
-        return { back, median: { from: mid(p1, p2), to: p2, ray: true } }
+        // Schiff shifts the median origin to the midpoint in PRICE only —
+        // X stays at P1. Mirror of the completed branch below.
+        return { back, median: { from: { x: p1.x, y: (p1.y + p2.y) / 2 }, to: p2, ray: true } }
       case 'modifiedSchiff':
+        // Modified Schiff shifts the origin to the midpoint in BOTH axes.
+        return { back, median: { from: mid(p1, p2), to: p2, ray: true } }
       case 'inside':
         return { back }
     }
@@ -192,7 +196,9 @@ function computeGeometry (variant: PitchforkVariant, p1: Coordinate, p2: Coordin
       }
     case 'schiff':
     case 'modifiedSchiff': {
-      const base = variant === 'schiff'
+      // TradingView definitions: Schiff = median origin at (P1.x,
+      // mid-price(P1,P2)); Modified Schiff = midpoint in both time and price.
+      const base = variant === 'modifiedSchiff'
         ? mid(p1, p2)
         : { x: p1.x, y: (p1.y + p2.y) / 2 }
       return {

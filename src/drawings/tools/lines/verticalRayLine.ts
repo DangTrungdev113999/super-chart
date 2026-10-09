@@ -53,8 +53,9 @@ const verticalRayLine: OverlayTemplate<VertRayExtendData> = {
 
     const figures: OverlayFigure[] = []
 
-    // Ray: from c1.y toward c2's direction, to the pane edge.
-    const endY = c2.y >= c1.y ? bounding.height : 0
+    // Ray: from c1.y toward c2's direction, to the pane edge. Same-price
+    // anchors ray UP — upstream parity (`c1.y < c2.y ? height : 0`).
+    const endY = c2.y > c1.y ? bounding.height : 0
     figures.push({
       key: 'vr_line',
       type: 'line',

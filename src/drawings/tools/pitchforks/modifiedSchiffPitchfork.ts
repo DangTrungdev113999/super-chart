@@ -18,8 +18,9 @@ import type { PitchforkExtendData } from './pitchforkCommon'
 import { createPitchforkTemplate } from './pitchforkCommon'
 
 /**
- * 'modifiedSchiffPitchfork' — Modified Schiff: the pivot moves to
- * (midpoint.x, p2.y) — time-midpoint with the second leg's price.
+ * 'modifiedSchiffPitchfork' — Modified Schiff: the median origin moves to
+ * the midpoint of the p1→p2 segment in BOTH time and price before
+ * projecting the median ray.
  */
 const modifiedSchiffPitchfork: OverlayTemplate<PitchforkExtendData> = createPitchforkTemplate('modifiedSchiffPitchfork', 'modifiedSchiff')
 

@@ -40,6 +40,8 @@ export interface VertSegmentExtendData extends LineExtendData {}
 const verticalSegment: OverlayTemplate<VertSegmentExtendData> = {
   name: 'verticalSegment',
   totalStep: 3,
+  // Arrowhead wings extend beyond the anchor hull.
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

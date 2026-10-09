@@ -41,6 +41,8 @@ export interface ArrowLineExtendData extends LineExtendData {}
 const arrowLine: OverlayTemplate<ArrowLineExtendData> = {
   name: 'arrowLine',
   totalStep: 3,
+  // Arrowhead wings extend beyond the anchor hull.
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,
