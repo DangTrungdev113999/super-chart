@@ -178,7 +178,7 @@ export type {
   DrawingToolGroup,
   DrawingChromeItem
 } from './catalog'
-export { getDrawingIcon, listDrawingIconIds } from './icons'
+export { getDrawingIcon, listDrawingIconIds, registerDrawingIcon } from './icons'
 export type { DrawingIconId } from './icons'
 
 export { createDrawingsApi } from './api'

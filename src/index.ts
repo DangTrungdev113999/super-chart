@@ -280,6 +280,7 @@ export {
   isStayInDrawingEnabled,
   isSnap45Active,
   snap45Coordinate,
+  registerDrawingIcon,
   bindDrawingKeyboard,
   withFigureCache,
   withViewportCull,

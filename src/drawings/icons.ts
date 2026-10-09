@@ -85,6 +85,16 @@ const ICONS: Record<string, string> = {
 // would resolve to Object.prototype members without this guard.
 const ICON_ID_SET = new Set<string>(Object.keys(ICONS))
 
+/**
+ * Register a host-supplied icon (inline SVG markup) under an id — for
+ * `extraGroups` palette items or custom tool buttons. Later calls with the
+ * same id overwrite.
+ */
+export function registerDrawingIcon (iconId: DrawingIconId, svgMarkup: string): void {
+  ICONS[iconId] = svgMarkup
+  ICON_ID_SET.add(iconId)
+}
+
 /** Inline SVG markup for an icon id — generic 'tool' glyph as fallback. */
 export function getDrawingIcon (iconId: DrawingIconId | undefined): string {
   if (iconId !== undefined && ICON_ID_SET.has(iconId)) {

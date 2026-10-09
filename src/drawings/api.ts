@@ -30,6 +30,7 @@ import { attachSettingsDialog, type SettingsDialog } from './ui/settingsDialog'
 import { mountToolPalette, type ToolPalette, type ToolPaletteOptions } from './ui/toolPalette'
 import { closeTextEditorSessions } from './editor/overlayTextEditor'
 import { bindDrawingKeyboard } from './interaction/keyboard'
+import type { DrawingKeyboardOptions } from './interaction/keyboard'
 
 /**
  * `chart.drawings` — the public facade over the drawing subsystem.
@@ -99,9 +100,11 @@ export interface DrawingsApi extends DrawingManager {
   /**
    * Arm a tool by catalog id ('trendLine') or kernel name ('segment').
    * Catalog ids resolve through the registry; unknown ids fall through to
-   * the raw overlay name for extension templates.
+   * the raw overlay name for extension templates. `raw: true` skips catalog
+   * resolution entirely — for host templates whose name collides with a
+   * catalog id.
    */
-  activate: (tool: string, opts?: { continuous?: boolean, extendData?: unknown, points?: OverlayCreate['points'], mode?: OverlayCreate['mode'] }) => Nullable<string>
+  activate: (tool: string, opts?: { continuous?: boolean, extendData?: unknown, points?: OverlayCreate['points'], mode?: OverlayCreate['mode'], raw?: boolean }) => Nullable<string>
 
   /**
    * Validating programmatic create.
@@ -139,6 +142,13 @@ export interface DrawingsApi extends DrawingManager {
    * destroyed with the api. Returns a handle for early teardown.
    */
   mountToolbar: (container: HTMLElement, opts?: ToolPaletteOptions) => ToolPalette
+
+  /**
+   * Bind a bare-key shortcut to a raw overlay name (host tools not in the
+   * catalog — e.g. `extraGroups` items). The tool palette registers its
+   * extras' hotkeys automatically; hosts can call it directly too.
+   */
+  registerToolHotkey: (key: string, overlayName: string) => void
 
   configure: (opts: DrawingsConfigureOptions) => void
 }
@@ -186,8 +196,9 @@ export type DrawingsApiOptions = Omit<DrawingManagerOptions, 'store'> & {
   store?: DrawingStore | null
   /** Floating toolbar: `false` disables, object supplies hooks (DP-6b). */
   toolbar?: boolean | FloatingToolbarHooks
-  /** Shared drawing keyboard layer — `false` disables (default on). */
-  keyboard?: boolean
+  /** Shared drawing keyboard layer — `false` disables (default on). Object
+   *  form forwards `isActive`/`target` to the binder. */
+  keyboard?: boolean | DrawingKeyboardOptions
 }
 
 export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): DrawingsApi {
@@ -207,6 +218,8 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
   let selectedId: string | null = null
   /** Mounted tool palettes — tracked so `destroy()` tears them all down. */
   const palettes = new Set<ToolPalette>()
+  /** Bare-key → raw overlay name for host tools outside the catalog. */
+  const extraToolHotkeys = new Map<string, string>()
   let apiDestroyed = false
   const unbindSelection = [
     manager.on('select', p => {
@@ -258,7 +271,11 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
   }
 
   let clipboard: SerializedDrawing | null = null
-  const unbindKeyboard = options?.keyboard === false
+  const keyboardOpt = options?.keyboard
+  const keyboardCtx = typeof keyboardOpt === 'object'
+    ? { isActive: keyboardOpt.isActive, target: keyboardOpt.target }
+    : undefined
+  const unbindKeyboard = keyboardOpt === false
     ? null
     : bindDrawingKeyboard({
       onEscape: () => {
@@ -315,9 +332,16 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
         const item = findCatalogItemByHotkey(key)
         if (item !== null) {
           api.activate(item.id)
+          return
+        }
+        // Host extra hotkeys (registered via registerToolHotkey) arm raw —
+        // host templates may collide with catalog ids by design.
+        const extra = extraToolHotkeys.get(key)
+        if (extra !== undefined) {
+          api.activate(extra, { raw: true })
         }
       }
-    })
+    }, keyboardCtx)
 
   function resolveToolName (tool: string): string {
     return findCatalogItem(tool)?.overlayName ?? tool
@@ -442,7 +466,7 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
     },
 
     activate (tool, opts) {
-      return manager.activate(resolveToolName(tool), opts)
+      return manager.activate(opts?.raw === true ? tool : resolveToolName(tool), opts)
     },
 
     create: ((nameOrSpec: string | DrawingCreateSpec | DrawingCreateSpec[], spec?: DrawingCreateSpec): Nullable<string> | Array<Nullable<string>> => {
@@ -562,6 +586,10 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
           palettes.delete(palette)
         }
       }
+    },
+
+    registerToolHotkey (key, overlayName) {
+      extraToolHotkeys.set(key, overlayName)
     },
 
     configure (opts) {

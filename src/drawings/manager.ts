@@ -173,7 +173,13 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
   }
 
   function persistable (overlay: Overlay): boolean {
-    return !overlay.ghost && !overlay.synced && overlay.transient !== true && !isTransient(overlay.name)
+    if (overlay.ghost || overlay.synced || overlay.transient === true || isTransient(overlay.name)) {
+      return false
+    }
+    // Overlays carrying a foreign groupId (indicator markers, host-managed
+    // internals) are not drawings — lockAll/hideAll/list must not touch them.
+    // Empty groupId keeps legacy host overlays manageable.
+    return overlay.groupId === '' || overlay.groupId === DRAWINGS_GROUP_ID
   }
 
   function trackShadow (overlay: Overlay): SerializedDrawing | null {

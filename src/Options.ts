@@ -20,6 +20,7 @@ import type { IndicatorCreate } from './component/Indicator'
 import type { PaneOptions } from './pane/types'
 import type { DrawingStore, DrawingScope } from './drawings/persistence'
 import type { FloatingToolbarHooks } from './drawings/ui/floatingToolbar'
+import type { DrawingKeyboardOptions } from './drawings/interaction/keyboard'
 
 export type FormatDateType = 'tooltip' | 'crosshair' | 'xAxis'
 
@@ -99,8 +100,13 @@ export interface DrawingsOptions {
   store?: DrawingStore | null
   /** Floating toolbar: `false` disables, object supplies hooks. */
   toolbar?: boolean | FloatingToolbarHooks
-  /** Shared drawing keyboard layer — `false` disables (default on). */
-  keyboard?: boolean
+  /**
+   * Shared drawing keyboard layer — `false` disables (default on). Object
+   * form forwards {@link DrawingKeyboardOptions}: `isActive` gates every
+   * handler (multi-chart hosts gate keys to the focused chart) and `target`
+   * overrides the document binding target.
+   */
+  keyboard?: boolean | DrawingKeyboardOptions
   /** Persistence partition override — defaults to chart symbol. */
   scope?: () => DrawingScope
   /** Tool names that render but are never listed/persisted/undone. */

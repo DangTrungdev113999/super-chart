@@ -13,6 +13,7 @@
  */
 
 import { createDom } from '../../common/utils/dom'
+import { logWarn } from '../../common/utils/logger'
 import type Chart from '../../Chart'
 
 import type { DrawingsApi } from '../api'
@@ -51,6 +52,31 @@ export interface ToolPaletteOptions {
    */
   groups?: string[]
   /**
+   * Host-defined groups appended to the rail — for tools the host
+   * registers itself (`chart.registerOverlay`) instead of shipping in the
+   * catalog. Items arm via `api.activate(<overlayName>)`, so `overlayName`
+   * must be a registered overlay template name.
+   */
+  extraGroups?: Array<{
+    id: string
+    /** Rail icon when the group's last-used memory is empty. */
+    iconId?: string
+    /** Insert before ('start') or after ('end') catalog groups. Default 'end'. */
+    position?: 'start' | 'end'
+    items: Array<{
+      /** Defaults to `overlayName` — ids only need uniqueness within the rail. */
+      id?: string
+      overlayName: string
+      title: string
+      iconId?: string
+      hotkey?: string
+      /** Default true — set false to render a disabled row. */
+      available?: boolean
+      /** Forwarded to `api.activate(name, { extendData })`. */
+      extendData?: unknown
+    }>
+  }>
+  /**
    * Show the chrome footer (magnet / stay-in-drawing / lock / hide /
    * remove-all). Default true.
    */
@@ -61,6 +87,12 @@ export interface ToolPaletteOptions {
    * (deactivate the armed tool).
    */
   onNonTool?: (item: DrawingToolItem) => boolean | undefined
+  /**
+   * Intercept tool arming. Return true to mark handled — the palette skips
+   * `api.activate` (the host runs its own input path, e.g. DOM-level
+   * freehand collection instead of the kernel's armed overlay).
+   */
+  onArmTool?: (item: DrawingToolItem) => boolean | undefined
 }
 
 export interface ToolPalette {
@@ -77,18 +109,68 @@ export function mountToolPalette (
   api: DrawingsApi,
   options?: ToolPaletteOptions
 ): ToolPalette {
-  injectDrawingStyles()
-
   const label = options?.label ?? ((_id: string, fallback: string) => fallback)
   const groups = api.catalog().filter(g => options?.groups === undefined || options.groups.includes(g.id))
   if (options?.groups !== undefined) {
     // Honor the caller's ordering — filter() keeps catalog order.
     groups.sort((a, b) => options.groups!.indexOf(a.id) - options.groups!.indexOf(b.id))
   }
+  // Host extras get normalized to catalog group shape so the rail/flyout/
+  // last-used machinery treats them identically. They arm by overlayName
+  // with catalog-id resolution bypassed (raw) — a host template may share
+  // a name with a catalog id and must still reach its own overlay.
+  const extraItems = new Map<string, DrawingToolItem>()
+  for (const extra of options?.extraGroups ?? []) {
+    if (groups.some(g => g.id === extra.id)) {
+      logWarn('', '', `mountToolbar: extraGroups id "${extra.id}" collides with a catalog group id — rail buttons share last-used/highlight state.`)
+    }
+    const items: DrawingToolItem[] = extra.items.map(it => {
+      const item: DrawingToolItem = {
+        id: it.id ?? it.overlayName,
+        overlayName: it.overlayName,
+        title: it.title,
+        iconId: it.iconId ?? 'tool',
+        ...(it.hotkey !== undefined ? { hotkey: it.hotkey } : {}),
+        capabilities: {
+          anchorCount: -1,
+          freehand: false,
+          hasText: false,
+          snap45: false,
+          cloneable: false,
+          multiline: false
+        },
+        toolbarRecipe: [],
+        available: it.available ?? true,
+        ...(it.extendData !== undefined ? { extendData: it.extendData } : {})
+      }
+      if (extraItems.has(item.overlayName)) {
+        logWarn('', '', `mountToolbar: duplicate overlayName "${item.overlayName}" across extra items — active-tool highlight tracks the last one.`)
+      }
+      extraItems.set(item.overlayName, item)
+      if (it.hotkey !== undefined) {
+        api.registerToolHotkey(it.hotkey, it.overlayName)
+      }
+      return item
+    })
+    if (items.length === 0) {
+      continue
+    }
+    const group: DrawingToolGroup = {
+      id: extra.id,
+      iconId: extra.iconId ?? items[0].iconId,
+      sections: [{ id: extra.id, items }]
+    }
+    if (extra.position === 'start') {
+      groups.unshift(group)
+    } else {
+      groups.push(group)
+    }
+  }
 
   // The palette may mount inside another document (iframe) — bind DOM and
   // listeners to the container's own document, never the module-global one.
   const ownerDoc = container.ownerDocument
+  injectDrawingStyles(ownerDoc)
 
   const root = createDom('div')
   root.className = 'sc-drw-tools'
@@ -145,10 +227,24 @@ export function mountToolPalette (
     if (!item.available) {
       return
     }
+    // Host intercept — its own input path owns the tool from here.
+    if (options?.onArmTool?.(item) === true) {
+      const owner = findGroupOf(item)
+      if (owner !== null) {
+        lastUsed.set(owner.id, item)
+      }
+      updateGroupIcons()
+      return
+    }
     // magnet/stay resolve inside activate() from the chart's interaction
     // state — identical semantics for palette clicks and hotkeys.
-    const id = api.activate(item.id)
+    // Arm by overlayName (raw — no catalog-id resolution): item.id is only a
+    // display/bookkeeping key and may not be a catalog id for host extras.
+    const id = item.extendData !== undefined
+      ? api.activate(item.overlayName, { extendData: item.extendData, raw: true })
+      : api.activate(item.overlayName, { raw: true })
     if (id === null) {
+      logWarn('', '', `mountToolbar: could not arm "${item.overlayName}" — overlay template is not registered on this chart.`)
       return
     }
     const owner = findGroupOf(item)
@@ -185,7 +281,11 @@ export function mountToolPalette (
 
   function updateActiveHighlight (): void {
     const tool = api.activeTool()
-    const activeItem = tool !== null ? findCatalogItemByOverlay(tool) : null
+    // Extra-group items aren't in the catalog — resolve them through the
+    // overlayName map so an armed host tool still highlights its rail group.
+    const activeItem = tool !== null
+      ? (findCatalogItemByOverlay(tool) ?? extraItems.get(tool) ?? null)
+      : null
     for (const [gid, b] of groupButtons) {
       const on = activeItem !== null && findGroupOf(activeItem)?.id === gid
       if (on) {
@@ -319,7 +419,7 @@ export function mountToolPalette (
     const b = createDom('button')
     b.type = 'button'
     b.className = 'sc-drw-btn sc-drw-tools-btn'
-    b.title = current !== null ? label(current.id, current.title) : humanize(group.id)
+    b.title = current !== null ? label(current.id, current.title) : label(group.id, humanize(group.id))
     b.setAttribute('aria-label', b.title)
     b.innerHTML = `<span class="sc-drw-tools-icon">${getDrawingIcon(current?.iconId ?? group.iconId)}</span>`
     b.addEventListener('click', e => {
@@ -498,6 +598,12 @@ export function mountToolPalette (
   }
   ownerDoc.defaultView?.addEventListener('resize', onWinResize)
 
+  // A second mountToolbar() on the same host (StrictMode remount, consumer
+  // retry after a failed first mount) must not duplicate the rail — drop a
+  // stale root left by a palette whose destroy() never ran. Its listeners
+  // were registered on ownerDoc and can't be detached here, but removing
+  // the DOM at least keeps a single interactive rail.
+  container.querySelectorAll(':scope > .sc-drw-tools').forEach(el => { el.remove() })
   container.appendChild(root)
   // A tool armed before mountToolbar() gets its highlight immediately —
   // not on the next toolChange.

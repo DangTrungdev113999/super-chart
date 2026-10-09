@@ -371,17 +371,20 @@ const CSS = `
 `
 
 /** Inject the drawings UI stylesheet — idempotent, SSR-safe. */
-export function injectDrawingStyles (): void {
-  if (typeof document === 'undefined') {
-    return
+export function injectDrawingStyles (doc?: Document): void {
+  if (doc === undefined) {
+    if (typeof document === 'undefined') {
+      return
+    }
+    doc = document
   }
   // Dedupe by element id per document — a module-global flag would skip
   // injection in second documents/iframes and never re-add a removed node.
-  if (document.getElementById(STYLE_ID) !== null) {
+  if (doc.getElementById(STYLE_ID) !== null) {
     return
   }
-  const style = document.createElement('style')
+  const style = doc.createElement('style')
   style.id = STYLE_ID
   style.textContent = CSS
-  document.head.appendChild(style)
+  doc.head.appendChild(style)
 }

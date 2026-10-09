@@ -105,6 +105,11 @@ export interface DrawingToolItem {
    * interaction state instead of arming an overlay template.
    */
   nonTool?: boolean
+  /**
+   * Arm-time extendData forwarded to `api.activate` — extra-group tools
+   * (host-registered templates) seed their own defaults this way.
+   */
+  extendData?: unknown
 }
 
 export interface DrawingToolSection {

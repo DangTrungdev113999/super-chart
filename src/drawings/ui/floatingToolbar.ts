@@ -65,6 +65,12 @@ export interface FloatingToolbarHooks {
   onTextEdit?: (overlay: Overlay) => void
   /** Per-tool action injection (TV's source-actions slot). */
   additionalActions?: (overlay: Overlay) => ToolbarSourceAction[]
+  /**
+   * Host veto — return false to keep the floating toolbar hidden for an
+   * overlay (e.g. a host-owned template whose own settings UI handles it).
+   * Called on every selection; hiding takes precedence over showing.
+   */
+  shouldShow?: (overlay: Overlay) => boolean
 }
 
 export interface FloatingToolbar {
@@ -744,6 +750,12 @@ export function attachFloatingToolbar (
     if (destroyed || overlay.isDrawing() || overlay.ghost || overlay.synced) {
       return
     }
+    if (hooks?.shouldShow?.(overlay) === false) {
+      // A direct show() on a vetoed overlay while another toolbar is up
+      // must not leave the stale one mounted.
+      hide()
+      return
+    }
     hide()
     const nextLayer = getPaneDomLayer(chart, overlay.paneId)
     if (nextLayer === null) {
@@ -784,6 +796,9 @@ export function attachFloatingToolbar (
       if (o.groupId !== 'drawings' || o.ghost || o.synced || o.isDrawing()) {
         return
       }
+      if (hooks?.shouldShow?.(o) === false) {
+        return
+      }
       selectedId = o.id
       show(o)
     }
@@ -818,6 +833,14 @@ export function attachFloatingToolbar (
     // If the tracked overlay vanished (remove/undo/scope wipe), drop the
     // toolbar — the 'change' payload may carry no overlay at all.
     if (selectedId !== null && chart.getOverlayById(selectedId) === null) {
+      selectedId = null
+      hide()
+      return
+    }
+    // An update may flip the shown overlay into a vetoed state (sync flags,
+    // extendData the host gates on) — re-check before letting its buttons
+    // keep mutating the overlay.
+    if (current !== null && hooks?.shouldShow?.(current) === false) {
       selectedId = null
       hide()
       return
