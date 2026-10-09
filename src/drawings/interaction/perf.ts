@@ -14,7 +14,6 @@
 
 import type Bounding from '../../common/Bounding'
 import type Coordinate from '../../common/Coordinate'
-import type { KLineData } from '../../common/Data'
 import type {
   OverlayFigure,
   OverlayFigureBounds,
@@ -132,13 +131,11 @@ export function withFigureCache<E> (
   const wrapped = (params: OverlayCreateFiguresCallbackParams<E>): OverlayFigure[] => {
     let dataRev = ''
     if (options?.includeDataRev === true) {
-      const list = params.chart.getDataList()
-      const first = list[0] as KLineData | undefined
-      const last = list[list.length - 1] as KLineData | undefined
-      // length + window identity + last-bar OHLCV — same-length rewrites
-      // and last-bar updates that don't touch close still invalidate.
-      dataRev = `|d${list.length}:${first?.timestamp ?? ''}-${last?.timestamp ?? ''}:` +
-        `${last?.open ?? ''},${last?.high ?? ''},${last?.low ?? ''},${last?.close ?? ''},${last?.volume ?? ''}`
+      // Monotonic store counter — bumped on EVERY successful data write
+      // (init/append/prepend/last-bar update). A length+endpoint fingerprint
+      // misses same-length interior rewrites; the counter cannot.
+      dataRev = `|d${(params.chart as unknown as { getChartStore?: () => ({ getDataRev?: () => number } | null) })
+        .getChartStore?.()?.getDataRev?.() ?? 0}`
     }
     // envRev — Store's monotonic environment counter (theme, symbol,
     // precision, period, formatters, locale, timezone). It lives on the

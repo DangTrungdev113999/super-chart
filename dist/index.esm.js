@@ -82,9 +82,15 @@ function merge(target, source) {
         }
     }
 }
-function clone(target) {
+function clone(target, seen) {
     if (!isObject(target)) {
         return target;
+    }
+    // Cycle guard — host-injected cyclic extendData would recurse forever.
+    // `seen` is allocated lazily only when an object actually repeats.
+    if ((seen === null || seen === void 0 ? void 0 : seen.has(target)) === true) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-explicit-any -- cycle returns the already-built copy
+        return seen.get(target);
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- ignore
     var copy = null;
@@ -94,12 +100,14 @@ function clone(target) {
     else {
         copy = {};
     }
+    seen !== null && seen !== void 0 ? seen : (seen = new Map());
+    seen.set(target, copy);
     for (var key in target) {
         if (Object.prototype.hasOwnProperty.call(target, key)) {
             var v = target[key];
             if (isObject(v)) {
                 // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- ignore
-                copy[key] = clone(v);
+                copy[key] = clone(v, seen);
             }
             else {
                 // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- ignore
@@ -9147,17 +9155,25 @@ function normalizePoint(p) {
     }
     return point;
 }
-/** Fields a restore writes back through createOverlay. */
+/** Fields a restore writes back through createOverlay. Returns null for
+ * records that can't form a drawing — empty name or zero valid anchor
+ * points (every tool's totalStep ≥ 1, so a point-less record would be an
+ * invisible zombie that still consumes undo/persist slots). */
 function serializedToOverlayCreate(d) {
     var _a, _b;
+    var name = typeof d.name === 'string' ? d.name : '';
+    var points = (Array.isArray(d.points) ? d.points : [])
+        .map(normalizePoint)
+        .filter(function (p) { return p !== null; });
+    if (name === '' || points.length === 0) {
+        return null;
+    }
     return {
         id: typeof d.id === 'string' ? d.id : undefined,
-        name: typeof d.name === 'string' ? d.name : '',
+        name: name,
         paneId: d.paneId,
         groupId: (_a = d.groupId) !== null && _a !== void 0 ? _a : 'drawings',
-        points: (Array.isArray(d.points) ? d.points : [])
-            .map(normalizePoint)
-            .filter(function (p) { return p !== null; }),
+        points: points,
         styles: clone((_b = d.styles) !== null && _b !== void 0 ? _b : null),
         // Boundary truthiness — a foreign record's lock:'yes' or visible:0 must
         // not freeze the drawing or block keyboard delete.
@@ -9225,7 +9241,7 @@ function sanitizeExtendData(extendData) {
  * Key-order-insensitive stringify — `JSON.stringify` makes the fingerprint
  * lie for hosts that rebuild objects with reordered keys.
  */
-function stableStringify(value) {
+function stableStringify(value, seen) {
     if (value === null || typeof value !== 'object') {
         // JSON.stringify(undefined) returns undefined at runtime — guard the
         // input instead of the result (the TS signature claims string).
@@ -9234,12 +9250,23 @@ function stableStringify(value) {
         }
         return JSON.stringify(value);
     }
+    // Cycle guard — a hostile/host-broken cyclic extendData would recurse
+    // forever and take the whole persist pass down with a stack overflow.
+    seen !== null && seen !== void 0 ? seen : (seen = new Set());
+    if (seen.has(value)) {
+        return 'null';
+    }
+    seen.add(value);
     if (Array.isArray(value)) {
-        return "[".concat(value.map(stableStringify).join(','), "]");
+        var out_1 = "[".concat(value.map(function (v) { return stableStringify(v, seen); }).join(','), "]");
+        seen.delete(value);
+        return out_1;
     }
     var rec = value;
     var keys = Object.keys(rec).sort();
-    return "{".concat(keys.map(function (k) { return "".concat(JSON.stringify(k), ":").concat(stableStringify(rec[k])); }).join(','), "}");
+    var out = "{".concat(keys.map(function (k) { return "".concat(JSON.stringify(k), ":").concat(stableStringify(rec[k], seen)); }).join(','), "}");
+    seen.delete(value);
+    return out;
 }
 /**
  * Snapshot a live overlay. Returns null for anything that must NOT be
@@ -9294,9 +9321,9 @@ function serializeOverlay$1(overlay, options) {
 }
 /** Cheap structural fingerprint for change detection (persistence diff + undo before-images). */
 function serializedFingerprint(d) {
-    var _a, _b, _c, _d, _e, _f, _g;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
     var pts = d.points.map(function (p) { var _a, _b, _c, _d, _e; return "".concat((_a = p.timestamp) !== null && _a !== void 0 ? _a : '', ",").concat((_b = p.value) !== null && _b !== void 0 ? _b : '', ",").concat((_c = p.dataIndex) !== null && _c !== void 0 ? _c : '', ",").concat((_d = p.interval) !== null && _d !== void 0 ? _d : '', ",").concat((_e = p.offset) !== null && _e !== void 0 ? _e : ''); }).join(';');
-    return "".concat(d.name, "|").concat((_a = d.paneId) !== null && _a !== void 0 ? _a : '', "|").concat((_b = d.groupId) !== null && _b !== void 0 ? _b : '', "|").concat(pts, "|").concat(stableStringify((_c = d.styles) !== null && _c !== void 0 ? _c : null), "|").concat(stableStringify((_d = d.extendData) !== null && _d !== void 0 ? _d : null), "|").concat(d.lock === true ? 1 : 0).concat(d.visible === false ? 0 : 1, "|").concat((_e = d.mode) !== null && _e !== void 0 ? _e : '', "|").concat((_f = d.modeSensitivity) !== null && _f !== void 0 ? _f : '', "|").concat((_g = d.zLevel) !== null && _g !== void 0 ? _g : '');
+    return "".concat(d.name, "|").concat((_a = d.paneId) !== null && _a !== void 0 ? _a : '', "|").concat((_b = d.groupId) !== null && _b !== void 0 ? _b : '', "|").concat(pts, "|").concat(stableStringify((_c = d.styles) !== null && _c !== void 0 ? _c : null), "|").concat(stableStringify((_d = d.extendData) !== null && _d !== void 0 ? _d : null), "|").concat(d.lock === true ? 1 : 0).concat(d.visible === false ? 0 : 1, "|").concat((_e = d.mode) !== null && _e !== void 0 ? _e : '', "|").concat((_f = d.modeSensitivity) !== null && _f !== void 0 ? _f : '', "|").concat((_g = d.zLevel) !== null && _g !== void 0 ? _g : '', "|").concat((_j = (_h = d.positionPercents) === null || _h === void 0 ? void 0 : _h.join(',')) !== null && _j !== void 0 ? _j : '');
 }
 
 /**
@@ -9884,14 +9911,17 @@ function createDrawingManager(chart, options) {
                                         // Same-id drawings already on the chart get overridden with the
                                         // stored state — createOverlay would dedupe silently and leave
                                         // the stale version diverged from storage.
-                                        if (chart.getOverlayById(d.id) !== null) {
-                                            chart.overrideOverlay(serializedToOverlayCreate(d));
-                                        }
-                                        else {
-                                            // Pre-seed the shadow with the STORED record so trackShadow
-                                            // keeps the original createdAt instead of restamping it.
-                                            shadow.set(d.id, d);
-                                            chart.createOverlay(serializedToOverlayCreate(d));
+                                        var create = serializedToOverlayCreate(d);
+                                        if (create !== null) {
+                                            if (chart.getOverlayById(d.id) !== null) {
+                                                chart.overrideOverlay(create);
+                                            }
+                                            else {
+                                                // Pre-seed the shadow with the STORED record so trackShadow
+                                                // keeps the original createdAt instead of restamping it.
+                                                shadow.set(d.id, d);
+                                                chart.createOverlay(create);
+                                            }
                                         }
                                     }
                                 }
@@ -9972,12 +10002,16 @@ function createDrawingManager(chart, options) {
                         var existing = chart.getOverlayById(d.id);
                         // d.completed guards BOTH branches — a half-formed remote
                         // record must not clobber a finished local overlay.
+                        var create = serializedToOverlayCreate(d);
+                        if (create === null) {
+                            return;
+                        }
                         if (existing !== null && !existing.isDrawing() && d.completed) {
-                            chart.overrideOverlay(serializedToOverlayCreate(d));
+                            chart.overrideOverlay(create);
                         }
                         else if (d.completed && existing === null && !pendingRemoves_1.has(d.id)) {
                             shadow.set(d.id, d);
-                            chart.createOverlay(serializedToOverlayCreate(d));
+                            chart.createOverlay(create);
                         }
                     }
                     catch (_a) {
@@ -9995,12 +10029,16 @@ function createDrawingManager(chart, options) {
                         // Pending-removal tombstones apply to upserts too — a peer's
                         // stale upsert arriving after the user's local delete must not
                         // resurrect the drawing before the remove reaches the store.
+                        var create = serializedToOverlayCreate(d);
+                        if (create === null) {
+                            return;
+                        }
                         if (existing !== null && !existing.isDrawing() && d.completed) {
-                            chart.overrideOverlay(serializedToOverlayCreate(d));
+                            chart.overrideOverlay(create);
                         }
                         else if (d.completed && existing === null && !pendingRemoves_1.has(d.id)) {
                             shadow.set(d.id, d);
-                            chart.createOverlay(serializedToOverlayCreate(d));
+                            chart.createOverlay(create);
                         }
                     }
                     catch (_a) {
@@ -10141,11 +10179,15 @@ function createDrawingManager(chart, options) {
             try {
                 apply.remove.forEach(function (id) { chart.removeOverlay({ id: id }); });
                 apply.restore.forEach(function (d) {
+                    var create = serializedToOverlayCreate(d);
+                    if (create === null) {
+                        return;
+                    }
                     if (chart.getOverlayById(d.id) !== null) {
-                        chart.overrideOverlay(serializedToOverlayCreate(d));
+                        chart.overrideOverlay(create);
                     }
                     else {
-                        chart.createOverlay(serializedToOverlayCreate(d));
+                        chart.createOverlay(create);
                     }
                     shadow.set(d.id, d);
                     persistUpsert(d);
@@ -10173,11 +10215,15 @@ function createDrawingManager(chart, options) {
             try {
                 apply.remove.forEach(function (id) { chart.removeOverlay({ id: id }); });
                 apply.restore.forEach(function (d) {
+                    var create = serializedToOverlayCreate(d);
+                    if (create === null) {
+                        return;
+                    }
                     if (chart.getOverlayById(d.id) !== null) {
-                        chart.overrideOverlay(serializedToOverlayCreate(d));
+                        chart.overrideOverlay(create);
                     }
                     else {
-                        chart.createOverlay(serializedToOverlayCreate(d));
+                        chart.createOverlay(create);
                     }
                     shadow.set(d.id, d);
                     persistUpsert(d);
@@ -11457,6 +11503,9 @@ function attachFloatingToolbar(chart, manager, hooks) {
             return;
         }
         var create = serializedToOverlayCreate(serialized);
+        if (create === null) {
+            return;
+        }
         delete create.id;
         // A clone is a fresh user drawing — locked/hidden state doesn't carry
         // (TV clones always land unlocked + visible).
@@ -14325,6 +14374,9 @@ function createDrawingsApi(chart, options) {
                     return false;
                 }
                 var create = serializedToOverlayCreate(clipboard);
+                if (create === null) {
+                    return false;
+                }
                 delete create.id;
                 manager.create(create);
                 return true;
@@ -23202,6 +23254,14 @@ var StoreImp = /** @class */ (function () {
          * leave stale cached figure specs behind.
          */
         this._envRev = 0;
+        /**
+         * Monotonic data-mutation counter — bumped on EVERY successful
+         * applyData/updateData path (init, append, prepend, in-place last-bar
+         * update). The figure-cache `dataRev` signature keys on this: a
+         * length/endpoints fingerprint misses interior rewrites, a counter
+         * cannot.
+         */
+        this._dataRev = 0;
         this._chart = chart;
         this._calcOptimalBarSpace();
         this._lastBarRightSideDiffBarCount = this._offsetRightDistance / this._barSpace;
@@ -23239,6 +23299,10 @@ var StoreImp = /** @class */ (function () {
         });
     }
     StoreImp.prototype.getEnvRev = function () { return this._envRev; };
+    /** External callers (Chart-level setPaneOptions axis changes etc.) that
+     * alter cached-figure environment inputs bump the signature here. */
+    StoreImp.prototype.bumpEnvRev = function () { this._envRev++; };
+    StoreImp.prototype.getDataRev = function () { return this._dataRev; };
     StoreImp.prototype.setStyles = function (value) {
         var _this = this;
         var _a, _b, _c, _d, _e, _f;
@@ -23416,6 +23480,9 @@ var StoreImp = /** @class */ (function () {
                 success = true;
                 adjustFlag = true;
             }
+        }
+        if (success) {
+            this._dataRev++;
         }
         if (success && adjustFlag) {
             this._adjustVisibleRange();
@@ -23992,6 +24059,9 @@ var StoreImp = /** @class */ (function () {
         this._indicators.set(paneId, paneIndicators);
         this._sortIndicators(paneId);
         this._calcIndicator(indicator);
+        // Indicator membership feeds label precision (fibCommon getPricePrecision)
+        // — it's an environment input to the figure-cache signature.
+        this._envRev++;
         return true;
     };
     StoreImp.prototype.getIndicatorsByPaneId = function (paneId) {
@@ -24018,20 +24088,38 @@ var StoreImp = /** @class */ (function () {
         return indicators;
     };
     StoreImp.prototype.removeIndicator = function (filter) {
-        var _this = this;
+        var e_1, _a;
         var removed = false;
         var filterIndicators = this.getIndicatorsByFilter(filter);
-        filterIndicators.forEach(function (indicator) {
-            var paneIndicators = _this.getIndicatorsByPaneId(indicator.paneId);
+        var _loop_1 = function (indicator) {
+            var paneIndicators = this_1.getIndicatorsByPaneId(indicator.paneId);
             var index = paneIndicators.findIndex(function (ins) { return ins.id === indicator.id; });
             if (index > -1) {
                 paneIndicators.splice(index, 1);
                 removed = true;
             }
             if (paneIndicators.length === 0) {
-                _this._indicators.delete(indicator.paneId);
+                this_1._indicators.delete(indicator.paneId);
             }
-        });
+        };
+        var this_1 = this;
+        try {
+            for (var filterIndicators_1 = __values(filterIndicators), filterIndicators_1_1 = filterIndicators_1.next(); !filterIndicators_1_1.done; filterIndicators_1_1 = filterIndicators_1.next()) {
+                var indicator = filterIndicators_1_1.value;
+                _loop_1(indicator);
+            }
+        }
+        catch (e_1_1) { e_1 = { error: e_1_1 }; }
+        finally {
+            try {
+                if (filterIndicators_1_1 && !filterIndicators_1_1.done && (_a = filterIndicators_1.return)) _a.call(filterIndicators_1);
+            }
+            finally { if (e_1) throw e_1.error; }
+        }
+        if (removed) {
+            // Same reasoning as addIndicator — precision source changed.
+            this._envRev++;
+        }
         return removed;
     };
     StoreImp.prototype.hasIndicators = function (paneId) {
@@ -24087,6 +24175,11 @@ var StoreImp = /** @class */ (function () {
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- ignore
         if (sortFlag) {
             this._sortIndicators();
+        }
+        if (filterIndicators.length > 0) {
+            // Indicator precision feeds cached drawing labels (fib levels,
+            // priceLabel, position pills) — it's an envRev signature input.
+            this._envRev++;
         }
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- ignore
         if (updateFlag) {
@@ -24405,7 +24498,7 @@ var StoreImp = /** @class */ (function () {
         var updatePaneIds = [];
         var filterOverlays = this.getOverlaysByFilter(filter);
         filterOverlays.forEach(function (overlay) {
-            var e_1, _a;
+            var e_2, _a;
             var _b;
             // Idempotence: a re-entrant removeOverlay (cascading remove from an
             // onRemoved hook mid-loop) already unregistered this overlay — the
@@ -24443,12 +24536,12 @@ var StoreImp = /** @class */ (function () {
                         }
                     }
                 }
-                catch (e_1_1) { e_1 = { error: e_1_1 }; }
+                catch (e_2_1) { e_2 = { error: e_2_1 }; }
                 finally {
                     try {
                         if (_d && !_d.done && (_a = _c.return)) _a.call(_c);
                     }
-                    finally { if (e_1) throw e_1.error; }
+                    finally { if (e_2) throw e_2.error; }
                 }
             }
             else {
@@ -24621,7 +24714,7 @@ var StoreImp = /** @class */ (function () {
         return this._chart;
     };
     StoreImp.prototype.destroy = function () {
-        var e_2, _a;
+        var e_3, _a;
         var _b, _c, _d;
         // Tell subscribers (e.g. ChartSyncManager) the in-progress drawing is gone
         // so peers can drop their ghost mirrors instead of leaking them. A throwing
@@ -24657,12 +24750,12 @@ var StoreImp = /** @class */ (function () {
                 catch (_k) { }
             }
         }
-        catch (e_2_1) { e_2 = { error: e_2_1 }; }
+        catch (e_3_1) { e_3 = { error: e_3_1 }; }
         finally {
             try {
                 if (_h && !_h.done && (_a = _g.return)) _a.call(_g);
             }
-            finally { if (e_2) throw e_2.error; }
+            finally { if (e_3) throw e_3.error; }
         }
         // Drop the remaining interaction slots — a pressed/hovered/selected
         // overlay referencing a destroyed chart must not linger for the next
@@ -30419,18 +30512,23 @@ var percentage = {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+// log10(0) = -Infinity would poison every pixel on the pane — floor the
+// magnitude at epsilon so zero (and denormal-near-zero) values map to a
+// large-but-finite real value instead.
+var LOG_EPSILON = 1e-12;
+var safeLog10 = function (v) { return v < 0 ? -log10(Math.max(Math.abs(v), LOG_EPSILON)) : log10(Math.max(v, LOG_EPSILON)); };
 var logarithm = {
     name: 'logarithm',
     minSpan: function (precision) { return 0.05 * index10(-precision); },
-    valueToRealValue: function (value) { return value < 0 ? -log10(Math.abs(value)) : log10(value); },
+    valueToRealValue: function (value) { return safeLog10(value); },
     realValueToDisplayValue: function (value) { return value < 0 ? -index10(Math.abs(value)) : index10(value); },
-    displayValueToRealValue: function (value) { return value < 0 ? -log10(Math.abs(value)) : log10(value); },
+    displayValueToRealValue: function (value) { return safeLog10(value); },
     realValueToValue: function (value) { return value < 0 ? -index10(Math.abs(value)) : index10(value); },
     createRange: function (_a) {
         var defaultRange = _a.defaultRange;
         var from = defaultRange.from, to = defaultRange.to, range = defaultRange.range;
-        var realFrom = from < 0 ? -log10(Math.abs(from)) : log10(from);
-        var realTo = to < 0 ? -log10(Math.abs(to)) : log10(to);
+        var realFrom = safeLog10(from);
+        var realTo = safeLog10(to);
         return {
             from: from,
             to: to,
@@ -34208,6 +34306,9 @@ var ChartImp = /** @class */ (function () {
                 }
                 if (isValid(options.axis)) {
                     shouldLayout = true;
+                    // Axis side/type feeds cached drawing axis pills (isFromZero) —
+                    // it's an environment input to the figure-cache signature.
+                    this_1._chartStore.bumpEnvRev();
                 }
                 var ops = __assign({}, options);
                 delete ops.state;
@@ -35771,22 +35872,19 @@ var WRAP_META = new WeakMap();
  */
 function withFigureCache(fn, options) {
     var wrapped = function (params) {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p;
         var dataRev = '';
         if ((options === null || options === void 0 ? void 0 : options.includeDataRev) === true) {
-            var list = params.chart.getDataList();
-            var first = list[0];
-            var last = list[list.length - 1];
-            // length + window identity + last-bar OHLCV — same-length rewrites
-            // and last-bar updates that don't touch close still invalidate.
-            dataRev = "|d".concat(list.length, ":").concat((_a = first === null || first === void 0 ? void 0 : first.timestamp) !== null && _a !== void 0 ? _a : '', "-").concat((_b = last === null || last === void 0 ? void 0 : last.timestamp) !== null && _b !== void 0 ? _b : '', ":") +
-                "".concat((_c = last === null || last === void 0 ? void 0 : last.open) !== null && _c !== void 0 ? _c : '', ",").concat((_d = last === null || last === void 0 ? void 0 : last.high) !== null && _d !== void 0 ? _d : '', ",").concat((_e = last === null || last === void 0 ? void 0 : last.low) !== null && _e !== void 0 ? _e : '', ",").concat((_f = last === null || last === void 0 ? void 0 : last.close) !== null && _f !== void 0 ? _f : '', ",").concat((_g = last === null || last === void 0 ? void 0 : last.volume) !== null && _g !== void 0 ? _g : '');
+            // Monotonic store counter — bumped on EVERY successful data write
+            // (init/append/prepend/last-bar update). A length+endpoint fingerprint
+            // misses same-length interior rewrites; the counter cannot.
+            dataRev = "|d".concat((_e = (_d = (_c = (_b = (_a = params.chart).getChartStore) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.getDataRev) === null || _d === void 0 ? void 0 : _d.call(_c)) !== null && _e !== void 0 ? _e : 0);
         }
         // envRev — Store's monotonic environment counter (theme, symbol,
         // precision, period, formatters, locale, timezone). It lives on the
         // ChartStore, reached through Chart.getChartStore(); absent on older
         // kernels → 0, which simply keeps the previous behavior.
-        var envRev = (_m = (_l = (_k = (_j = (_h = params.chart).getChartStore) === null || _j === void 0 ? void 0 : _j.call(_h)) === null || _k === void 0 ? void 0 : _k.getEnvRev) === null || _l === void 0 ? void 0 : _l.call(_k)) !== null && _m !== void 0 ? _m : 0;
+        var envRev = (_k = (_j = (_h = (_g = (_f = params.chart).getChartStore) === null || _g === void 0 ? void 0 : _g.call(_f)) === null || _h === void 0 ? void 0 : _h.getEnvRev) === null || _j === void 0 ? void 0 : _j.call(_h)) !== null && _k !== void 0 ? _k : 0;
         var signature = coordsSignature(params.coordinates) +
             "|r".concat(params.overlay.figuresRev) +
             "|e".concat(envRev) +
@@ -35795,10 +35893,10 @@ function withFigureCache(fn, options) {
             "|b".concat(params.bounding.width, "x").concat(params.bounding.height) +
             "|c".concat(params.overlay.currentStep) +
             "|t".concat(params.isTouch === true ? 1 : 0) +
-            "|h".concat((_o = params.hoveredFigureKey) !== null && _o !== void 0 ? _o : '') +
+            "|h".concat((_l = params.hoveredFigureKey) !== null && _l !== void 0 ? _l : '') +
             dataRev +
-            "|k".concat((_q = (_p = options === null || options === void 0 ? void 0 : options.extraKey) === null || _p === void 0 ? void 0 : _p.call(options, params)) !== null && _q !== void 0 ? _q : '');
-        var slotKey = (_r = options === null || options === void 0 ? void 0 : options.slot) !== null && _r !== void 0 ? _r : '';
+            "|k".concat((_o = (_m = options === null || options === void 0 ? void 0 : options.extraKey) === null || _m === void 0 ? void 0 : _m.call(options, params)) !== null && _o !== void 0 ? _o : '');
+        var slotKey = (_p = options === null || options === void 0 ? void 0 : options.slot) !== null && _p !== void 0 ? _p : '';
         var slots = cache.get(params.overlay);
         var entry = slots === null || slots === void 0 ? void 0 : slots.get(slotKey);
         if (entry !== undefined && entry.signature === signature) {
@@ -36264,6 +36362,9 @@ function openEditor$9(chart, overlay) {
 var textNote = {
     name: 'text',
     totalStep: 2,
+    // geometry escapes the anchor hull (control points / fixed-size box)
+    // or user-widened boxes — must not be view-culled
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -36351,7 +36452,10 @@ function openEditor$8(chart, overlay) {
         }
     });
 }
-var anchoredNote = __assign({ name: 'anchoredNote', totalStep: 2, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, styles: {
+var anchoredNote = __assign({ name: 'anchoredNote', totalStep: 2, 
+    // geometry escapes the anchor hull (control points / fixed-size box)
+    // or user-widened boxes — must not be view-culled
+    cullable: false, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, styles: {
         anchoredNote: {
             color: '#FFFFFF',
             backgroundColor: '#2962FF',
@@ -36646,7 +36750,10 @@ function openEditor$6(chart, overlay) {
         }
     });
 }
-var callout = __assign({ name: 'callout', totalStep: 3, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, styles: {
+var callout = __assign({ name: 'callout', totalStep: 3, 
+    // geometry escapes the anchor hull (control points / fixed-size box)
+    // or user-widened boxes — must not be view-culled
+    cullable: false, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, styles: {
         callout: {
             color: '#FFFFFF',
             backgroundColor: 'rgba(42, 46, 57, 0.95)',
@@ -37619,7 +37726,10 @@ function openEditor(chart, overlay) {
         }
     });
 }
-var table = __assign({ name: 'table', totalStep: 2, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, styles: {
+var table = __assign({ name: 'table', totalStep: 2, 
+    // geometry escapes the anchor hull (control points / fixed-size box)
+    // or user-widened boxes — must not be view-culled
+    cullable: false, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, styles: {
         table: {
             color: '#131722',
             backgroundColor: '#FFFFFF',
@@ -37885,6 +37995,26 @@ function getFillBetween(extendData) {
 function sortedVisibleLevels(levels) {
     return levels.filter(function (level) { return level.visible; }).sort(function (a, b) { return a.coeff - b.coeff; });
 }
+function fibRealSpace(yAxis) {
+    if (yAxis === null || yAxis.name === 'normal') {
+        return { linear: true, toReal: function (v) { return v; }, fromReal: function (r) { return r; } };
+    }
+    var range = yAxis.getRange();
+    return {
+        linear: false,
+        toReal: function (v) { return yAxis.valueToRealValue(v, { range: range }); },
+        fromReal: function (r) { return yAxis.realValueToValue(r, { range: range }); }
+    };
+}
+/**
+ * Interpolate a fib level between two anchor VALUES in real space —
+ * `vTo + (vFrom − vTo)·coeff` under the axis transform.
+ */
+function fibLevelValue(yAxis, vFrom, vTo, coeff) {
+    var rs = fibRealSpace(yAxis);
+    var v = rs.fromReal(rs.toReal(vTo) + (rs.toReal(vFrom) - rs.toReal(vTo)) * coeff);
+    return Number.isFinite(v) ? v : vTo + (vFrom - vTo) * coeff;
+}
 /**
  * Precision mirror of `extension/overlay/fibonacciLine`: symbol
  * pricePrecision on candle panes, max indicator precision elsewhere.
@@ -38016,22 +38146,31 @@ var fibChannel = {
         var offPx = c2.x !== c1.x
             ? c3.y - getLinearYFromCoordinates(c1, c2, { x: c3.x, y: c3.y })
             : c3.y - c1.y;
-        var deltaV = hasValues
-            ? v3 - (v1 + (v2 - v1) * ((i3 - i1) / (i2 - i1)))
+        var rs = fibRealSpace(yAxis);
+        // Channel offset: P3's signed deviation off the baseline at P3's index —
+        // measured in real space so parallel offsets are screen-parallel under
+        // log/percentage axes.
+        var baselineAtI3 = hasValues
+            ? rs.fromReal(rs.toReal(v1) + (rs.toReal(v2) - rs.toReal(v1)) * ((i3 - i1) / (i2 - i1)))
             : 0;
+        var deltaV = hasValues ? v3 - baselineAtI3 : 0;
+        var realDeltaV = hasValues ? rs.toReal(v3) - rs.toReal(baselineAtI3) : 0;
+        var levelBaseValue = function (v, coeff) {
+            return rs.linear ? v + coeff * deltaV : rs.fromReal(rs.toReal(v) + coeff * realDeltaV);
+        };
         var levelLines = levels.map(function (level) {
             var start = useValue
-                ? { x: c1.x, y: yAxis.convertToPixel(v1 + level.coeff * deltaV) }
+                ? { x: c1.x, y: yAxis.convertToPixel(levelBaseValue(v1, level.coeff)) }
                 : { x: c1.x, y: c1.y + level.coeff * offPx };
             var end = useValue
-                ? { x: c2.x, y: yAxis.convertToPixel(v2 + level.coeff * deltaV) }
+                ? { x: c2.x, y: yAxis.convertToPixel(levelBaseValue(v2, level.coeff)) }
                 : { x: c2.x, y: c2.y + level.coeff * offPx };
             var _a = __read(extendSegment(start, end, extendLeft, extendRight, bounding.width), 2), s = _a[0], e = _a[1];
             return {
                 level: level,
                 start: s,
                 end: e,
-                endValue: useValue ? v2 + level.coeff * deltaV : undefined
+                endValue: useValue ? levelBaseValue(v2, level.coeff) : undefined
             };
         });
         // Fill parallelograms between adjacent level lines.
@@ -38113,6 +38252,17 @@ var fibExtension = {
         var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         var figures = [];
         if (coordinates.length < 2) {
+            // Anchors before the arity return — a 1-point restored overlay must
+            // stay selectable/resumable instead of rendering nothing.
+            figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+                coordinates: coordinates,
+                isSelected: isSelected,
+                isHovered: isHovered,
+                isTouch: isTouch,
+                isDrawing: overlay.isDrawing(),
+                lock: overlay.lock,
+                keyPrefix: 'anchor_'
+            })), false));
             return figures;
         }
         var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
@@ -38156,11 +38306,16 @@ var fibExtension = {
         var v2 = (_k = overlay.points[1]) === null || _k === void 0 ? void 0 : _k.value;
         var v3 = (_l = overlay.points[2]) === null || _l === void 0 ? void 0 : _l.value;
         var useValue = isNumber(v1) && isNumber(v2) && isNumber(v3);
+        var rs = fibRealSpace(yAxis);
         var vDif = (v2 !== null && v2 !== void 0 ? v2 : 0) - (v1 !== null && v1 !== void 0 ? v1 : 0);
-        var levelValue = function (coeff) { return (v3 !== null && v3 !== void 0 ? v3 : 0) + vDif * coeff; };
+        // v3 + (v2−v1)·coeff — extrapolation, in real space under non-linear axes.
+        var levelValue = function (coeff) { return rs.linear || !useValue
+            ? (v3 !== null && v3 !== void 0 ? v3 : 0) + vDif * coeff
+            : rs.fromReal(rs.toReal(v3) + (rs.toReal(v2) - rs.toReal(v1)) * coeff); };
         var levelY = function (coeff) {
             if (useValue && yAxis !== null) {
-                return yAxis.convertToPixel(levelValue(coeff));
+                var y = yAxis.convertToPixel(levelValue(coeff));
+                return Number.isFinite(y) ? y : c3.y + (c2.y - c1.y) * coeff;
             }
             return c3.y + (c2.y - c1.y) * coeff;
         };
@@ -38248,7 +38403,19 @@ var fibRetracement = {
         var _b, _c, _d, _e, _f, _g, _h, _j, _k;
         var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         var figures = [];
+        // Emit anchors BEFORE the arity return — a restored/incomplete overlay
+        // with one point would otherwise render nothing and be unresumable.
         if (coordinates.length < 2) {
+            figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+                coordinates: coordinates,
+                isSelected: isSelected,
+                isHovered: isHovered,
+                isTouch: isTouch,
+                isDrawing: overlay.isDrawing(),
+                lock: overlay.lock,
+                keyPrefix: 'anchor_',
+                midPoint: true
+            })), false));
             return figures;
         }
         var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
@@ -38262,15 +38429,16 @@ var fibRetracement = {
         var rightX = extendData.extendRight === true ? bounding.width : Math.max(c1.x, c2.x);
         var v1 = (_j = overlay.points[0]) === null || _j === void 0 ? void 0 : _j.value;
         var v2 = (_k = overlay.points[1]) === null || _k === void 0 ? void 0 : _k.value;
-        // Value-space level math keeps prices correct on log axes; pixel-space
-        // interpolation is the fallback when values are absent (mid-drag).
         var useValue = isNumber(v1) && isNumber(v2);
-        var vBase = v2 !== null && v2 !== void 0 ? v2 : 0;
-        var vDif = (v1 !== null && v1 !== void 0 ? v1 : 0) - (v2 !== null && v2 !== void 0 ? v2 : 0);
-        var levelValue = function (coeff) { return vBase + vDif * coeff; };
+        // Interpolate in the axis's real space — on log axes a coeff-t level
+        // sits at t-fraction of the screen distance, not the price delta.
+        var levelValue = function (coeff) { return fibLevelValue(yAxis, v1 !== null && v1 !== void 0 ? v1 : 0, v2 !== null && v2 !== void 0 ? v2 : 0, coeff); };
         var levelY = function (coeff) {
             if (useValue && yAxis !== null) {
-                return yAxis.convertToPixel(levelValue(coeff));
+                var y = yAxis.convertToPixel(levelValue(coeff));
+                // Non-finite y (zero/negative prices on a log axis) — fall back to
+                // pixel interpolation so the line still lands somewhere sane.
+                return Number.isFinite(y) ? y : c2.y + (c1.y - c2.y) * coeff;
             }
             return c2.y + (c1.y - c2.y) * coeff;
         };
@@ -38329,16 +38497,6 @@ var fibRetracement = {
                 ignoreEvent: true
             });
         });
-        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
-            coordinates: coordinates,
-            isSelected: isSelected,
-            isHovered: isHovered,
-            isTouch: isTouch,
-            isDrawing: overlay.isDrawing(),
-            lock: overlay.lock,
-            keyPrefix: 'anchor_',
-            midPoint: true
-        })), false));
         return figures;
     }
 };
@@ -38368,6 +38526,17 @@ var fibTimeExtension = {
         var overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         var figures = [];
         if (coordinates.length < 2) {
+            // Anchors before the arity return — a 1-point restored overlay must
+            // stay selectable/resumable instead of rendering nothing.
+            figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+                coordinates: coordinates,
+                isSelected: isSelected,
+                isHovered: isHovered,
+                isTouch: isTouch,
+                isDrawing: overlay.isDrawing(),
+                lock: overlay.lock,
+                keyPrefix: 'anchor_'
+            })), false));
             return figures;
         }
         var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
@@ -38504,6 +38673,18 @@ var fibTimeZone = {
         var overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         var figures = [];
         if (coordinates.length < 2) {
+            // Anchors before the arity return — a 1-point restored overlay must
+            // stay selectable/resumable instead of rendering nothing.
+            figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+                coordinates: coordinates,
+                isSelected: isSelected,
+                isHovered: isHovered,
+                isTouch: isTouch,
+                isDrawing: overlay.isDrawing(),
+                lock: overlay.lock,
+                keyPrefix: 'anchor_',
+                midPoint: true
+            })), false));
             return figures;
         }
         var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
@@ -41331,13 +41512,14 @@ function extractPattern(dataList, lo, hi) {
 function indexStore(chart) {
     return chart.getChartStore();
 }
-/** Resolve a point's bar index (dataIndex first, timestamp fallback). */
+/** Resolve a point's bar index — timestamp-first like the render path;
+ * stored dataIndex goes stale by +N after a history prepend. */
 function pointBarIndex$1(point, store) {
-    if (isNumber(point.dataIndex)) {
-        return Math.round(point.dataIndex);
-    }
     if (isNumber(point.timestamp)) {
         return store.timestampToDataIndex(point.timestamp);
+    }
+    if (isNumber(point.dataIndex)) {
+        return Math.round(point.dataIndex);
     }
     return null;
 }
@@ -48271,6 +48453,9 @@ var ARC_SEGMENTS = 40;
 var arc = {
     name: 'arc',
     totalStep: 4,
+    // geometry escapes the anchor hull (control points / fixed-size box)
+    // or user-widened boxes — must not be view-culled
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -48584,6 +48769,9 @@ var CURVE_SEGMENTS$1 = 40;
 var curve = {
     name: 'curve',
     totalStep: 3,
+    // geometry escapes the anchor hull (control points / fixed-size box)
+    // or user-widened boxes — must not be view-culled
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -48702,6 +48890,9 @@ var CURVE_SEGMENTS = 48;
 var doubleCurve = {
     name: 'doubleCurve',
     totalStep: 3,
+    // geometry escapes the anchor hull (control points / fixed-size box)
+    // or user-widened boxes — must not be view-culled
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -50068,6 +50259,8 @@ function fivePointPatternFigures(params, ratiosOf, fallbackColor) {
         }
     }
     // Zigzag polyline through every vertex (follows the in-progress point).
+    // Hit target — without it the overlay has no eventable figure and can
+    // never be hovered/selected/dragged once deselected.
     figures.push({
         key: 'ptn_wave',
         type: 'line',
@@ -50077,8 +50270,7 @@ function fivePointPatternFigures(params, ratiosOf, fallbackColor) {
             color: stroke.color,
             size: stroke.size,
             dashedValue: stroke.dashedValue
-        },
-        ignoreEvent: true
+        }
     });
     var ratios = ratiosOf(overlay.points);
     if (coordinates.length >= 3 && isNumber(ratios.ab)) {
@@ -50165,8 +50357,7 @@ var abcd = {
                     color: stroke.color,
                     size: stroke.size,
                     dashedValue: stroke.dashedValue
-                },
-                ignoreEvent: true
+                }
             });
             var points = overlay.points;
             if (coordinates.length >= 3) {
@@ -50260,19 +50451,23 @@ var cyclicLines = {
                     color: TV_CONNECTOR_COLOR,
                     size: 1,
                     dashedValue: [6, 6]
-                },
-                ignoreEvent: true
+                }
             });
             var pad = 4;
             var xs = [];
-            if (isNumber(p0.dataIndex) && isNumber(p1.dataIndex) && isValid(xAxis)) {
-                var step = p1.dataIndex - p0.dataIndex;
+            // Timestamp-first like the render path — stored dataIndex goes stale
+            // by +N after a history prepend while timestamp stays authoritative.
+            var store = chart.getChartStore();
+            var i0 = isNumber(p0.timestamp) ? store.timestampToDataIndex(p0.timestamp) : p0.dataIndex;
+            var i1 = isNumber(p1.timestamp) ? store.timestampToDataIndex(p1.timestamp) : p1.dataIndex;
+            if (isNumber(i0) && isNumber(i1) && isValid(xAxis)) {
+                var step = i1 - i0;
                 if (step !== 0) {
                     // March in dataIndex space but bound by PIXELS — visibleRange is
                     // clamped to loaded data and would stop the march at the last
                     // real bar, dropping lines that belong in the empty future
                     // margin (dataIndexToCoordinate extrapolates fine there).
-                    for (var index = p0.dataIndex; xs.length < MAX_CYCLE_LINES; index += step) {
+                    for (var index = i0; xs.length < MAX_CYCLE_LINES; index += step) {
                         var x = xAxis.convertToPixel(index);
                         if (step > 0 ? x > bounding.width + pad : x < -pad) {
                             break;
@@ -50305,8 +50500,7 @@ var cyclicLines = {
                         color: stroke.color,
                         size: stroke.size,
                         dashedValue: stroke.dashedValue
-                    },
-                    ignoreEvent: true
+                    }
                 });
             }
         }
@@ -50792,8 +50986,7 @@ var headAndShoulders = {
                     color: stroke.color,
                     size: stroke.size,
                     dashedValue: stroke.dashedValue
-                },
-                ignoreEvent: true
+                }
             });
         }
         if (coordinates.length >= 5) {
@@ -50804,8 +50997,7 @@ var headAndShoulders = {
                 key: 'hs_neckline',
                 type: 'line',
                 attrs: { coordinates: [leftEnd, rightEnd] },
-                styles: { style: 'dashed', color: stroke.color, size: stroke.size, dashedValue: [2, 2] },
-                ignoreEvent: true
+                styles: { style: 'dashed', color: stroke.color, size: stroke.size, dashedValue: [2, 2] }
             });
             if (fillEnabled) {
                 var fill = patternFillColorOf(ext, stroke.color);
@@ -50924,8 +51116,7 @@ var sineLine = {
                         color: stroke.color,
                         size: stroke.size,
                         dashedValue: stroke.dashedValue
-                    },
-                    ignoreEvent: true
+                    }
                 });
             }
         }
@@ -50988,8 +51179,7 @@ var threeDrives = {
                     color: stroke.color,
                     size: stroke.size,
                     dashedValue: stroke.dashedValue
-                },
-                ignoreEvent: true
+                }
             });
             var points = overlay.points;
             if (showLabels && coordinates.length >= 4) {
@@ -51090,8 +51280,7 @@ var timeCycles = {
                         color: stroke.color,
                         size: stroke.size,
                         dashedValue: stroke.dashedValue
-                    },
-                    ignoreEvent: true
+                    }
                 });
                 if (fillEnabled) {
                     var domeRings = boundaries.map(function (x) {
@@ -51237,8 +51426,7 @@ var trianglePattern = {
                     color: stroke.color,
                     size: stroke.size,
                     dashedValue: stroke.dashedValue
-                },
-                ignoreEvent: true
+                }
             });
         }
         // Dotted + shaded wedge.
@@ -51254,8 +51442,7 @@ var trianglePattern = {
                     borderSize: stroke.size,
                     borderStyle: 'dashed',
                     borderDashedValue: [2, 2]
-                },
-                ignoreEvent: true
+                }
             });
         }
         if (showLabels) {

@@ -48,6 +48,9 @@ const CURVE_SEGMENTS = 40
 const curve: OverlayTemplate<ShapeExtendData> = {
   name: 'curve',
   totalStep: 3,
+  // geometry escapes the anchor hull (control points / fixed-size box)
+  // or user-widened boxes — must not be view-culled
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

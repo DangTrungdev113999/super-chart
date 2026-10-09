@@ -12,6 +12,7 @@
  * limitations under the License.
  */
 
+import type Nullable from '../../../common/Nullable'
 import { isArray, isNumber } from '../../../common/utils/typeChecks'
 import { SymbolDefaultPrecisionConstants } from '../../../common/SymbolInfo'
 
@@ -163,6 +164,40 @@ export function getFillBetween (extendData: FibExtendData | undefined): boolean 
 /** Visible levels sorted by coeff — adjacency order for fills. */
 export function sortedVisibleLevels (levels: FibLevel[]): FibLevel[] {
   return levels.filter(level => level.visible).sort((a, b) => a.coeff - b.coeff)
+}
+
+/**
+ * The axis's real (transformed) value space. On log/percentage axes TV
+ * places a coeff-`t` level at t-fraction of the anchors' SCREEN distance —
+ * equivalent to interpolating `valueToRealValue` rather than raw price.
+ * `linear` (normal axis / no axis) means identity transforms.
+ */
+export interface FibRealSpace {
+  linear: boolean
+  toReal: (v: number) => number
+  fromReal: (r: number) => number
+}
+
+export function fibRealSpace (yAxis: Nullable<YAxis>): FibRealSpace {
+  if (yAxis === null || yAxis.name === 'normal') {
+    return { linear: true, toReal: v => v, fromReal: r => r }
+  }
+  const range = yAxis.getRange()
+  return {
+    linear: false,
+    toReal: v => yAxis.valueToRealValue(v, { range }),
+    fromReal: r => yAxis.realValueToValue(r, { range })
+  }
+}
+
+/**
+ * Interpolate a fib level between two anchor VALUES in real space —
+ * `vTo + (vFrom − vTo)·coeff` under the axis transform.
+ */
+export function fibLevelValue (yAxis: Nullable<YAxis>, vFrom: number, vTo: number, coeff: number): number {
+  const rs = fibRealSpace(yAxis)
+  const v = rs.fromReal(rs.toReal(vTo) + (rs.toReal(vFrom) - rs.toReal(vTo)) * coeff)
+  return Number.isFinite(v) ? v : vTo + (vFrom - vTo) * coeff
 }
 
 /**

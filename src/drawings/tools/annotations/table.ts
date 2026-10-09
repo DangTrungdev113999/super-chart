@@ -158,6 +158,9 @@ function openEditor (chart: Chart, overlay: Overlay<TableExtendData>): void {
 const table: OverlayTemplate<TableExtendData> = {
   name: 'table',
   totalStep: 2,
+  // geometry escapes the anchor hull (control points / fixed-size box)
+  // or user-widened boxes — must not be view-culled
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

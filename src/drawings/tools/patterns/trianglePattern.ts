@@ -107,8 +107,7 @@ const trianglePattern: OverlayTemplate<PatternExtendData> = {
           color: stroke.color,
           size: stroke.size,
           dashedValue: stroke.dashedValue
-        },
-        ignoreEvent: true
+        }
       })
     }
 
@@ -125,8 +124,7 @@ const trianglePattern: OverlayTemplate<PatternExtendData> = {
           borderSize: stroke.size,
           borderStyle: 'dashed',
           borderDashedValue: [2, 2]
-        },
-        ignoreEvent: true
+        }
       })
     }
 

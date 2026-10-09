@@ -35,6 +35,7 @@ import {
   getPricePrecision,
   formatFibPrice,
   fibLevelText,
+  fibRealSpace,
   fibAlphaColor
 } from './fibCommon'
 
@@ -136,24 +137,32 @@ const fibChannel: OverlayTemplate<FibChannelExtendData> = {
       ? c3.y - getLinearYFromCoordinates(c1, c2, { x: c3.x, y: c3.y })
       : c3.y - c1.y
 
-    const deltaV = hasValues
-      ? v3 - (v1 + (v2 - v1) * ((i3 - i1) / (i2 - i1)))
+    const rs = fibRealSpace(yAxis)
+    // Channel offset: P3's signed deviation off the baseline at P3's index —
+    // measured in real space so parallel offsets are screen-parallel under
+    // log/percentage axes.
+    const baselineAtI3 = hasValues
+      ? rs.fromReal(rs.toReal(v1) + (rs.toReal(v2) - rs.toReal(v1)) * ((i3 - i1) / (i2 - i1)))
       : 0
+    const deltaV = hasValues ? v3 - baselineAtI3 : 0
+    const realDeltaV = hasValues ? rs.toReal(v3) - rs.toReal(baselineAtI3) : 0
+    const levelBaseValue = (v: number, coeff: number): number =>
+      rs.linear ? v + coeff * deltaV : rs.fromReal(rs.toReal(v) + coeff * realDeltaV)
 
     interface LevelLine { level: FibLevel, start: Coordinate, end: Coordinate, endValue?: number }
     const levelLines: LevelLine[] = levels.map(level => {
       const start: Coordinate = useValue
-        ? { x: c1.x, y: yAxis.convertToPixel(v1 + level.coeff * deltaV) }
+        ? { x: c1.x, y: yAxis.convertToPixel(levelBaseValue(v1, level.coeff)) }
         : { x: c1.x, y: c1.y + level.coeff * offPx }
       const end: Coordinate = useValue
-        ? { x: c2.x, y: yAxis.convertToPixel(v2 + level.coeff * deltaV) }
+        ? { x: c2.x, y: yAxis.convertToPixel(levelBaseValue(v2, level.coeff)) }
         : { x: c2.x, y: c2.y + level.coeff * offPx }
       const [s, e] = extendSegment(start, end, extendLeft, extendRight, bounding.width)
       return {
         level,
         start: s,
         end: e,
-        endValue: useValue ? v2 + level.coeff * deltaV : undefined
+        endValue: useValue ? levelBaseValue(v2, level.coeff) : undefined
       }
     })
 

@@ -31,6 +31,7 @@ import {
   getPricePrecision,
   formatFibPrice,
   fibLevelText,
+  fibRealSpace,
   fibAlphaColor
 } from './fibCommon'
 
@@ -55,6 +56,17 @@ const fibExtension: OverlayTemplate<FibExtensionExtendData> = {
   createPointFigures: ({ chart, overlay, coordinates, bounding, yAxis, isSelected, isHovered, isTouch }) => {
     const figures: OverlayFigure[] = []
     if (coordinates.length < 2) {
+      // Anchors before the arity return — a 1-point restored overlay must
+      // stay selectable/resumable instead of rendering nothing.
+      figures.push(...createAnchorFigures({
+        coordinates,
+        isSelected,
+        isHovered,
+        isTouch,
+        isDrawing: overlay.isDrawing(),
+        lock: overlay.lock,
+        keyPrefix: 'anchor_'
+      }))
       return figures
     }
 
@@ -104,11 +116,16 @@ const fibExtension: OverlayTemplate<FibExtensionExtendData> = {
     const v2 = overlay.points[1]?.value
     const v3 = overlay.points[2]?.value
     const useValue = isNumber(v1) && isNumber(v2) && isNumber(v3)
+    const rs = fibRealSpace(yAxis)
     const vDif = (v2 ?? 0) - (v1 ?? 0)
-    const levelValue = (coeff: number): number => (v3 ?? 0) + vDif * coeff
+    // v3 + (v2−v1)·coeff — extrapolation, in real space under non-linear axes.
+    const levelValue = (coeff: number): number => rs.linear || !useValue
+      ? (v3 ?? 0) + vDif * coeff
+      : rs.fromReal(rs.toReal(v3) + (rs.toReal(v2) - rs.toReal(v1)) * coeff)
     const levelY = (coeff: number): number => {
       if (useValue && yAxis !== null) {
-        return yAxis.convertToPixel(levelValue(coeff))
+        const y = yAxis.convertToPixel(levelValue(coeff))
+        return Number.isFinite(y) ? y : c3.y + (c2.y - c1.y) * coeff
       }
       return c3.y + (c2.y - c1.y) * coeff
     }

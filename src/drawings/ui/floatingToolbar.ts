@@ -441,6 +441,9 @@ export function attachFloatingToolbar (
       return
     }
     const create = serializedToOverlayCreate(serialized)
+    if (create === null) {
+      return
+    }
     delete (create as { id?: string }).id
     // A clone is a fresh user drawing — locked/hidden state doesn't carry
     // (TV clones always land unlocked + visible).

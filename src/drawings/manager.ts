@@ -501,13 +501,16 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
               // Same-id drawings already on the chart get overridden with the
               // stored state — createOverlay would dedupe silently and leave
               // the stale version diverged from storage.
-              if (chart.getOverlayById(d.id) !== null) {
-                chart.overrideOverlay(serializedToOverlayCreate(d))
-              } else {
-                // Pre-seed the shadow with the STORED record so trackShadow
-                // keeps the original createdAt instead of restamping it.
-                shadow.set(d.id, d)
-                chart.createOverlay(serializedToOverlayCreate(d))
+              const create = serializedToOverlayCreate(d)
+              if (create !== null) {
+                if (chart.getOverlayById(d.id) !== null) {
+                  chart.overrideOverlay(create)
+                } else {
+                  // Pre-seed the shadow with the STORED record so trackShadow
+                  // keeps the original createdAt instead of restamping it.
+                  shadow.set(d.id, d)
+                  chart.createOverlay(create)
+                }
               }
             }
           } catch {
@@ -581,11 +584,15 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
             const existing = chart.getOverlayById(d.id)
             // d.completed guards BOTH branches — a half-formed remote
             // record must not clobber a finished local overlay.
+            const create = serializedToOverlayCreate(d)
+            if (create === null) {
+              return
+            }
             if (existing !== null && !existing.isDrawing() && d.completed) {
-              chart.overrideOverlay(serializedToOverlayCreate(d))
+              chart.overrideOverlay(create)
             } else if (d.completed && existing === null && !pendingRemoves.has(d.id)) {
               shadow.set(d.id, d)
-              chart.createOverlay(serializedToOverlayCreate(d))
+              chart.createOverlay(create)
             }
           } catch {
             // One malformed remote record must not starve the rest.
@@ -601,11 +608,15 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
             // Pending-removal tombstones apply to upserts too — a peer's
             // stale upsert arriving after the user's local delete must not
             // resurrect the drawing before the remove reaches the store.
+            const create = serializedToOverlayCreate(d)
+            if (create === null) {
+              return
+            }
             if (existing !== null && !existing.isDrawing() && d.completed) {
-              chart.overrideOverlay(serializedToOverlayCreate(d))
+              chart.overrideOverlay(create)
             } else if (d.completed && existing === null && !pendingRemoves.has(d.id)) {
               shadow.set(d.id, d)
-              chart.createOverlay(serializedToOverlayCreate(d))
+              chart.createOverlay(create)
             }
           } catch {
             // One malformed remote record must not starve the rest.
@@ -759,10 +770,14 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
       try {
         apply.remove.forEach(id => { chart.removeOverlay({ id }) })
         apply.restore.forEach(d => {
+          const create = serializedToOverlayCreate(d)
+          if (create === null) {
+            return
+          }
           if (chart.getOverlayById(d.id) !== null) {
-            chart.overrideOverlay(serializedToOverlayCreate(d))
+            chart.overrideOverlay(create)
           } else {
-            chart.createOverlay(serializedToOverlayCreate(d))
+            chart.createOverlay(create)
           }
           shadow.set(d.id, d)
           persistUpsert(d)
@@ -790,10 +805,14 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
       try {
         apply.remove.forEach(id => { chart.removeOverlay({ id }) })
         apply.restore.forEach(d => {
+          const create = serializedToOverlayCreate(d)
+          if (create === null) {
+            return
+          }
           if (chart.getOverlayById(d.id) !== null) {
-            chart.overrideOverlay(serializedToOverlayCreate(d))
+            chart.overrideOverlay(create)
           } else {
-            chart.createOverlay(serializedToOverlayCreate(d))
+            chart.createOverlay(create)
           }
           shadow.set(d.id, d)
           persistUpsert(d)

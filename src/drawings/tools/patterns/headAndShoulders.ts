@@ -109,8 +109,7 @@ const headAndShoulders: OverlayTemplate<PatternExtendData> = {
           color: stroke.color,
           size: stroke.size,
           dashedValue: stroke.dashedValue
-        },
-        ignoreEvent: true
+        }
       })
     }
 
@@ -130,8 +129,7 @@ const headAndShoulders: OverlayTemplate<PatternExtendData> = {
         key: 'hs_neckline',
         type: 'line',
         attrs: { coordinates: [leftEnd, rightEnd] },
-        styles: { style: 'dashed', color: stroke.color, size: stroke.size, dashedValue: [2, 2] },
-        ignoreEvent: true
+        styles: { style: 'dashed', color: stroke.color, size: stroke.size, dashedValue: [2, 2] }
       })
 
       if (fillEnabled) {

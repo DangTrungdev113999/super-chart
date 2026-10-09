@@ -429,6 +429,8 @@ export function fivePointPatternFigures (
   }
 
   // Zigzag polyline through every vertex (follows the in-progress point).
+  // Hit target — without it the overlay has no eventable figure and can
+  // never be hovered/selected/dragged once deselected.
   figures.push({
     key: 'ptn_wave',
     type: 'line',
@@ -438,8 +440,7 @@ export function fivePointPatternFigures (
       color: stroke.color,
       size: stroke.size,
       dashedValue: stroke.dashedValue
-    },
-    ignoreEvent: true
+    }
   })
 
   const ratios = ratiosOf(overlay.points)

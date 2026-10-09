@@ -47,9 +47,16 @@ export function merge (target: any, source: any): void {
   }
 }
 
-export function clone<T> (target: T): T {
+export function clone<T> (target: T, seen?: Map<unknown, unknown>): T {
   if (!isObject(target)) {
     return target
+  }
+
+  // Cycle guard — host-injected cyclic extendData would recurse forever.
+  // `seen` is allocated lazily only when an object actually repeats.
+  if (seen?.has(target) === true) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-explicit-any -- cycle returns the already-built copy
+    return seen.get(target) as any
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- ignore
@@ -59,12 +66,14 @@ export function clone<T> (target: T): T {
   } else {
     copy = {}
   }
+  seen ??= new Map()
+  seen.set(target, copy)
   for (const key in target) {
     if (Object.prototype.hasOwnProperty.call(target, key) as boolean) {
       const v = target[key]
       if (isObject(v)) {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- ignore
-        copy[key] = clone(v)
+        copy[key] = clone(v, seen)
       } else {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- ignore
         copy[key] = v

@@ -120,6 +120,9 @@ function openEditor (chart: Chart, overlay: Overlay<TextToolExtendData>): void {
 const textNote: OverlayTemplate<TextToolExtendData> = {
   name: 'text',
   totalStep: 2,
+  // geometry escapes the anchor hull (control points / fixed-size box)
+  // or user-widened boxes — must not be view-culled
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

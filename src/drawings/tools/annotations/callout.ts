@@ -104,6 +104,9 @@ function openEditor (chart: Chart, overlay: Overlay<CalloutExtendData>): void {
 const callout: OverlayTemplate<CalloutExtendData> = {
   name: 'callout',
   totalStep: 3,
+  // geometry escapes the anchor hull (control points / fixed-size box)
+  // or user-widened boxes — must not be view-culled
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

@@ -43,6 +43,9 @@ const ARC_SEGMENTS = 40
 const arc: OverlayTemplate<ShapeExtendData> = {
   name: 'arc',
   totalStep: 4,
+  // geometry escapes the anchor hull (control points / fixed-size box)
+  // or user-widened boxes — must not be view-culled
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

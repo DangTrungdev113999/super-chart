@@ -84,16 +84,24 @@ function normalizePoint (p: unknown): SerializedDrawingPoint | null {
   return point
 }
 
-/** Fields a restore writes back through createOverlay. */
-export function serializedToOverlayCreate (d: SerializedDrawing): OverlayCreate {
+/** Fields a restore writes back through createOverlay. Returns null for
+ * records that can't form a drawing — empty name or zero valid anchor
+ * points (every tool's totalStep ≥ 1, so a point-less record would be an
+ * invisible zombie that still consumes undo/persist slots). */
+export function serializedToOverlayCreate (d: SerializedDrawing): OverlayCreate | null {
+  const name = typeof d.name === 'string' ? d.name : ''
+  const points = (Array.isArray(d.points) ? d.points : [])
+    .map(normalizePoint)
+    .filter((p): p is SerializedDrawingPoint => p !== null)
+  if (name === '' || points.length === 0) {
+    return null
+  }
   return {
     id: typeof d.id === 'string' ? d.id : undefined,
-    name: typeof d.name === 'string' ? d.name : '',
+    name,
     paneId: d.paneId,
     groupId: d.groupId ?? 'drawings',
-    points: (Array.isArray(d.points) ? d.points : [])
-      .map(normalizePoint)
-      .filter((p): p is SerializedDrawingPoint => p !== null),
+    points,
     styles: clone(d.styles ?? null),
     // Boundary truthiness — a foreign record's lock:'yes' or visible:0 must
     // not freeze the drawing or block keyboard delete.
@@ -152,7 +160,7 @@ function sanitizeExtendData (extendData: unknown): unknown {
  * Key-order-insensitive stringify — `JSON.stringify` makes the fingerprint
  * lie for hosts that rebuild objects with reordered keys.
  */
-function stableStringify (value: unknown): string {
+function stableStringify (value: unknown, seen?: Set<unknown>): string {
   if (value === null || typeof value !== 'object') {
     // JSON.stringify(undefined) returns undefined at runtime — guard the
     // input instead of the result (the TS signature claims string).
@@ -161,12 +169,23 @@ function stableStringify (value: unknown): string {
     }
     return JSON.stringify(value)
   }
+  // Cycle guard — a hostile/host-broken cyclic extendData would recurse
+  // forever and take the whole persist pass down with a stack overflow.
+  seen ??= new Set()
+  if (seen.has(value)) {
+    return 'null'
+  }
+  seen.add(value)
   if (Array.isArray(value)) {
-    return `[${value.map(stableStringify).join(',')}]`
+    const out = `[${value.map(v => stableStringify(v, seen)).join(',')}]`
+    seen.delete(value)
+    return out
   }
   const rec = value as Record<string, unknown>
   const keys = Object.keys(rec).sort()
-  return `{${keys.map(k => `${JSON.stringify(k)}:${stableStringify(rec[k])}`).join(',')}}`
+  const out = `{${keys.map(k => `${JSON.stringify(k)}:${stableStringify(rec[k], seen)}`).join(',')}}`
+  seen.delete(value)
+  return out
 }
 
 /**
@@ -224,7 +243,7 @@ export function serializeOverlay<E> (overlay: Overlay<E>, options?: { now?: numb
 /** Cheap structural fingerprint for change detection (persistence diff + undo before-images). */
 export function serializedFingerprint (d: SerializedDrawing): string {
   const pts = d.points.map(p => `${p.timestamp ?? ''},${p.value ?? ''},${p.dataIndex ?? ''},${p.interval ?? ''},${p.offset ?? ''}`).join(';')
-  return `${d.name}|${d.paneId ?? ''}|${d.groupId ?? ''}|${pts}|${stableStringify(d.styles ?? null)}|${stableStringify(d.extendData ?? null)}|${d.lock === true ? 1 : 0}${d.visible === false ? 0 : 1}|${d.mode ?? ''}|${d.modeSensitivity ?? ''}|${d.zLevel ?? ''}`
+  return `${d.name}|${d.paneId ?? ''}|${d.groupId ?? ''}|${pts}|${stableStringify(d.styles ?? null)}|${stableStringify(d.extendData ?? null)}|${d.lock === true ? 1 : 0}${d.visible === false ? 0 : 1}|${d.mode ?? ''}|${d.modeSensitivity ?? ''}|${d.zLevel ?? ''}|${d.positionPercents?.join(',') ?? ''}`
 }
 
 // ─── v1 migration ────────────────────────────────────────────────

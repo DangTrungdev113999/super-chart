@@ -70,21 +70,25 @@ const cyclicLines: OverlayTemplate<PatternExtendData> = {
           color: TV_CONNECTOR_COLOR,
           size: 1,
           dashedValue: [6, 6]
-        },
-        ignoreEvent: true
+        }
       })
 
       const pad = 4
       const xs: number[] = []
-      if (isNumber(p0.dataIndex) && isNumber(p1.dataIndex) && isValid(xAxis)) {
-        const step = p1.dataIndex - p0.dataIndex
+      // Timestamp-first like the render path — stored dataIndex goes stale
+      // by +N after a history prepend while timestamp stays authoritative.
+      const store = (chart as unknown as { getChartStore: () => { timestampToDataIndex: (t: number) => number } }).getChartStore()
+      const i0 = isNumber(p0.timestamp) ? store.timestampToDataIndex(p0.timestamp) : p0.dataIndex
+      const i1 = isNumber(p1.timestamp) ? store.timestampToDataIndex(p1.timestamp) : p1.dataIndex
+      if (isNumber(i0) && isNumber(i1) && isValid(xAxis)) {
+        const step = i1 - i0
         if (step !== 0) {
           // March in dataIndex space but bound by PIXELS — visibleRange is
           // clamped to loaded data and would stop the march at the last
           // real bar, dropping lines that belong in the empty future
           // margin (dataIndexToCoordinate extrapolates fine there).
           for (
-            let index = p0.dataIndex;
+            let index = i0;
             xs.length < MAX_CYCLE_LINES;
             index += step
           ) {
@@ -124,8 +128,7 @@ const cyclicLines: OverlayTemplate<PatternExtendData> = {
             color: stroke.color,
             size: stroke.size,
             dashedValue: stroke.dashedValue
-          },
-          ignoreEvent: true
+          }
         })
       }
     }

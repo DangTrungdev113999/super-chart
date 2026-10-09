@@ -965,6 +965,9 @@ export default class ChartImp implements Chart {
         }
         if (isValid(options.axis)) {
           shouldLayout = true
+          // Axis side/type feeds cached drawing axis pills (isFromZero) —
+          // it's an environment input to the figure-cache signature.
+          this._chartStore.bumpEnvRev()
         }
         const ops = { ...options }
         delete ops.state

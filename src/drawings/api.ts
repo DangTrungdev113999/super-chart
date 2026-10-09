@@ -283,6 +283,9 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
           return false
         }
         const create = serializedToOverlayCreate(clipboard)
+        if (create === null) {
+          return false
+        }
         delete (create as { id?: string }).id
         manager.create(create)
         return true

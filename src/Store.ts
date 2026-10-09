@@ -431,6 +431,21 @@ export default class StoreImp implements Store {
 
   getEnvRev (): number { return this._envRev }
 
+  /** External callers (Chart-level setPaneOptions axis changes etc.) that
+   * alter cached-figure environment inputs bump the signature here. */
+  bumpEnvRev (): void { this._envRev++ }
+
+  /**
+   * Monotonic data-mutation counter — bumped on EVERY successful
+   * applyData/updateData path (init, append, prepend, in-place last-bar
+   * update). The figure-cache `dataRev` signature keys on this: a
+   * length/endpoints fingerprint misses interior rewrites, a counter
+   * cannot.
+   */
+  private _dataRev = 0
+
+  getDataRev (): number { return this._dataRev }
+
   setStyles (value: string | DeepPartial<Styles>): void {
     this._envRev++
     let styles: Nullable<DeepPartial<Styles>> = null
@@ -637,6 +652,9 @@ export default class StoreImp implements Store {
         success = true
         adjustFlag = true
       }
+    }
+    if (success) {
+      this._dataRev++
     }
     if (success && adjustFlag) {
       this._adjustVisibleRange()
@@ -1261,6 +1279,9 @@ export default class StoreImp implements Store {
     this._indicators.set(paneId, paneIndicators)
     this._sortIndicators(paneId)
     this._calcIndicator(indicator)
+    // Indicator membership feeds label precision (fibCommon getPricePrecision)
+    // — it's an environment input to the figure-cache signature.
+    this._envRev++
     return true
   }
 
@@ -1290,7 +1311,7 @@ export default class StoreImp implements Store {
   removeIndicator (filter: IndicatorFilter): boolean {
     let removed = false
     const filterIndicators = this.getIndicatorsByFilter(filter)
-    filterIndicators.forEach(indicator => {
+    for (const indicator of filterIndicators) {
       const paneIndicators = this.getIndicatorsByPaneId(indicator.paneId)
       const index = paneIndicators.findIndex(ins => ins.id === indicator.id)
       if (index > -1) {
@@ -1300,7 +1321,11 @@ export default class StoreImp implements Store {
       if (paneIndicators.length === 0) {
         this._indicators.delete(indicator.paneId)
       }
-    })
+    }
+    if (removed) {
+      // Same reasoning as addIndicator — precision source changed.
+      this._envRev++
+    }
     return removed
   }
 
@@ -1362,6 +1387,11 @@ export default class StoreImp implements Store {
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- ignore
     if (sortFlag) {
       this._sortIndicators()
+    }
+    if (filterIndicators.length > 0) {
+      // Indicator precision feeds cached drawing labels (fib levels,
+      // priceLabel, position pills) — it's an envRev signature input.
+      this._envRev++
     }
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- ignore
     if (updateFlag) {

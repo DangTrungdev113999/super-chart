@@ -31,6 +31,7 @@ import {
   getPricePrecision,
   formatFibPrice,
   fibLevelText,
+  fibLevelValue,
   fibAlphaColor
 } from './fibCommon'
 
@@ -56,7 +57,19 @@ const fibRetracement: OverlayTemplate<FibRetracementExtendData> = {
   needDefaultYAxisFigure: false,
   createPointFigures: ({ chart, overlay, coordinates, bounding, yAxis, isSelected, isHovered, isTouch }) => {
     const figures: OverlayFigure[] = []
+    // Emit anchors BEFORE the arity return — a restored/incomplete overlay
+    // with one point would otherwise render nothing and be unresumable.
     if (coordinates.length < 2) {
+      figures.push(...createAnchorFigures({
+        coordinates,
+        isSelected,
+        isHovered,
+        isTouch,
+        isDrawing: overlay.isDrawing(),
+        lock: overlay.lock,
+        keyPrefix: 'anchor_',
+        midPoint: true
+      }))
       return figures
     }
 
@@ -73,15 +86,16 @@ const fibRetracement: OverlayTemplate<FibRetracementExtendData> = {
 
     const v1 = overlay.points[0]?.value
     const v2 = overlay.points[1]?.value
-    // Value-space level math keeps prices correct on log axes; pixel-space
-    // interpolation is the fallback when values are absent (mid-drag).
     const useValue = isNumber(v1) && isNumber(v2)
-    const vBase = v2 ?? 0
-    const vDif = (v1 ?? 0) - (v2 ?? 0)
-    const levelValue = (coeff: number): number => vBase + vDif * coeff
+    // Interpolate in the axis's real space — on log axes a coeff-t level
+    // sits at t-fraction of the screen distance, not the price delta.
+    const levelValue = (coeff: number): number => fibLevelValue(yAxis, v1 ?? 0, v2 ?? 0, coeff)
     const levelY = (coeff: number): number => {
       if (useValue && yAxis !== null) {
-        return yAxis.convertToPixel(levelValue(coeff))
+        const y = yAxis.convertToPixel(levelValue(coeff))
+        // Non-finite y (zero/negative prices on a log axis) — fall back to
+        // pixel interpolation so the line still lands somewhere sane.
+        return Number.isFinite(y) ? y : c2.y + (c1.y - c2.y) * coeff
       }
       return c2.y + (c1.y - c2.y) * coeff
     }
@@ -146,16 +160,6 @@ const fibRetracement: OverlayTemplate<FibRetracementExtendData> = {
       })
     })
 
-    figures.push(...createAnchorFigures({
-      coordinates,
-      isSelected,
-      isHovered,
-      isTouch,
-      isDrawing: overlay.isDrawing(),
-      lock: overlay.lock,
-      keyPrefix: 'anchor_',
-      midPoint: true
-    }))
     return figures
   }
 }

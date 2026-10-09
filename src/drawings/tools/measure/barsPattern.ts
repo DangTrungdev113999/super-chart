@@ -151,13 +151,14 @@ function indexStore (chart: unknown): StoreIndexAccess {
   return (chart as ChartIndexAccess).getChartStore()
 }
 
-/** Resolve a point's bar index (dataIndex first, timestamp fallback). */
+/** Resolve a point's bar index — timestamp-first like the render path;
+ * stored dataIndex goes stale by +N after a history prepend. */
 function pointBarIndex (point: Partial<Point>, store: StoreIndexAccess): number | null {
-  if (isNumber(point.dataIndex)) {
-    return Math.round(point.dataIndex)
-  }
   if (isNumber(point.timestamp)) {
     return store.timestampToDataIndex(point.timestamp)
+  }
+  if (isNumber(point.dataIndex)) {
+    return Math.round(point.dataIndex)
   }
   return null
 }

@@ -50,6 +50,17 @@ const fibTimeExtension: OverlayTemplate<FibTimeExtensionExtendData> = {
   createPointFigures: ({ overlay, coordinates, bounding, isSelected, isHovered, isTouch }) => {
     const figures: OverlayFigure[] = []
     if (coordinates.length < 2) {
+      // Anchors before the arity return — a 1-point restored overlay must
+      // stay selectable/resumable instead of rendering nothing.
+      figures.push(...createAnchorFigures({
+        coordinates,
+        isSelected,
+        isHovered,
+        isTouch,
+        isDrawing: overlay.isDrawing(),
+        lock: overlay.lock,
+        keyPrefix: 'anchor_'
+      }))
       return figures
     }
 

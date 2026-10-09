@@ -320,7 +320,7 @@ export interface Styles {
 	overlay: OverlayStyle;
 }
 declare function merge(target: any, source: any): void;
-declare function clone<T>(target: T): T;
+declare function clone<T>(target: T, seen?: Map<unknown, unknown>): T;
 declare function isArray<T = unknown>(value: unknown): value is T[];
 declare function isFunction<T = (...args: unknown[]) => unknown>(value: unknown): value is T;
 declare function isObject(value: unknown): value is object;

@@ -69,8 +69,7 @@ const abcd: OverlayTemplate<PatternExtendData> = {
           color: stroke.color,
           size: stroke.size,
           dashedValue: stroke.dashedValue
-        },
-        ignoreEvent: true
+        }
       })
 
       const points = overlay.points

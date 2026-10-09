@@ -77,8 +77,7 @@ const sineLine: OverlayTemplate<PatternExtendData> = {
             color: stroke.color,
             size: stroke.size,
             dashedValue: stroke.dashedValue
-          },
-          ignoreEvent: true
+          }
         })
       }
     }

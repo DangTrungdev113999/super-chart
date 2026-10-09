@@ -15,17 +15,23 @@
 import { log10, index10 } from '../../common/utils/number'
 import type { AxisTemplate } from '../../component/Axis'
 
+// log10(0) = -Infinity would poison every pixel on the pane — floor the
+// magnitude at epsilon so zero (and denormal-near-zero) values map to a
+// large-but-finite real value instead.
+const LOG_EPSILON = 1e-12
+const safeLog10 = (v: number): number => v < 0 ? -log10(Math.max(Math.abs(v), LOG_EPSILON)) : log10(Math.max(v, LOG_EPSILON))
+
 const logarithm: AxisTemplate = {
   name: 'logarithm',
   minSpan: (precision) => 0.05 * index10(-precision),
-  valueToRealValue: (value) => value < 0 ? -log10(Math.abs(value)) : log10(value),
+  valueToRealValue: (value) => safeLog10(value),
   realValueToDisplayValue: (value) => value < 0 ? -index10(Math.abs(value)) : index10(value),
-  displayValueToRealValue: (value) => value < 0 ? -log10(Math.abs(value)) : log10(value),
+  displayValueToRealValue: (value) => safeLog10(value),
   realValueToValue: (value) => value < 0 ? -index10(Math.abs(value)) : index10(value),
   createRange: ({ defaultRange }) => {
     const { from, to, range } = defaultRange
-    const realFrom = from < 0 ? -log10(Math.abs(from)) : log10(from)
-    const realTo = to < 0 ? -log10(Math.abs(to)) : log10(to)
+    const realFrom = safeLog10(from)
+    const realTo = safeLog10(to)
     return {
       from,
       to,
