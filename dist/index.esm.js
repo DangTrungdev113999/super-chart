@@ -9506,13 +9506,15 @@ function createDrawingManager(chart, options) {
     }
     function trackShadow(overlay) {
         var _a;
+        // Stamp BEFORE the serialize early-return — ghost/synced mirrors never
+        // serialize but still need an epoch, or a stale-epoch wipe check can't
+        // catch them: they'd fall through into the synced-remove branch and
+        // tombstone the canonical record in the shared store.
+        overlayEpoch.set(overlay, scopeEpoch);
         var serialized = serializeOverlay$1(overlay, { createdAt: (_a = shadow.get(overlay.id)) === null || _a === void 0 ? void 0 : _a.createdAt });
         if (serialized === null) {
             return null;
         }
-        // Stamp the overlay with the scope epoch it belongs to — a remove of a
-        // stale-epoch overlay at ANY later time is an old-scope wipe.
-        overlayEpoch.set(overlay, scopeEpoch);
         shadow.set(overlay.id, serialized);
         return serialized;
     }
@@ -9548,12 +9550,24 @@ function createDrawingManager(chart, options) {
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
-                        if (store === null || pendingByScope.size === 0) {
+                        if (store === null) {
                             return [2 /*return*/];
                         }
                         if (saveTimer !== null) {
                             clearTimeout(saveTimer);
                             saveTimer = null;
+                        }
+                        // Join any in-flight apply even with nothing new to drain — flush() is
+                        // the durability contract (pagehide, store swap) and must not resolve
+                        // while a prior apply is still running.
+                        return [4 /*yield*/, applyChain];
+                    case 1:
+                        // Join any in-flight apply even with nothing new to drain — flush() is
+                        // the durability contract (pagehide, store swap) and must not resolve
+                        // while a prior apply is still running.
+                        _a.sent();
+                        if (pendingByScope.size === 0) {
+                            return [2 /*return*/];
                         }
                         buckets = __spreadArray([], __read(pendingByScope.values()), false);
                         pendingByScope.clear();
@@ -9638,7 +9652,7 @@ function createDrawingManager(chart, options) {
                             });
                         }); });
                         return [4 /*yield*/, applyChain];
-                    case 1:
+                    case 2:
                         _a.sent();
                         return [2 /*return*/];
                 }
@@ -9813,9 +9827,14 @@ function createDrawingManager(chart, options) {
                     // owner chart. No local undo (undo would materialize a zombie the
                     // owner still owns), but the remove MUST reach the shared store:
                     // skipping it leaves the record alive and the drawing resurrects
-                    // on every chart after reload.
+                    // on every chart after reload. suppressSync marks a host bulk wipe
+                    // (symbol-switch cleanup, full clear) — honoring it stops the wipe
+                    // from tombstoning the canonical record and broadcasting
+                    // removedIds to every peer tab.
                     history.invalidateOverlay(overlay.id);
-                    persistRemove(overlay.id);
+                    if (overlay.suppressSync !== true) {
+                        persistRemove(overlay.id);
+                    }
                     emit('change', { overlay: overlay });
                     break;
                 }
@@ -9876,6 +9895,11 @@ function createDrawingManager(chart, options) {
             void loadScope(epoch).then(afterLoad, afterLoad);
         }
     };
+    // Ids a remote store event applied while a load was in-flight — the
+    // remote state is fresher than the stored record about to materialize,
+    // so the record must not clobber it (zombie resurrect / stale overwrite).
+    var loadInFlight = false;
+    var loadTouched = new Set();
     function loadScope(epoch) {
         return __awaiter(this, void 0, void 0, function () {
             var target, drawings;
@@ -9887,17 +9911,25 @@ function createDrawingManager(chart, options) {
                         }
                         _b.label = 1;
                     case 1:
-                        _b.trys.push([1, 3, , 4]);
+                        _b.trys.push([1, 6, , 7]);
                         target = scope();
-                        return [4 /*yield*/, store.load(target)
-                            // Stale-load guard: a slower load for scope B resolving after a
-                            // switch to C must not materialize B's drawings on the C chart.
-                        ];
+                        loadInFlight = true;
+                        drawings = [];
+                        _b.label = 2;
                     case 2:
-                        drawings = (_b.sent()).drawings;
+                        _b.trys.push([2, , 4, 5]);
+                        return [4 /*yield*/, store.load(target)];
+                    case 3:
+                        (drawings = (_b.sent()).drawings);
+                        return [3 /*break*/, 5];
+                    case 4:
+                        loadInFlight = false;
+                        return [7 /*endfinally*/];
+                    case 5:
                         // Stale-load guard: a slower load for scope B resolving after a
                         // switch to C must not materialize B's drawings on the C chart.
                         if (destroyed || (epoch !== undefined && epoch !== scopeEpoch)) {
+                            loadTouched.clear();
                             return [2 /*return*/];
                         }
                         applyDepth++;
@@ -9907,6 +9939,9 @@ function createDrawingManager(chart, options) {
                                 // null entries) must not abort the rest of the load, and a throw
                                 // here would otherwise surface as a "half-restored" chart.
                                 try {
+                                    if (loadTouched.has(d.id)) {
+                                        return;
+                                    }
                                     if (d.completed) {
                                         // Same-id drawings already on the chart get overridden with the
                                         // stored state — createOverlay would dedupe silently and leave
@@ -9932,24 +9967,34 @@ function createDrawingManager(chart, options) {
                         }
                         finally {
                             applyDepth = Math.max(0, applyDepth - 1);
+                            loadTouched.clear();
                         }
-                        return [3 /*break*/, 4];
-                    case 3:
+                        return [3 /*break*/, 7];
+                    case 6:
                         _b.sent();
-                        return [3 /*break*/, 4];
-                    case 4: return [2 /*return*/];
+                        // Load failure — the chart stays empty rather than half-restored.
+                        loadTouched.clear();
+                        return [3 /*break*/, 7];
+                    case 7: return [2 /*return*/];
                 }
             });
         });
     }
     var onStoreEvent = function (event) {
-        var _a;
+        var _a, _b;
         if (destroyed) {
             return;
         }
         var current = scope();
         if (event.scope.symbol !== current.symbol || event.scope.chartId !== current.chartId) {
             return;
+        }
+        if (loadInFlight) {
+            // A load is awaiting resolution — record every remotely-touched id so
+            // the materialize pass can't clobber fresher remote state with the
+            // stale stored record (or resurrect a just-removed drawing).
+            event.drawings.forEach(function (d) { loadTouched.add(d.id); });
+            (_a = event.removedIds) === null || _a === void 0 ? void 0 : _a.forEach(function (id) { loadTouched.add(id); });
         }
         remoteApplying = true;
         applyingInternal = true;
@@ -10045,7 +10090,7 @@ function createDrawingManager(chart, options) {
                         // One malformed remote record must not starve the rest.
                     }
                 });
-                (_a = event.removedIds) === null || _a === void 0 ? void 0 : _a.forEach(function (id) {
+                (_b = event.removedIds) === null || _b === void 0 ? void 0 : _b.forEach(function (id) {
                     history.invalidateOverlay(id);
                     // Clear unflushed ops for the deleted id — a pending local
                     // upsert would otherwise resurrect the drawing in the shared
@@ -24513,6 +24558,12 @@ var StoreImp = /** @class */ (function () {
                 updatePaneIds.push(paneId);
             }
             _this._clearOverlayInteractionSlots(overlay);
+            // Slot clearing runs host hooks (deselect) that may cascade into a
+            // nested removeOverlay for this same overlay — the inner pass already
+            // unregistered and emitted, so bail before splicing/firing twice.
+            if (_this._overlayById.get(overlay.id) !== overlay) {
+                return;
+            }
             var index = paneOverlays.findIndex(function (o) { return o.id === overlay.id; });
             if (index === -1) {
                 try {
@@ -24617,7 +24668,9 @@ var StoreImp = /** @class */ (function () {
                 if (sortFlag) {
                     this._sortOverlays();
                 }
-                if (!ignoreUpdateFlag) {
+                // A zLevel restore/bump re-sorted the stack — that repaint must not
+                // be suppressed just because a hover hook claimed the frame.
+                if (!ignoreUpdateFlag || sortFlag) {
                     this._chart.updatePane(1 /* UpdateLevel.Overlay */);
                 }
             }
@@ -27359,6 +27412,10 @@ var OverlayView = /** @class */ (function (_super) {
                     }
                     // Gesture commit boundary — pairs with 'editStart' emitted on press.
                     chartStore.executeAction('onOverlayChange', { type: 'editEnd', overlay: overlay });
+                    // Consumed so the dispatcher repaints — commit writes like
+                    // anchoredText's fraction re-capture must paint this frame, not
+                    // wait for the next interaction.
+                    consumed = true;
                 }
             }
             freehandLastCoord = null;
@@ -32022,11 +32079,17 @@ var EventHandlerImp = /** @class */ (function () {
         // A cancelled pinch leaves the middle coordinate armed — the next
         // touchstart's _checkPinchState would run _stopPinch on a dead pinch
         // and poison the fresh scroll anchor via pinchEndEvent.
+        var wasPinching = this._startPinchMiddleCoordinate !== null;
         this._startPinchMiddleCoordinate = null;
         this._startPinchDistance = 0;
         if (this._unsubscribeRootTouchEvents !== null) {
             this._unsubscribeRootTouchEvents();
             this._unsubscribeRootTouchEvents = null;
+        }
+        if (wasPinching && isValid(this._handler.pinchEndEvent)) {
+            // Close the pinch formally — disarms the scroll anchor so the
+            // synthetic touchEnd below can't compute a fling from a pinch delta.
+            this._handler.pinchEndEvent({ x: 0, y: 0, pageX: 0, pageY: 0 }, 0);
         }
         this._processEvent(this._makeCompatEvent(touchCancelEvent, touch), this._handler.touchEndEvent);
     };
@@ -33067,30 +33130,33 @@ var Event = /** @class */ (function () {
         return false;
     };
     Event.prototype.touchMoveEvent = function (e) {
-        var _a, _b, _c, _d, _e, _f;
+        var _a, _b, _c, _d, _e, _f, _g;
         if (this._mouseDownWidget !== null && this._mouseDownWidget.getName() === WidgetNameConstants.SEPARATOR) {
+            // Same claim as the main/axis branches — without preventDefault the
+            // browser may scroll the page (or cancel the touch) mid-resize.
+            (_a = e.preventDefault) === null || _a === void 0 ? void 0 : _a.call(e);
             return this._mouseDownWidget.dispatchEvent('pressedMouseMoveEvent', e);
         }
-        var _g = this._findWidgetByEvent(e), pane = _g.pane, widget = _g.widget;
+        var _h = this._findWidgetByEvent(e), pane = _h.pane, widget = _h.widget;
         // Same identity gate as pressedMouseMoveEvent — a touch gesture is
         // widget-local: without it a freehand stroke sliding across a pane
         // boundary writes points in the wrong pane's coordinate space.
         if (widget !== null &&
-            ((_a = this._mouseDownWidget) === null || _a === void 0 ? void 0 : _a.getPane().getId()) === (pane === null || pane === void 0 ? void 0 : pane.getId()) &&
-            ((_b = this._mouseDownWidget) === null || _b === void 0 ? void 0 : _b.getName()) === widget.getName()) {
+            ((_b = this._mouseDownWidget) === null || _b === void 0 ? void 0 : _b.getPane().getId()) === (pane === null || pane === void 0 ? void 0 : pane.getId()) &&
+            ((_c = this._mouseDownWidget) === null || _c === void 0 ? void 0 : _c.getName()) === widget.getName()) {
             var event_10 = this._makeWidgetEvent(e, widget);
             var name_8 = widget.getName();
             var chartStore = this._chart.getChartStore();
             switch (name_8) {
                 case WidgetNameConstants.MAIN: {
                     if (widget.dispatchEvent('pressedMouseMoveEvent', event_10)) {
-                        (_c = event_10.preventDefault) === null || _c === void 0 ? void 0 : _c.call(event_10);
+                        (_d = event_10.preventDefault) === null || _d === void 0 ? void 0 : _d.call(event_10);
                         chartStore.setCrosshair(undefined, { notInvalidate: true });
                         this._chart.updatePane(1 /* UpdateLevel.Overlay */);
                         return true;
                     }
                     if (this._touchCoordinate !== null) {
-                        (_d = event_10.preventDefault) === null || _d === void 0 ? void 0 : _d.call(event_10);
+                        (_e = event_10.preventDefault) === null || _e === void 0 ? void 0 : _e.call(event_10);
                         chartStore.setCrosshair({ x: event_10.x, y: event_10.y, paneId: pane === null || pane === void 0 ? void 0 : pane.getId() });
                     }
                     else {
@@ -33098,13 +33164,13 @@ var Event = /** @class */ (function () {
                         // scroll-drag lets the browser scroll the page underneath the
                         // gesture (or cancel it mid-flight) since no touch-action CSS
                         // is guaranteed by hosts.
-                        (_e = event_10.preventDefault) === null || _e === void 0 ? void 0 : _e.call(event_10);
+                        (_f = event_10.preventDefault) === null || _f === void 0 ? void 0 : _f.call(event_10);
                         this._processMainScrollingEvent(widget, event_10);
                     }
                     return true;
                 }
                 case WidgetNameConstants.X_AXIS: {
-                    (_f = event_10.preventDefault) === null || _f === void 0 ? void 0 : _f.call(event_10);
+                    (_g = event_10.preventDefault) === null || _g === void 0 ? void 0 : _g.call(event_10);
                     return this._processXAxisScrollingEvent(widget, event_10);
                 }
                 case WidgetNameConstants.Y_AXIS: {
@@ -33356,9 +33422,12 @@ var Event = /** @class */ (function () {
         var _a;
         var consumed = widget.dispatchEvent('pressedMouseMoveEvent', event);
         if (!consumed) {
+            // Claim every Y-axis drag, not just armed-scale drags — otherwise a
+            // touch drag with scrollZoomEnabled=false scrolls the page mid-gesture
+            // (X_AXIS prevents unconditionally).
+            (_a = event.preventDefault) === null || _a === void 0 ? void 0 : _a.call(event);
             var yAxis = widget.getPane().getAxisComponent();
             if (this._prevYAxisRange !== null && yAxis.scrollZoomEnabled && this._yAxisStartScaleDistance !== 0) {
-                (_a = event.preventDefault) === null || _a === void 0 ? void 0 : _a.call(event);
                 var _b = this._prevYAxisRange, from = _b.from, to = _b.to, range = _b.range;
                 var scale = event.pageY / this._yAxisStartScaleDistance;
                 // pageY can hit 0 or go negative when the drag leaves the viewport —
@@ -35075,11 +35144,14 @@ function createChartSync(options) {
                             if (!updated && !suppressMaterialize) {
                                 // Follower may have attached after the overlay was created —
                                 // materialize it instead of dropping the update. But only if
-                                // the source still owns it: emits for a removed overlay can
-                                // land a frame late (mid-drag delete), and resurrecting those
-                                // would leave a zombie nobody owns.
+                                // the source still owns it CANONICALLY: emits for a removed
+                                // overlay can land a frame late (mid-drag delete), and a
+                                // source-side orphan mirror (synced/ghost — e.g. stranded by
+                                // a symbol-switch race) must never recreate a zombie with no
+                                // canonical owner here.
                                 try {
-                                    if (source.getOverlays({ id: overlay.id }).length > 0) {
+                                    var src = source.getOverlays({ id: overlay.id })[0];
+                                    if (isValid(src) && !src.synced && !src.ghost) {
                                         mirrorCreate(chart, overlay);
                                     }
                                 }
@@ -43660,8 +43732,12 @@ function computeGeometry(variant, p1, p2, p3) {
                 // In-progress median: P1 → P2 (TradingView medianPoint = p2 at 2 points).
                 return { median: { from: p1, to: p2, ray: true } };
             case 'schiff':
-                return { back: back, median: { from: mid(p1, p2), to: p2, ray: true } };
+                // Schiff shifts the median origin to the midpoint in PRICE only —
+                // X stays at P1. Mirror of the completed branch below.
+                return { back: back, median: { from: { x: p1.x, y: (p1.y + p2.y) / 2 }, to: p2, ray: true } };
             case 'modifiedSchiff':
+                // Modified Schiff shifts the origin to the midpoint in BOTH axes.
+                return { back: back, median: { from: mid(p1, p2), to: p2, ray: true } };
             case 'inside':
                 return { back: back };
         }
@@ -43679,7 +43755,9 @@ function computeGeometry(variant, p1, p2, p3) {
             };
         case 'schiff':
         case 'modifiedSchiff': {
-            var base = variant === 'schiff'
+            // TradingView definitions: Schiff = median origin at (P1.x,
+            // mid-price(P1,P2)); Modified Schiff = midpoint in both time and price.
+            var base = variant === 'modifiedSchiff'
                 ? mid(p1, p2)
                 : { x: p1.x, y: (p1.y + p2.y) / 2 };
             return {
@@ -44056,8 +44134,9 @@ var insidePitchfork = createPitchforkTemplate('insidePitchfork', 'inside');
  * limitations under the License.
  */
 /**
- * 'modifiedSchiffPitchfork' — Modified Schiff: the pivot moves to
- * (midpoint.x, p2.y) — time-midpoint with the second leg's price.
+ * 'modifiedSchiffPitchfork' — Modified Schiff: the median origin moves to
+ * the midpoint of the p1→p2 segment in BOTH time and price before
+ * projecting the median ray.
  */
 var modifiedSchiffPitchfork = createPitchforkTemplate('modifiedSchiffPitchfork', 'modifiedSchiff');
 
@@ -44095,8 +44174,9 @@ var pitchfork = createPitchforkTemplate('pitchfork', 'original');
  * limitations under the License.
  */
 /**
- * 'schiffPitchfork' — Schiff pitchfork: the pivot handle moves to the
- * midpoint of the p1→p2 segment before projecting the median ray.
+ * 'schiffPitchfork' — Schiff pitchfork: the median origin moves to
+ * (p1.x, mid-price(p1,p2)) — same time as P1, halfway in price — before
+ * projecting the median ray.
  */
 var schiffPitchfork = createPitchforkTemplate('schiffPitchfork', 'schiff');
 
@@ -44116,6 +44196,8 @@ var schiffPitchfork = createPitchforkTemplate('schiffPitchfork', 'schiff');
 var arrowLine = {
     name: 'arrowLine',
     totalStep: 3,
+    // Arrowhead wings extend beyond the anchor hull.
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -44642,6 +44724,10 @@ var horizontalSegment = {
         });
     },
     performEventPressedMove: function (params) {
+        // A truncated point-array write (sync/API) must not crash the hook.
+        if (params.points.length < 2) {
+            return;
+        }
         // Anchor drags re-level the whole segment (both endpoints share y).
         params.points[0].value = params.performPoint.value;
         params.points[1].value = params.performPoint.value;
@@ -45908,8 +45994,9 @@ var verticalRayLine = {
         var lineColor = lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color);
         var lineWidth = lineSizeOf(overlay, chart, ext.lineWidth);
         var figures = [];
-        // Ray: from c1.y toward c2's direction, to the pane edge.
-        var endY = c2.y >= c1.y ? bounding.height : 0;
+        // Ray: from c1.y toward c2's direction, to the pane edge. Same-price
+        // anchors ray UP — upstream parity (`c1.y < c2.y ? height : 0`).
+        var endY = c2.y > c1.y ? bounding.height : 0;
         figures.push({
             key: 'vr_line',
             type: 'line',
@@ -45983,6 +46070,8 @@ var verticalRayLine = {
 var verticalSegment = {
     name: 'verticalSegment',
     totalStep: 3,
+    // Arrowhead wings extend beyond the anchor hull.
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -47599,19 +47688,6 @@ function computeRegression(chart, overlay, cfg) {
         prices: prices
     };
 }
-/**
- * Cheap data signature for the figure cache — catches appends, prepends
- * and realtime close updates without rescanning the range.
- */
-function regressionDataKey(chart) {
-    var dataList = chart.getDataList();
-    if (dataList.length === 0) {
-        return '0';
-    }
-    var first = dataList[0];
-    var last = dataList[dataList.length - 1];
-    return "".concat(dataList.length, "|").concat(first.timestamp, "|").concat(last.timestamp, "|").concat(last.close);
-}
 function toPixelPoints(chart, paneId, points) {
     var converted = chart.convertToPixel(points, { paneId: paneId });
     return isArray(converted) ? converted : [converted];
@@ -47846,7 +47922,10 @@ var regressionTrend = {
         // ─── Anchors sit ON the fitted line (TradingView _updateAnchorsPrice
         // keeps the stored prices snapped after every recompute). ───
         figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
-            coordinates: [regS, regE],
+            // Anchor N sits on the stored point's OWN side — for R→L draws
+            // (fit.i1 > fit.i2) points[0] is the fit END, so swap order or the
+            // left handle would silently write the right-side point.
+            coordinates: fit.i1 <= fit.i2 ? [regS, regE] : [regE, regS],
             isSelected: isSelected,
             isHovered: isHovered,
             isDrawing: false,
@@ -47855,13 +47934,7 @@ var regressionTrend = {
             cursors: ['move', 'move']
         })), false));
         return figures;
-    }, {
-        slot: 'point',
-        extraKey: function (_a) {
-            var chart = _a.chart;
-            return regressionDataKey(chart);
-        }
-    }),
+    }, { slot: 'point' }),
     createXAxisFigures: function (_a) {
         var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates;
         rememberLineChart(overlay, chart);
@@ -47921,13 +47994,7 @@ var regressionTrend = {
             }
         }
         return figures;
-    }, {
-        slot: 'y',
-        extraKey: function (_a) {
-            var chart = _a.chart;
-            return regressionDataKey(chart);
-        }
-    }),
+    }, { slot: 'y' }),
     performEventPressedMove: function (params) {
         snapAnchorsToFit(this, params.points);
     },
