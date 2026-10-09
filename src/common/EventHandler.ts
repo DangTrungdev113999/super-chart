@@ -510,6 +510,14 @@ export default class EventHandlerImp {
       const { manhattanDistance } = this._mouseTouchMoveWithDownInfo(this._getCoordinate(touch), this._tapCoordinate)
       if (manhattanDistance < ManhattanDistance.DoubleTap && !this._cancelTap) {
         this._processEvent(compatEvent, this._handler.doubleTapEvent)
+      } else if (!this._cancelTap) {
+        // A second tap INSIDE the window but far from the first is a fresh
+        // tap, not a double-tap — swallowing it wedges multi-point drawing
+        // (fast taps at different anchors would never advance the step).
+        this._processEvent(compatEvent, this._handler.tapEvent)
+        if (isValid(this._handler.tapEvent)) {
+          this._preventDefault(touchEndEvent)
+        }
       }
       this._resetTapTimeout()
     } else {
@@ -571,6 +579,12 @@ export default class EventHandlerImp {
       const { manhattanDistance } = this._mouseTouchMoveWithDownInfo(this._getCoordinate(mouseUpEvent), this._clickCoordinate)
       if (manhattanDistance < ManhattanDistance.DoubleClick && !this._cancelClick) {
         this._processEvent(compatEvent, this._handler.mouseDoubleClickEvent)
+      } else if (!this._cancelClick) {
+        // Distant second click inside the window — a real click, not a
+        // double-click. Swallowing it stalls in-progress drawings whose
+        // next anchor was placed fast (the rubber-band preview already
+        // filled the point, so the step silently never advances).
+        this._processEvent(compatEvent, this._handler.mouseClickEvent)
       }
       this._resetClickTimeout()
     } else {

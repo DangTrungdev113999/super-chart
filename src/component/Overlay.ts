@@ -540,6 +540,17 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
 
   constructor (overlay: OverlayTemplate<E>) {
     this.override(overlay)
+    // override() strips kernel-owned fields so runtime patches (sync
+    // overrides, host edits) can't clobber them — but the TEMPLATE is the
+    // one place they must land. Without this every tool runs with the
+    // defaults: totalStep=1 strands multi-step drawings mid-draw forever,
+    // freehand/cullable flags silently drop.
+    this.totalStep = overlay.totalStep ?? 1
+    this.freehand = overlay.freehand === true
+    if (overlay.freehandMinDistance !== undefined) {
+      this.freehandMinDistance = overlay.freehandMinDistance
+    }
+    this.cullable = overlay.cullable
   }
 
   override (overlay: Partial<Overlay<E>>): void {

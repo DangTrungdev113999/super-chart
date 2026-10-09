@@ -1453,6 +1453,11 @@ export default class StoreImp implements Store {
         const zLevel = this.getOverlaysByPaneId(paneId).length
         create.zLevel ??= zLevel
         overlay.override(create)
+        // override() strips groupId to protect identity on remote/host
+        // patches — creation is the one place it must land, otherwise every
+        // overlay stays in the '' group and groupId-scoped queries
+        // (manager reconcile, drawings.clear) match nothing.
+        overlay.groupId = create.groupId ?? id
         this._overlayById.set(id, overlay)
         if (overlay.ghost) {
           // Ghost overlays are passive mirrors of drawings on other charts:

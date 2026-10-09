@@ -45,7 +45,13 @@
     <script>
       var chart = superChart.init('chart')
       chart.createIndicator('MA')
-      chart.applyNewData(generated())
+      // v10 fork uses an async DataLoader instead of applyNewData.
+      var bars = generated()
+      chart.setDataLoader({
+        getBars: function (params) { params.callback(bars) }
+      })
+      chart.setSymbol({ ticker: 'FP_DEMO', pricePrecision: 2, volumePrecision: 0 })
+      chart.setPeriod({ type: 'day', span: 1 })
       var d = chart.drawings
       var logEl = document.getElementById('log')
       function log (msg) { logEl.textContent = msg + '\n' + logEl.textContent }
