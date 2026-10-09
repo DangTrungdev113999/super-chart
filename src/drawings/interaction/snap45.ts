@@ -27,6 +27,13 @@ export interface DrawingInteractionState {
    * When true, every drawn/dragged point snaps — as if Shift were held.
    */
   align45: boolean
+  /**
+   * TradingView's magnet mode — newly armed tools snap points to the
+   * nearest candle OHLC. Applies to tools activated while the flag is on
+   * (the armed overlay carries 'weak_magnet'); existing overlays keep the
+   * mode they were drawn with.
+   */
+  magnet: boolean
 }
 
 const states = new WeakMap<Chart, DrawingInteractionState>()
@@ -34,7 +41,7 @@ const states = new WeakMap<Chart, DrawingInteractionState>()
 export function getDrawingInteractionState (chart: Chart): DrawingInteractionState {
   let state = states.get(chart)
   if (state === undefined) {
-    state = { align45: false }
+    state = { align45: false, magnet: false }
     states.set(chart, state)
   }
   return state
@@ -46,6 +53,14 @@ export function setAlign45Enabled (chart: Chart, enabled: boolean): void {
 
 export function isAlign45Enabled (chart: Chart): boolean {
   return getDrawingInteractionState(chart).align45
+}
+
+export function setMagnetEnabled (chart: Chart, enabled: boolean): void {
+  getDrawingInteractionState(chart).magnet = enabled
+}
+
+export function isMagnetEnabled (chart: Chart): boolean {
+  return getDrawingInteractionState(chart).magnet
 }
 
 /**

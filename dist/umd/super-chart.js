@@ -9718,6 +9718,12 @@ function createDrawingManager(chart, options) {
                 if (continuousTool !== null && activeToolName === continuousTool) {
                     chart.createOverlay({ name: continuousTool, groupId: DRAWINGS_GROUP_ID });
                 }
+                else if (activeToolName !== null && overlay.name === activeToolName) {
+                    // Non-continuous tool finished — disarm so activeTool() and the
+                    // toolChange event reflect that nothing is armed anymore.
+                    activeToolName = null;
+                    emit('toolChange', { tool: null });
+                }
                 break;
             }
             case 'editStart': {
@@ -10148,12 +10154,7 @@ function createDrawingManager(chart, options) {
             activeToolName = name;
             continuousTool = (opts === null || opts === void 0 ? void 0 : opts.continuous) === true ? name : null;
             emit('toolChange', { tool: name });
-            var id = chart.createOverlay({
-                name: name,
-                groupId: DRAWINGS_GROUP_ID,
-                extendData: opts === null || opts === void 0 ? void 0 : opts.extendData,
-                points: opts === null || opts === void 0 ? void 0 : opts.points
-            });
+            var id = chart.createOverlay(__assign({ name: name, groupId: DRAWINGS_GROUP_ID, extendData: opts === null || opts === void 0 ? void 0 : opts.extendData, points: opts === null || opts === void 0 ? void 0 : opts.points }, ((opts === null || opts === void 0 ? void 0 : opts.mode) !== undefined ? { mode: opts.mode } : {})));
             return typeof id === 'string' ? id : null;
         },
         deactivate: function () {
@@ -10862,6 +10863,13 @@ function findCatalogItemByOverlay(overlayName) {
     }
     return null;
 }
+var DRAWING_CHROME = [
+    { id: 'magnet', title: 'Magnet Mode', iconId: 'magnet', kind: 'toggle' },
+    { id: 'stayInDrawing', title: 'Stay in Drawing Mode', iconId: 'cursor', kind: 'toggle' },
+    { id: 'lockAll', title: 'Lock All Drawings', iconId: 'lock', kind: 'toggle' },
+    { id: 'hideAll', title: 'Hide All Drawings', iconId: 'hide', kind: 'toggle' },
+    { id: 'removeAll', title: 'Remove All Drawings', iconId: 'remove', kind: 'action' }
+];
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -11111,7 +11119,7 @@ var states = new WeakMap();
 function getDrawingInteractionState(chart) {
     var state = states.get(chart);
     if (state === undefined) {
-        state = { align45: false };
+        state = { align45: false, magnet: false };
         states.set(chart, state);
     }
     return state;
@@ -11121,6 +11129,12 @@ function setAlign45Enabled(chart, enabled) {
 }
 function isAlign45Enabled(chart) {
     return getDrawingInteractionState(chart).align45;
+}
+function setMagnetEnabled(chart, enabled) {
+    getDrawingInteractionState(chart).magnet = enabled;
+}
+function isMagnetEnabled(chart) {
+    return getDrawingInteractionState(chart).magnet;
 }
 /**
  * Whether a move should snap to 45° increments — Shift held during the
@@ -11174,7 +11188,7 @@ var PALETTE = [
     '#ffeb3b', '#ff9800', '#f23645', '#e91e63',
     '#9c27b0', '#673ab7'
 ];
-var CSS = "\n.sc-drw-toolbar {\n  position: absolute;\n  top: 0;\n  left: 0;\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  padding: 2px 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  line-height: 1;\n  user-select: none;\n  white-space: nowrap;\n  will-change: transform;\n}\n.sc-drw-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 26px;\n  height: 26px;\n  padding: 0;\n  margin: 0;\n  border: none;\n  border-radius: 3px;\n  background: transparent;\n  color: #d1d4dc;\n  cursor: pointer;\n}\n.sc-drw-btn:hover { background: #2a2e39; color: #ffffff; }\n.sc-drw-btn:active { background: #363c4e; }\n.sc-drw-btn[data-on=\"true\"] { color: #2962ff; }\n.sc-drw-btn[data-on=\"true\"]:hover { color: #4c7dff; }\n.sc-drw-btn svg { display: block; width: 16px; height: 16px; }\n.sc-drw-btn--wide { width: auto; padding: 0 6px; font-size: 11px; }\n.sc-drw-grip {\n  cursor: grab;\n  color: #5d6372;\n  width: 14px;\n}\n.sc-drw-grip:active { cursor: grabbing; }\n.sc-drw-sep {\n  width: 1px;\n  height: 18px;\n  margin: 0 2px;\n  background: #2a2e39;\n}\n.sc-drw-swatch {\n  width: 14px;\n  height: 14px;\n  border-radius: 2px;\n  border: 1px solid rgba(255, 255, 255, 0.25);\n}\n.sc-drw-menu {\n  position: absolute;\n  top: 0;\n  left: 0;\n  min-width: 120px;\n  padding: 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  z-index: 10;\n}\n.sc-drw-menu-item {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  width: 100%;\n  padding: 5px 8px;\n  border: none;\n  border-radius: 3px;\n  background: transparent;\n  color: inherit;\n  font: inherit;\n  text-align: left;\n  cursor: pointer;\n}\n.sc-drw-menu-item:hover { background: #2a2e39; }\n.sc-drw-menu-item[data-on=\"true\"] { color: #4c7dff; }\n.sc-drw-menu-item svg { width: 14px; height: 14px; flex: none; }\n.sc-drw-menu-label {\n  padding: 4px 8px 2px;\n  color: #787b86;\n  font-size: 10px;\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n}\n.sc-drw-palette {\n  display: grid;\n  grid-template-columns: repeat(7, 18px);\n  gap: 4px;\n  padding: 4px;\n}\n.sc-drw-palette-cell {\n  width: 18px;\n  height: 18px;\n  padding: 0;\n  border: 1px solid rgba(255, 255, 255, 0.12);\n  border-radius: 2px;\n  cursor: pointer;\n}\n.sc-drw-palette-cell:hover { transform: scale(1.15); border-color: #ffffff; }\n.sc-drw-palette--inline {\n  display: none;\n  position: absolute;\n  top: 100%;\n  left: 0;\n  margin-top: 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);\n  z-index: 5;\n}\n.sc-drw-field:hover .sc-drw-palette--inline { display: grid; }\n.sc-drw-dialog {\n  position: absolute;\n  top: 0;\n  left: 0;\n  width: 240px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 6px;\n  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  user-select: none;\n  will-change: transform;\n  z-index: 20;\n}\n.sc-drw-dialog-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 6px 8px;\n  font-weight: 600;\n  cursor: grab;\n  border-bottom: 1px solid #2a2e39;\n}\n.sc-drw-dialog-header:active { cursor: grabbing; }\n.sc-drw-dialog-tabs {\n  display: flex;\n  gap: 2px;\n  padding: 4px 6px 0;\n  border-bottom: 1px solid #2a2e39;\n}\n.sc-drw-dialog-tab {\n  padding: 4px 8px;\n  border: none;\n  border-radius: 3px 3px 0 0;\n  background: transparent;\n  color: #787b86;\n  font: inherit;\n  cursor: pointer;\n}\n.sc-drw-dialog-tab:hover { color: #d1d4dc; }\n.sc-drw-dialog-tab[data-on=\"true\"] {\n  color: #ffffff;\n  background: #2a2e39;\n}\n.sc-drw-dialog-body {\n  max-height: 320px;\n  overflow-y: auto;\n  padding: 8px;\n}\n.sc-drw-section {\n  padding: 6px 2px 3px;\n  color: #787b86;\n  font-size: 10px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n}\n.sc-drw-field {\n  position: relative;\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  padding: 3px 2px;\n  min-height: 24px;\n}\n.sc-drw-field-label {\n  flex: 1;\n  color: #9aa0ae;\n}\n.sc-drw-field-control {\n  position: relative;\n  display: flex;\n  align-items: center;\n  gap: 6px;\n}\n.sc-drw-input {\n  width: 110px;\n  padding: 3px 6px;\n  border: 1px solid #2a2e39;\n  border-radius: 3px;\n  background: #131722;\n  color: #d1d4dc;\n  font: inherit;\n}\n.sc-drw-input:focus { outline: none; border-color: #2962ff; }\n.sc-drw-input--narrow { width: 64px; }\n.sc-drw-color {\n  width: 26px;\n  height: 22px;\n  padding: 0;\n  border: 1px solid #2a2e39;\n  border-radius: 3px;\n  background: transparent;\n  cursor: pointer;\n}\n.sc-drw-levels {\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n  width: 100%;\n}\n.sc-drw-level-row {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  padding: 2px 0;\n}\n";
+var CSS = "\n.sc-drw-toolbar {\n  position: absolute;\n  top: 0;\n  left: 0;\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  padding: 2px 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  line-height: 1;\n  user-select: none;\n  white-space: nowrap;\n  will-change: transform;\n}\n.sc-drw-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 26px;\n  height: 26px;\n  padding: 0;\n  margin: 0;\n  border: none;\n  border-radius: 3px;\n  background: transparent;\n  color: #d1d4dc;\n  cursor: pointer;\n}\n.sc-drw-btn:hover { background: #2a2e39; color: #ffffff; }\n.sc-drw-btn:active { background: #363c4e; }\n.sc-drw-btn[data-on=\"true\"] { color: #2962ff; }\n.sc-drw-btn[data-on=\"true\"]:hover { color: #4c7dff; }\n.sc-drw-btn svg { display: block; width: 16px; height: 16px; }\n.sc-drw-btn--wide { width: auto; padding: 0 6px; font-size: 11px; }\n.sc-drw-grip {\n  cursor: grab;\n  color: #5d6372;\n  width: 14px;\n}\n.sc-drw-grip:active { cursor: grabbing; }\n.sc-drw-sep {\n  width: 1px;\n  height: 18px;\n  margin: 0 2px;\n  background: #2a2e39;\n}\n.sc-drw-swatch {\n  width: 14px;\n  height: 14px;\n  border-radius: 2px;\n  border: 1px solid rgba(255, 255, 255, 0.25);\n}\n.sc-drw-menu {\n  position: absolute;\n  top: 0;\n  left: 0;\n  min-width: 120px;\n  padding: 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  z-index: 10;\n}\n.sc-drw-menu-item {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  width: 100%;\n  padding: 5px 8px;\n  border: none;\n  border-radius: 3px;\n  background: transparent;\n  color: inherit;\n  font: inherit;\n  text-align: left;\n  cursor: pointer;\n}\n.sc-drw-menu-item:hover { background: #2a2e39; }\n.sc-drw-menu-item[data-on=\"true\"] { color: #4c7dff; }\n.sc-drw-menu-item svg { width: 14px; height: 14px; flex: none; }\n.sc-drw-menu-label {\n  padding: 4px 8px 2px;\n  color: #787b86;\n  font-size: 10px;\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n}\n.sc-drw-palette {\n  display: grid;\n  grid-template-columns: repeat(7, 18px);\n  gap: 4px;\n  padding: 4px;\n}\n.sc-drw-palette-cell {\n  width: 18px;\n  height: 18px;\n  padding: 0;\n  border: 1px solid rgba(255, 255, 255, 0.12);\n  border-radius: 2px;\n  cursor: pointer;\n}\n.sc-drw-palette-cell:hover { transform: scale(1.15); border-color: #ffffff; }\n.sc-drw-palette--inline {\n  display: none;\n  position: absolute;\n  top: 100%;\n  left: 0;\n  margin-top: 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);\n  z-index: 5;\n}\n.sc-drw-field:hover .sc-drw-palette--inline { display: grid; }\n.sc-drw-dialog {\n  position: absolute;\n  top: 0;\n  left: 0;\n  width: 240px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 6px;\n  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  user-select: none;\n  will-change: transform;\n  z-index: 20;\n}\n.sc-drw-dialog-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 6px 8px;\n  font-weight: 600;\n  cursor: grab;\n  border-bottom: 1px solid #2a2e39;\n}\n.sc-drw-dialog-header:active { cursor: grabbing; }\n.sc-drw-dialog-tabs {\n  display: flex;\n  gap: 2px;\n  padding: 4px 6px 0;\n  border-bottom: 1px solid #2a2e39;\n}\n.sc-drw-dialog-tab {\n  padding: 4px 8px;\n  border: none;\n  border-radius: 3px 3px 0 0;\n  background: transparent;\n  color: #787b86;\n  font: inherit;\n  cursor: pointer;\n}\n.sc-drw-dialog-tab:hover { color: #d1d4dc; }\n.sc-drw-dialog-tab[data-on=\"true\"] {\n  color: #ffffff;\n  background: #2a2e39;\n}\n.sc-drw-dialog-body {\n  max-height: 320px;\n  overflow-y: auto;\n  padding: 8px;\n}\n.sc-drw-section {\n  padding: 6px 2px 3px;\n  color: #787b86;\n  font-size: 10px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n}\n.sc-drw-field {\n  position: relative;\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  padding: 3px 2px;\n  min-height: 24px;\n}\n.sc-drw-field-label {\n  flex: 1;\n  color: #9aa0ae;\n}\n.sc-drw-field-control {\n  position: relative;\n  display: flex;\n  align-items: center;\n  gap: 6px;\n}\n.sc-drw-input {\n  width: 110px;\n  padding: 3px 6px;\n  border: 1px solid #2a2e39;\n  border-radius: 3px;\n  background: #131722;\n  color: #d1d4dc;\n  font: inherit;\n}\n.sc-drw-input:focus { outline: none; border-color: #2962ff; }\n.sc-drw-input--narrow { width: 64px; }\n.sc-drw-color {\n  width: 26px;\n  height: 22px;\n  padding: 0;\n  border: 1px solid #2a2e39;\n  border-radius: 3px;\n  background: transparent;\n  cursor: pointer;\n}\n.sc-drw-levels {\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n  width: 100%;\n}\n.sc-drw-level-row {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  padding: 2px 0;\n}\n/* \u2500\u2500 Left tool palette (toolPalette.ts) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */\n.sc-drw-tools {\n  position: relative;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 2px;\n  width: 40px;\n  height: 100%;\n  padding: 4px 0;\n  background: #1e222d;\n  border-right: 1px solid #2a2e39;\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  line-height: 1;\n  user-select: none;\n}\n.sc-drw-tools-group {\n  position: relative;\n  display: flex;\n}\n.sc-drw-tools-btn {\n  width: 32px;\n  height: 32px;\n}\n.sc-drw-tools-btn svg { width: 18px; height: 18px; }\n.sc-drw-tools-icon {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n}\n.sc-drw-tools-icon svg { display: block; }\n.sc-drw-tools-caret {\n  position: absolute;\n  right: -1px;\n  bottom: -1px;\n  width: 10px;\n  height: 10px;\n  padding: 0;\n  margin: 0;\n  border: none;\n  background: transparent;\n  cursor: pointer;\n}\n.sc-drw-tools-caret::before {\n  content: '';\n  position: absolute;\n  right: 1px;\n  bottom: 1px;\n  border-left: 4px solid transparent;\n  border-bottom: 4px solid #5d6372;\n}\n.sc-drw-tools-caret:hover::before { border-bottom-color: #d1d4dc; }\n.sc-drw-tools-group:hover .sc-drw-tools-caret::before { border-bottom-color: #9598a1; }\n.sc-drw-tools-chrome {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 2px;\n  margin-top: auto;\n  padding-top: 4px;\n  border-top: 1px solid #2a2e39;\n}\n.sc-drw-flyout {\n  position: absolute;\n  left: calc(100% + 1px);\n  min-width: 190px;\n  max-height: 100%;\n  overflow-y: auto;\n  padding: 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  z-index: 20;\n}\n.sc-drw-flyout-item {\n  padding: 6px 8px;\n}\n.sc-drw-flyout-item--disabled {\n  opacity: 0.4;\n  cursor: default;\n}\n.sc-drw-flyout-item--disabled:hover { background: transparent; }\n.sc-drw-flyout-icon {\n  display: inline-flex;\n  flex: none;\n  color: #b2b5be;\n}\n.sc-drw-flyout-icon svg { width: 16px; height: 16px; }\n.sc-drw-flyout-title { flex: 1; }\n.sc-drw-flyout-key {\n  color: #787b86;\n  font-size: 10px;\n  text-transform: uppercase;\n}\n";
 /** Inject the drawings UI stylesheet — idempotent, SSR-safe. */
 function injectDrawingStyles() {
     if (typeof document === 'undefined') {
@@ -14250,6 +14264,419 @@ function attachSettingsDialog(chart, manager) {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+function humanize(id) {
+    return id.replace(/[-_]/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+}
+function mountToolPalette(container, chart, api, options) {
+    var e_1, _a, e_2, _b;
+    var _c;
+    injectDrawingStyles();
+    var label = (_c = options === null || options === void 0 ? void 0 : options.label) !== null && _c !== void 0 ? _c : (function (_id, fallback) { return fallback; });
+    var groups = api.catalog().filter(function (g) { return (options === null || options === void 0 ? void 0 : options.groups) === undefined || options.groups.includes(g.id); });
+    if ((options === null || options === void 0 ? void 0 : options.groups) !== undefined) {
+        // Honor the caller's ordering — filter() keeps catalog order.
+        groups.sort(function (a, b) { return options.groups.indexOf(a.id) - options.groups.indexOf(b.id); });
+    }
+    var root = createDom('div');
+    root.className = 'sc-drw-tools';
+    /** group id → last armed catalog item (defaults to first available). */
+    var lastUsed = new Map();
+    /** group id → rail button, for active-tool highlighting. */
+    var groupButtons = new Map();
+    /** catalog item id → flyout row, for active highlight inside flyouts. */
+    var itemButtons = new Map();
+    var flyout = null;
+    var flyoutGroup = null;
+    var destroyed = false;
+    // Chrome toggle state — local to this mount.
+    var stayInDrawing = false;
+    var allLocked = false;
+    var allHidden = false;
+    function firstAvailable(group) {
+        var e_3, _a;
+        try {
+            for (var _b = __values(group.sections), _c = _b.next(); !_c.done; _c = _b.next()) {
+                var section = _c.value;
+                var found = section.items.find(function (i) { return i.available; });
+                if (found !== undefined)
+                    return found;
+            }
+        }
+        catch (e_3_1) { e_3 = { error: e_3_1 }; }
+        finally {
+            try {
+                if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
+            }
+            finally { if (e_3) throw e_3.error; }
+        }
+        return null;
+    }
+    function armItem(item) {
+        var _a;
+        if (item.nonTool === true || item.overlayName === '') {
+            var handled = ((_a = options === null || options === void 0 ? void 0 : options.onNonTool) === null || _a === void 0 ? void 0 : _a.call(options, item)) === true;
+            if (!handled) {
+                api.deactivate();
+            }
+            return;
+        }
+        var owner = findGroupOf(item);
+        if (owner !== null) {
+            lastUsed.set(owner.id, item);
+        }
+        api.activate(item.id, {
+            continuous: stayInDrawing,
+            mode: isMagnetEnabled(chart) ? 'weak_magnet' : 'normal'
+        });
+        updateGroupIcons();
+    }
+    function findGroupOf(item) {
+        var e_4, _a, e_5, _b;
+        try {
+            for (var groups_2 = __values(groups), groups_2_1 = groups_2.next(); !groups_2_1.done; groups_2_1 = groups_2.next()) {
+                var g = groups_2_1.value;
+                try {
+                    for (var _c = (e_5 = void 0, __values(g.sections)), _d = _c.next(); !_d.done; _d = _c.next()) {
+                        var s = _d.value;
+                        if (s.items.includes(item))
+                            return g;
+                    }
+                }
+                catch (e_5_1) { e_5 = { error: e_5_1 }; }
+                finally {
+                    try {
+                        if (_d && !_d.done && (_b = _c.return)) _b.call(_c);
+                    }
+                    finally { if (e_5) throw e_5.error; }
+                }
+            }
+        }
+        catch (e_4_1) { e_4 = { error: e_4_1 }; }
+        finally {
+            try {
+                if (groups_2_1 && !groups_2_1.done && (_a = groups_2.return)) _a.call(groups_2);
+            }
+            finally { if (e_4) throw e_4.error; }
+        }
+        return null;
+    }
+    /** Rail buttons show the icon of the group's last-used tool (TV parity). */
+    function updateGroupIcons() {
+        var e_6, _a;
+        var _b;
+        try {
+            for (var groups_3 = __values(groups), groups_3_1 = groups_3.next(); !groups_3_1.done; groups_3_1 = groups_3.next()) {
+                var g = groups_3_1.value;
+                var btn = groupButtons.get(g.id);
+                if (btn === undefined)
+                    continue;
+                var current = (_b = lastUsed.get(g.id)) !== null && _b !== void 0 ? _b : firstAvailable(g);
+                if (current === null)
+                    continue;
+                var iconHost = btn.querySelector('.sc-drw-tools-icon');
+                if (iconHost !== null) {
+                    iconHost.innerHTML = getDrawingIcon(current.iconId);
+                }
+                btn.title = label(current.id, current.title);
+            }
+        }
+        catch (e_6_1) { e_6 = { error: e_6_1 }; }
+        finally {
+            try {
+                if (groups_3_1 && !groups_3_1.done && (_a = groups_3.return)) _a.call(groups_3);
+            }
+            finally { if (e_6) throw e_6.error; }
+        }
+    }
+    function updateActiveHighlight() {
+        var e_7, _a, e_8, _b;
+        var _c;
+        var tool = api.activeTool();
+        var activeItem = tool !== null ? findCatalogItemByOverlay(tool) : null;
+        try {
+            for (var groupButtons_1 = __values(groupButtons), groupButtons_1_1 = groupButtons_1.next(); !groupButtons_1_1.done; groupButtons_1_1 = groupButtons_1.next()) {
+                var _d = __read(groupButtons_1_1.value, 2), gid = _d[0], b = _d[1];
+                var on = activeItem !== null && ((_c = findGroupOf(activeItem)) === null || _c === void 0 ? void 0 : _c.id) === gid;
+                if (on) {
+                    b.setAttribute('data-on', 'true');
+                }
+                else {
+                    b.removeAttribute('data-on');
+                }
+            }
+        }
+        catch (e_7_1) { e_7 = { error: e_7_1 }; }
+        finally {
+            try {
+                if (groupButtons_1_1 && !groupButtons_1_1.done && (_a = groupButtons_1.return)) _a.call(groupButtons_1);
+            }
+            finally { if (e_7) throw e_7.error; }
+        }
+        try {
+            for (var itemButtons_1 = __values(itemButtons), itemButtons_1_1 = itemButtons_1.next(); !itemButtons_1_1.done; itemButtons_1_1 = itemButtons_1.next()) {
+                var _e = __read(itemButtons_1_1.value, 2), id = _e[0], b = _e[1];
+                if ((activeItem === null || activeItem === void 0 ? void 0 : activeItem.id) === id) {
+                    b.setAttribute('data-on', 'true');
+                }
+                else {
+                    b.removeAttribute('data-on');
+                }
+            }
+        }
+        catch (e_8_1) { e_8 = { error: e_8_1 }; }
+        finally {
+            try {
+                if (itemButtons_1_1 && !itemButtons_1_1.done && (_b = itemButtons_1.return)) _b.call(itemButtons_1);
+            }
+            finally { if (e_8) throw e_8.error; }
+        }
+    }
+    function closeFlyout() {
+        var _a;
+        (_a = flyout === null || flyout === void 0 ? void 0 : flyout.parentElement) === null || _a === void 0 ? void 0 : _a.removeChild(flyout);
+        flyout = null;
+        flyoutGroup = null;
+        // Rows are rebuilt per flyout — drop the refs so detached nodes don't
+        // accumulate across opens.
+        itemButtons.clear();
+    }
+    function openFlyout(group, anchor) {
+        var e_9, _a, e_10, _b;
+        if (flyoutGroup === group.id) {
+            closeFlyout();
+            return;
+        }
+        closeFlyout();
+        var menu = createDom('div');
+        menu.className = 'sc-drw-flyout';
+        try {
+            for (var _c = __values(group.sections), _d = _c.next(); !_d.done; _d = _c.next()) {
+                var section = _d.value;
+                if (group.sections.length > 1) {
+                    var head = createDom('div');
+                    head.className = 'sc-drw-menu-label';
+                    head.textContent = label("section:".concat(section.id), humanize(section.id));
+                    menu.appendChild(head);
+                }
+                var _loop_1 = function (it) {
+                    var row = createDom('button');
+                    row.className = 'sc-drw-menu-item sc-drw-flyout-item';
+                    row.innerHTML = "<span class=\"sc-drw-flyout-icon\">".concat(getDrawingIcon(it.iconId), "</span>") +
+                        "<span class=\"sc-drw-flyout-title\">".concat(label(it.id, it.title), "</span>") +
+                        (it.hotkey !== undefined ? "<span class=\"sc-drw-flyout-key\">".concat(it.hotkey, "</span>") : '');
+                    if (!it.available) {
+                        row.setAttribute('disabled', 'true');
+                        row.classList.add('sc-drw-flyout-item--disabled');
+                    }
+                    else {
+                        row.addEventListener('click', function (e) {
+                            e.stopPropagation();
+                            armItem(it);
+                            closeFlyout();
+                        });
+                    }
+                    itemButtons.set(it.id, row);
+                    menu.appendChild(row);
+                };
+                try {
+                    for (var _e = (e_10 = void 0, __values(section.items)), _f = _e.next(); !_f.done; _f = _e.next()) {
+                        var it = _f.value;
+                        _loop_1(it);
+                    }
+                }
+                catch (e_10_1) { e_10 = { error: e_10_1 }; }
+                finally {
+                    try {
+                        if (_f && !_f.done && (_b = _e.return)) _b.call(_e);
+                    }
+                    finally { if (e_10) throw e_10.error; }
+                }
+            }
+        }
+        catch (e_9_1) { e_9 = { error: e_9_1 }; }
+        finally {
+            try {
+                if (_d && !_d.done && (_a = _c.return)) _a.call(_c);
+            }
+            finally { if (e_9) throw e_9.error; }
+        }
+        // Vertical-align the flyout with the group button; clamp inside the
+        // container so a bottom group doesn't overflow the palette.
+        var rootRect = root.getBoundingClientRect();
+        var aRect = anchor.getBoundingClientRect();
+        menu.style.top = "".concat(Math.max(0, aRect.top - rootRect.top), "px");
+        root.appendChild(menu);
+        var overflow = menu.offsetTop + menu.offsetHeight - root.clientHeight;
+        if (overflow > 0) {
+            menu.style.top = "".concat(Math.max(0, menu.offsetTop - overflow), "px");
+        }
+        flyout = menu;
+        flyoutGroup = group.id;
+        updateActiveHighlight();
+    }
+    // ── Rail buttons ─────────────────────────────────────────────────────────
+    function addGroupButton(group) {
+        var _a, _b;
+        var current = (_a = lastUsed.get(group.id)) !== null && _a !== void 0 ? _a : firstAvailable(group);
+        var wrap = createDom('div');
+        wrap.className = 'sc-drw-tools-group';
+        var b = createDom('button');
+        b.className = 'sc-drw-btn sc-drw-tools-btn';
+        b.title = current !== null ? label(current.id, current.title) : group.id;
+        b.setAttribute('aria-label', b.title);
+        b.innerHTML = "<span class=\"sc-drw-tools-icon\">".concat(getDrawingIcon((_b = current === null || current === void 0 ? void 0 : current.iconId) !== null && _b !== void 0 ? _b : group.iconId), "</span>");
+        b.addEventListener('click', function (e) {
+            var _a;
+            e.stopPropagation();
+            var pick = (_a = lastUsed.get(group.id)) !== null && _a !== void 0 ? _a : firstAvailable(group);
+            if (pick !== null) {
+                armItem(pick);
+            }
+        });
+        wrap.appendChild(b);
+        // Caret opens the flyout — only when the group has >1 entry.
+        var itemCount = group.sections.reduce(function (n, s) { return n + s.items.length; }, 0);
+        if (itemCount > 1) {
+            var caret = createDom('button');
+            caret.className = 'sc-drw-tools-caret';
+            caret.setAttribute('aria-label', 'More tools');
+            caret.addEventListener('click', function (e) {
+                e.stopPropagation();
+                openFlyout(group, wrap);
+            });
+            wrap.appendChild(caret);
+            // Hover-to-open reads like TV on dense rails.
+            wrap.addEventListener('mouseenter', function () {
+                if (flyout !== null && flyoutGroup !== group.id) {
+                    openFlyout(group, wrap);
+                }
+            });
+        }
+        root.appendChild(wrap);
+        groupButtons.set(group.id, b);
+    }
+    try {
+        for (var groups_1 = __values(groups), groups_1_1 = groups_1.next(); !groups_1_1.done; groups_1_1 = groups_1.next()) {
+            var group = groups_1_1.value;
+            addGroupButton(group);
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (groups_1_1 && !groups_1_1.done && (_a = groups_1.return)) _a.call(groups_1);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    // ── Chrome footer ────────────────────────────────────────────────────────
+    if ((options === null || options === void 0 ? void 0 : options.chrome) !== false) {
+        var footer_1 = createDom('div');
+        footer_1.className = 'sc-drw-tools-chrome';
+        var addChromeButton = function (c) {
+            var b = createDom('button');
+            b.className = 'sc-drw-btn sc-drw-tools-btn';
+            b.title = label(c.id, c.title);
+            b.setAttribute('aria-label', b.title);
+            b.innerHTML = getDrawingIcon(c.iconId);
+            var setOn = function (on) {
+                if (on) {
+                    b.setAttribute('data-on', 'true');
+                }
+                else {
+                    b.removeAttribute('data-on');
+                }
+            };
+            b.addEventListener('click', function (e) {
+                e.stopPropagation();
+                switch (c.id) {
+                    case 'magnet': {
+                        var next = !isMagnetEnabled(chart);
+                        setMagnetEnabled(chart, next);
+                        setOn(next);
+                        break;
+                    }
+                    case 'stayInDrawing': {
+                        stayInDrawing = !stayInDrawing;
+                        setOn(stayInDrawing);
+                        break;
+                    }
+                    case 'lockAll': {
+                        allLocked = !allLocked;
+                        api.list().forEach(function (d) { api.update(d.id, { lock: allLocked }); });
+                        setOn(allLocked);
+                        break;
+                    }
+                    case 'hideAll': {
+                        allHidden = !allHidden;
+                        api.list().forEach(function (d) { api.update(d.id, { visible: !allHidden }); });
+                        setOn(allHidden);
+                        break;
+                    }
+                    case 'removeAll': {
+                        api.clear();
+                        break;
+                    }
+                }
+            });
+            if (c.id === 'magnet')
+                setOn(isMagnetEnabled(chart));
+            footer_1.appendChild(b);
+        };
+        try {
+            for (var DRAWING_CHROME_1 = __values(DRAWING_CHROME), DRAWING_CHROME_1_1 = DRAWING_CHROME_1.next(); !DRAWING_CHROME_1_1.done; DRAWING_CHROME_1_1 = DRAWING_CHROME_1.next()) {
+                var c = DRAWING_CHROME_1_1.value;
+                addChromeButton(c);
+            }
+        }
+        catch (e_2_1) { e_2 = { error: e_2_1 }; }
+        finally {
+            try {
+                if (DRAWING_CHROME_1_1 && !DRAWING_CHROME_1_1.done && (_b = DRAWING_CHROME_1.return)) _b.call(DRAWING_CHROME_1);
+            }
+            finally { if (e_2) throw e_2.error; }
+        }
+        root.appendChild(footer_1);
+    }
+    // ── Events ───────────────────────────────────────────────────────────────
+    var unbindTool = api.on('toolChange', function () {
+        updateActiveHighlight();
+    });
+    var onDocPointer = function (e) {
+        if (flyout !== null && e.target instanceof Node && !root.contains(e.target)) {
+            closeFlyout();
+        }
+    };
+    document.addEventListener('pointerdown', onDocPointer, true);
+    container.appendChild(root);
+    return {
+        destroy: function () {
+            var _a;
+            if (destroyed)
+                return;
+            destroyed = true;
+            document.removeEventListener('pointerdown', onDocPointer, true);
+            unbindTool();
+            closeFlyout();
+            (_a = root.parentElement) === null || _a === void 0 ? void 0 : _a.removeChild(root);
+            groupButtons.clear();
+            itemButtons.clear();
+        }
+    };
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 function isEditableTarget(target) {
     if (!(target instanceof Element)) {
         return false;
@@ -14399,6 +14826,8 @@ function createDrawingsApi(chart, options) {
         ? null
         : attachFloatingToolbar(chart, manager, toolbarHooks);
     var selectedId = null;
+    /** Mounted tool palettes — tracked so `destroy()` tears them all down. */
+    var palettes = new Set();
     var unbindSelection = [
         manager.on('select', function (p) {
             var _a, _b;
@@ -14602,7 +15031,7 @@ function createDrawingsApi(chart, options) {
             return true;
         });
     }
-    return __assign(__assign({}, manager), { catalog: function () {
+    var api = __assign(__assign({}, manager), { catalog: function () {
             return getDrawingCatalog();
         }, activate: function (tool, opts) {
             return manager.activate(resolveToolName(tool), opts);
@@ -14677,6 +15106,17 @@ function createDrawingsApi(chart, options) {
             }
             settingsDialog.open(overlay);
             return true;
+        }, mountToolbar: function (container, opts) {
+            // The palette drives `activate`/`list`/`clear` through the facade so
+            // catalog-id resolution applies.
+            var palette = mountToolPalette(container, chart, api, opts);
+            palettes.add(palette);
+            return {
+                destroy: function () {
+                    palette.destroy();
+                    palettes.delete(palette);
+                }
+            };
         }, configure: function (opts) {
             var _a;
             if ('store' in opts) {
@@ -14688,11 +15128,16 @@ function createDrawingsApi(chart, options) {
                 unsub();
             });
             closeTextEditorSessions(chart);
+            palettes.forEach(function (p) {
+                p.destroy();
+            });
+            palettes.clear();
             toolbar === null || toolbar === void 0 ? void 0 : toolbar.destroy();
             settingsDialog.destroy();
             clipboard = null;
             manager.destroy();
         } });
+    return api;
 }
 
 /**
@@ -52520,6 +52965,7 @@ exports.getSupportedLocales = getSupportedLocales;
 exports.getSupportedOverlays = getSupportedOverlays;
 exports.init = init;
 exports.isAlign45Enabled = isAlign45Enabled;
+exports.isMagnetEnabled = isMagnetEnabled;
 exports.isSnap45Active = isSnap45Active;
 exports.isVisibleOnInterval = isVisibleOnInterval;
 exports.measureText = measureText;
@@ -52533,6 +52979,7 @@ exports.registerStyles = registerStyles;
 exports.registerXAxis = registerXAxis;
 exports.registerYAxis = registerYAxis;
 exports.setAlign45Enabled = setAlign45Enabled;
+exports.setMagnetEnabled = setMagnetEnabled;
 exports.snap45Coordinate = snap45Coordinate;
 exports.textBoxDataEqual = textBoxDataEqual;
 exports.textBoxFont = textBoxFont;

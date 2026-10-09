@@ -274,6 +274,8 @@ export {
   getDrawingInteractionState,
   setAlign45Enabled,
   isAlign45Enabled,
+  setMagnetEnabled,
+  isMagnetEnabled,
   isSnap45Active,
   snap45Coordinate,
   bindDrawingKeyboard,
@@ -339,5 +341,7 @@ export type {
   RichTextAttrs,
   RichTextStyle,
   TextToolExtendData,
-  TextToolStyle
+  TextToolStyle,
+  ToolPalette,
+  ToolPaletteOptions
 } from './drawings'

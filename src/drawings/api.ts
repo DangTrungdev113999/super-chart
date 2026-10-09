@@ -27,6 +27,7 @@ import type { DrawingStore } from './persistence'
 import { serializeOverlay, serializedToOverlayCreate, type SerializedDrawing, type SerializedDrawingPoint } from './serialize'
 import { attachFloatingToolbar, type FloatingToolbar, type FloatingToolbarHooks } from './ui/floatingToolbar'
 import { attachSettingsDialog, type SettingsDialog } from './ui/settingsDialog'
+import { mountToolPalette, type ToolPalette, type ToolPaletteOptions } from './ui/toolPalette'
 import { closeTextEditorSessions } from './editor/overlayTextEditor'
 import { bindDrawingKeyboard } from './interaction/keyboard'
 
@@ -100,7 +101,7 @@ export interface DrawingsApi extends DrawingManager {
    * Catalog ids resolve through the registry; unknown ids fall through to
    * the raw overlay name for extension templates.
    */
-  activate: (tool: string, opts?: { continuous?: boolean, extendData?: unknown, points?: OverlayCreate['points'] }) => Nullable<string>
+  activate: (tool: string, opts?: { continuous?: boolean, extendData?: unknown, points?: OverlayCreate['points'], mode?: OverlayCreate['mode'] }) => Nullable<string>
 
   /**
    * Validating programmatic create.
@@ -130,6 +131,14 @@ export interface DrawingsApi extends DrawingManager {
 
   /** Open the library settings dialog for a drawing (DP-6c). */
   openSettings: (id: string) => boolean
+
+  /**
+   * Mount the built-in TradingView-style tool palette (DP-6d) into a host
+   * element — vertical icon rail + catalog flyouts + chrome footer. The
+   * host only positions the container; the palette owns its DOM and is
+   * destroyed with the api. Returns a handle for early teardown.
+   */
+  mountToolbar: (container: HTMLElement, opts?: ToolPaletteOptions) => ToolPalette
 
   configure: (opts: DrawingsConfigureOptions) => void
 }
@@ -196,6 +205,8 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
     : attachFloatingToolbar(chart, manager, toolbarHooks)
 
   let selectedId: string | null = null
+  /** Mounted tool palettes — tracked so `destroy()` tears them all down. */
+  const palettes = new Set<ToolPalette>()
   const unbindSelection = [
     manager.on('select', p => {
       selectedId = p.overlay?.id ?? null
@@ -415,7 +426,7 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
     })
   }
 
-  return {
+  const api: DrawingsApi = {
     ...manager,
 
     catalog () {
@@ -519,6 +530,19 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
       return true
     },
 
+    mountToolbar (container, opts) {
+      // The palette drives `activate`/`list`/`clear` through the facade so
+      // catalog-id resolution applies.
+      const palette = mountToolPalette(container, chart, api, opts)
+      palettes.add(palette)
+      return {
+        destroy: () => {
+          palette.destroy()
+          palettes.delete(palette)
+        }
+      }
+    },
+
     configure (opts) {
       if ('store' in opts) {
         manager.attachStore(opts.store ?? null)
@@ -531,10 +555,16 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
         unsub()
       })
       closeTextEditorSessions(chart)
+      palettes.forEach(p => {
+        p.destroy()
+      })
+      palettes.clear()
       toolbar?.destroy()
       settingsDialog.destroy()
       clipboard = null
       manager.destroy()
     }
   }
+
+  return api
 }

@@ -51,7 +51,7 @@ export interface DrawingManagerOptions {
 
 export interface DrawingManager {
   /** Arm a drawing tool — subsequent clicks collect its points. */
-  activate: (name: string, opts?: { continuous?: boolean, extendData?: unknown, points?: OverlayCreate['points'] }) => Nullable<string>
+  activate: (name: string, opts?: { continuous?: boolean, extendData?: unknown, points?: OverlayCreate['points'], mode?: OverlayCreate['mode'] }) => Nullable<string>
   deactivate: () => void
   activeTool: () => string | null
 
@@ -305,6 +305,11 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
         // Stay-in-drawing: re-arm the tool for the next drawing.
         if (continuousTool !== null && activeToolName === continuousTool) {
           chart.createOverlay({ name: continuousTool, groupId: DRAWINGS_GROUP_ID })
+        } else if (activeToolName !== null && overlay.name === activeToolName) {
+          // Non-continuous tool finished — disarm so activeTool() and the
+          // toolChange event reflect that nothing is armed anymore.
+          activeToolName = null
+          emit('toolChange', { tool: null })
         }
         break
       }
@@ -720,7 +725,8 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
         name,
         groupId: DRAWINGS_GROUP_ID,
         extendData: opts?.extendData,
-        points: opts?.points
+        points: opts?.points,
+        ...(opts?.mode !== undefined ? { mode: opts.mode } : {})
       })
       return typeof id === 'string' ? id : null
     },

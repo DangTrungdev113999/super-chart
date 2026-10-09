@@ -1099,6 +1099,7 @@ export interface DrawingManager {
 		continuous?: boolean;
 		extendData?: unknown;
 		points?: OverlayCreate["points"];
+		mode?: OverlayCreate["mode"];
 	}) => Nullable<string>;
 	deactivate: () => void;
 	activeTool: () => string | null;
@@ -1377,6 +1378,45 @@ export interface DrawingToolGroup {
 	sections: DrawingToolSection[];
 }
 /**
+ * Left-side tool palette (DP-6d) — TradingView's vertical drawing rail.
+ *
+ * Renders the catalog's groups → sections → items as an icon column with
+ * hover flyouts. Clicking a group button arms its last-used tool; clicking
+ * the caret (or the group again) opens the flyout. The chrome footer wires
+ * magnet / stay-in-drawing / lock-all / hide-all / remove-all.
+ *
+ * Hosts mount once per chart via `chart.drawings.mountToolbar(el)` and keep
+ * no drawing-UI state themselves — tool activation, last-picked memory,
+ * and pressed states all live here.
+ */
+export interface ToolPaletteOptions {
+	/**
+	 * i18n hook — translate any catalog title. `id` is the item/section/
+	 * chrome id (e.g. 'trendLine', 'lines', 'lockAll'); `fallback` is the
+	 * built-in English title.
+	 */
+	label?: (id: string, fallback: string) => string;
+	/**
+	 * Render only these group ids, in this order. Default: every group.
+	 * E.g. `['cursor', 'trend-line', 'gann-fib']` for a slim toolbar.
+	 */
+	groups?: string[];
+	/**
+	 * Show the chrome footer (magnet / stay-in-drawing / lock / hide /
+	 * remove-all). Default true.
+	 */
+	chrome?: boolean;
+	/**
+	 * Handler for non-drawing entries (cursor modes, eraser, zoom). Return
+	 * true to mark handled — the palette skips its default behavior
+	 * (deactivate the armed tool).
+	 */
+	onNonTool?: (item: DrawingToolItem) => boolean | undefined;
+}
+export interface ToolPalette {
+	destroy: () => void;
+}
+/**
  * `chart.drawings` — the public facade over the drawing subsystem.
  *
  * Wraps the DrawingManager (observe + shadow + history + persistence) with
@@ -1443,6 +1483,7 @@ export interface DrawingsApi extends DrawingManager {
 		continuous?: boolean;
 		extendData?: unknown;
 		points?: OverlayCreate["points"];
+		mode?: OverlayCreate["mode"];
 	}) => Nullable<string>;
 	/**
 	 * Validating programmatic create.
@@ -1484,6 +1525,13 @@ export interface DrawingsApi extends DrawingManager {
 	clear: (filter?: DrawingClearFilter) => string[];
 	/** Open the library settings dialog for a drawing (DP-6c). */
 	openSettings: (id: string) => boolean;
+	/**
+	 * Mount the built-in TradingView-style tool palette (DP-6d) into a host
+	 * element — vertical icon rail + catalog flyouts + chrome footer. The
+	 * host only positions the container; the palette owns its DOM and is
+	 * destroyed with the api. Returns a handle for early teardown.
+	 */
+	mountToolbar: (container: HTMLElement, opts?: ToolPaletteOptions) => ToolPalette;
 	configure: (opts: DrawingsConfigureOptions) => void;
 }
 export type DomPosition = "root" | "main" | "yAxis";
@@ -2146,10 +2194,19 @@ export interface DrawingInteractionState {
 	 * When true, every drawn/dragged point snaps — as if Shift were held.
 	 */
 	align45: boolean;
+	/**
+	 * TradingView's magnet mode — newly armed tools snap points to the
+	 * nearest candle OHLC. Applies to tools activated while the flag is on
+	 * (the armed overlay carries 'weak_magnet'); existing overlays keep the
+	 * mode they were drawn with.
+	 */
+	magnet: boolean;
 }
 export declare function getDrawingInteractionState(chart: Chart): DrawingInteractionState;
 export declare function setAlign45Enabled(chart: Chart, enabled: boolean): void;
 export declare function isAlign45Enabled(chart: Chart): boolean;
+export declare function setMagnetEnabled(chart: Chart, enabled: boolean): void;
+export declare function isMagnetEnabled(chart: Chart): boolean;
 /**
  * Whether a move should snap to 45° increments — Shift held during the
  * gesture, or the persistent toolbar toggle.

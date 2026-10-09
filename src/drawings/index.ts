@@ -42,6 +42,8 @@ export {
   getDrawingInteractionState,
   setAlign45Enabled,
   isAlign45Enabled,
+  setMagnetEnabled,
+  isMagnetEnabled,
   isSnap45Active,
   snap45Coordinate
 } from './interaction/snap45'
@@ -203,6 +205,10 @@ export { injectDrawingStyles, PALETTE as DRAWING_PALETTE } from './ui/styles'
 // ─── Settings dialog (DP-6c) ─────────────────────────────────────────────────
 export { attachSettingsDialog } from './ui/settingsDialog'
 export type { SettingsDialog } from './ui/settingsDialog'
+
+// ─── Left tool palette (DP-6d) ───────────────────────────────────────────────
+export { mountToolPalette } from './ui/toolPalette'
+export type { ToolPalette, ToolPaletteOptions } from './ui/toolPalette'
 export { buildSettingsTabs, VISIBLE_INTERVALS } from './ui/settingsSchema'
 export type {
   SettingField,

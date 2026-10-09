@@ -263,6 +263,106 @@ const CSS = `
   gap: 6px;
   padding: 2px 0;
 }
+/* ── Left tool palette (toolPalette.ts) ─────────────────────────────────── */
+.sc-drw-tools {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 40px;
+  height: 100%;
+  padding: 4px 0;
+  background: #1e222d;
+  border-right: 1px solid #2a2e39;
+  color: #d1d4dc;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 11px;
+  line-height: 1;
+  user-select: none;
+}
+.sc-drw-tools-group {
+  position: relative;
+  display: flex;
+}
+.sc-drw-tools-btn {
+  width: 32px;
+  height: 32px;
+}
+.sc-drw-tools-btn svg { width: 18px; height: 18px; }
+.sc-drw-tools-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.sc-drw-tools-icon svg { display: block; }
+.sc-drw-tools-caret {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+.sc-drw-tools-caret::before {
+  content: '';
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  border-left: 4px solid transparent;
+  border-bottom: 4px solid #5d6372;
+}
+.sc-drw-tools-caret:hover::before { border-bottom-color: #d1d4dc; }
+.sc-drw-tools-group:hover .sc-drw-tools-caret::before { border-bottom-color: #9598a1; }
+.sc-drw-tools-chrome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin-top: auto;
+  padding-top: 4px;
+  border-top: 1px solid #2a2e39;
+}
+.sc-drw-flyout {
+  position: absolute;
+  left: calc(100% + 1px);
+  min-width: 190px;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 4px;
+  background: #1e222d;
+  border: 1px solid #2a2e39;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  color: #d1d4dc;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 11px;
+  z-index: 20;
+}
+.sc-drw-flyout-item {
+  padding: 6px 8px;
+}
+.sc-drw-flyout-item--disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.sc-drw-flyout-item--disabled:hover { background: transparent; }
+.sc-drw-flyout-icon {
+  display: inline-flex;
+  flex: none;
+  color: #b2b5be;
+}
+.sc-drw-flyout-icon svg { width: 16px; height: 16px; }
+.sc-drw-flyout-title { flex: 1; }
+.sc-drw-flyout-key {
+  color: #787b86;
+  font-size: 10px;
+  text-transform: uppercase;
+}
 `
 
 /** Inject the drawings UI stylesheet — idempotent, SSR-safe. */

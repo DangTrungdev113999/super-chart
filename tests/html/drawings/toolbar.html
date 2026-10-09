@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script type="text/javascript" src="../../../dist/umd/super-chart.js"></script>
+    <script type="text/javascript" src="../../js/dataSource.js"></script>
+    <link rel="stylesheet" type="text/css" href="../../css/chart.css"/>
+    <title>Drawings — mountToolbar harness</title>
+    <style>
+      body { display: flex; margin: 0; font-family: -apple-system, sans-serif; background: #131722; color: #d1d4dc; }
+      #rail { width: 40px; height: 100vh; flex: none; }
+      #chart { flex: 1; height: 100vh; }
+    </style>
+  </head>
+  <body>
+    <div id="rail"></div>
+    <div id="chart"></div>
+    <script>
+      var chart = superChart.init('chart')
+      chart.createIndicator('MA')
+      var bars = generated()
+      chart.setDataLoader({
+        getBars: function (params) { params.callback(bars) }
+      })
+      chart.setSymbol({ ticker: 'FP_DEMO', pricePrecision: 2, volumePrecision: 0 })
+      chart.setPeriod({ type: 'day', span: 1 })
+      window.chart = chart
+      window.d = chart.drawings
+      window.palette = d.mountToolbar(document.getElementById('rail'))
+    </script>
+  </body>
+</html>
