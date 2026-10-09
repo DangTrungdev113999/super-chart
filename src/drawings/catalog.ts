@@ -144,6 +144,14 @@ const FIB_RECIPE: ToolbarControl[] = [
 ]
 
 /**
+ * Tools that pin every figure color (level.color / FIB_TREND_*) and only read
+ * `styles.line.size` — the line color/style controls would be dead UI.
+ */
+const FIB_LEVELS_RECIPE: ToolbarControl[] = [
+  { kind: 'levels' }, { kind: 'width' }, ...TAIL
+]
+
+/**
  * Stroke/fill live under `styles.<channel>.border*` / `.color` — the channel
  * is per-tool (rect | circle | polygon | arc), so the recipe is a factory.
  */
@@ -340,22 +348,22 @@ function buildCatalog (): DrawingToolGroup[] {
         {
           id: 'fibonacci',
           items: [
-            item('fibRetracement', 'fibonacciLine', 'Fib Retracement', 'fibRetracement', caps({ anchorCount: 2 }), FIB_RECIPE, { hotkey: 'F' }),
-            item('fibTimeZone', 'fibTimeZone', 'Fib Time Zone', 'fibTimeZone', caps({ anchorCount: 2 }), FIB_RECIPE),
-            item('fibChannel', 'fibChannel', 'Fib Channel', 'parallelChannel', caps({ anchorCount: 3 }), FIB_RECIPE),
+            item('fibRetracement', 'fibonacciLine', 'Fib Retracement', 'fibRetracement', caps({ anchorCount: 2 }), FIB_LEVELS_RECIPE, { hotkey: 'F' }),
+            item('fibTimeZone', 'fibTimeZone', 'Fib Time Zone', 'fibTimeZone', caps({ anchorCount: 2 }), FIB_LEVELS_RECIPE),
+            item('fibChannel', 'fibChannel', 'Fib Channel', 'parallelChannel', caps({ anchorCount: 3 }), FIB_LEVELS_RECIPE),
             item('fibCircles', 'fibCircles', 'Fib Circles', 'circle', caps({ anchorCount: 2 }), FIB_RECIPE),
             item('fibSpeedFan', 'fibSpeedFan', 'Fib Speed Resistance Fan', 'trendLine', caps({ anchorCount: 2 }), FIB_RECIPE),
             item('fibSpeedArcs', 'fibSpeedArcs', 'Fib Speed Resistance Arcs', 'arc', caps({ anchorCount: 2 }), FIB_RECIPE),
             item('fibSpiral', 'fibSpiral', 'Fib Spiral', 'arc', caps({ anchorCount: 2 }), FIB_RECIPE),
             item('fibWedge', 'fibWedge', 'Fib Wedge', 'triangle', caps({ anchorCount: 3 }), FIB_RECIPE),
-            item('fibExtension', 'fibExtension', 'Trend-Based Fib Extension', 'fibRetracement', caps({ anchorCount: 3 }), FIB_RECIPE),
-            item('fibTimeExtension', 'fibTimeExtension', 'Trend-Based Fib Time', 'fibTimeZone', caps({ anchorCount: 3 }), FIB_RECIPE)
+            item('fibExtension', 'fibExtension', 'Trend-Based Fib Extension', 'fibRetracement', caps({ anchorCount: 3 }), FIB_LEVELS_RECIPE),
+            item('fibTimeExtension', 'fibTimeExtension', 'Trend-Based Fib Time', 'fibTimeZone', caps({ anchorCount: 3 }), FIB_LEVELS_RECIPE)
           ]
         },
         {
           id: 'gann',
           items: [
-            item('gannFan', 'gannFan', 'Gann Fan', 'trendLine', caps({ anchorCount: 2 }), FIB_RECIPE),
+            item('gannFan', 'gannFan', 'Gann Fan', 'trendLine', caps({ anchorCount: 2 }), FIB_LEVELS_RECIPE),
             item('gannBox', 'gannBox', 'Gann Box', 'rect', caps({ anchorCount: 2 }), FIB_RECIPE),
             item('gannSquare', 'gannSquare', 'Gann Square', 'rect', caps({ anchorCount: 2 }), FIB_RECIPE),
             item('gannFixed', 'gannFixed', 'Gann Square Fixed', 'rect', caps({ anchorCount: 1 }), FIB_RECIPE),
@@ -456,7 +464,15 @@ function buildCatalog (): DrawingToolGroup[] {
             item('circle', 'circle', 'Circle', 'circle', caps({ anchorCount: 2 }), shapeRecipe('circle')),
             item('ellipse', 'ellipse', 'Ellipse', 'ellipse', caps({ anchorCount: 2 }), shapeRecipe('circle')),
             item('triangle', 'triangle', 'Triangle', 'triangle', caps({ anchorCount: 3 }), shapeRecipe('polygon')),
-            item('arc', 'arc', 'Arc', 'arc', caps({ anchorCount: 3 }), shapeRecipe('arc', 'polygon')),
+            // Arc's stroke channel is arc.{color,style,size} (not
+            // border*) — the generic shapeRecipe would write dead keys.
+            item('arc', 'arc', 'Arc', 'arc', caps({ anchorCount: 3 }), [
+              { kind: 'color', role: 'line', path: ['styles', 'arc', 'color'] },
+              { kind: 'color', role: 'fill', path: ['styles', 'polygon', 'color'] },
+              { kind: 'style', role: 'line', path: ['styles', 'arc', 'style'] },
+              { kind: 'width', path: ['styles', 'arc', 'size'] },
+              ...TAIL
+            ]),
             item('curve', 'curve', 'Curve', 'curve', caps({ anchorCount: 2 }), PATH_RECIPE),
             item('doubleCurve', 'doubleCurve', 'Double Curve', 'curve', caps({ anchorCount: 2 }), PATH_RECIPE),
             item('polyline', 'polyline', 'Polyline', 'polyline', caps({ anchorCount: -1 }), shapeRecipe('polygon'))

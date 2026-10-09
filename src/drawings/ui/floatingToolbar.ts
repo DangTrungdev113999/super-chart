@@ -183,15 +183,29 @@ export function attachFloatingToolbar (
   // ── control renderers ───────────────────────────────────────────────────
 
   /**
-   * Default role→styles path for controls without an explicit `path` and no
-   * matching entry in the item's stylePaths — the styles.line/polygon/text
-   * convention shared by line-drawn and text tools.
+   * Default kind/role→styles path for controls without an explicit `path`
+   * and no matching entry in the item's stylePaths — keyed the same way as
+   * ROLE_PATH_KEYS (`kind:role` for colors, `kind` for the rest). Writing a
+   * bare role here would corrupt the channel (a 'style' control must never
+   * fall back to a color path).
    */
   const DEFAULT_ROLE_PATHS: Record<string, StylePath> = {
-    line: ['styles', 'line', 'color'],
-    fill: ['styles', 'polygon', 'color'],
-    text: ['styles', 'text', 'color'],
-    background: ['styles', 'rect', 'color']
+    'color:line': ['styles', 'line', 'color'],
+    'color:fill': ['styles', 'polygon', 'color'],
+    'color:text': ['styles', 'text', 'color'],
+    'color:background': ['styles', 'rect', 'color'],
+    'style:line': ['styles', 'line', 'style'],
+    width: ['styles', 'line', 'size'],
+    text: ['styles', 'text', 'size'],
+    textAlign: ['styles', 'text', 'align']
+  }
+
+  /** Companion dash pattern for a styles.line.style write (mirrors the
+   * settings dialog's DASHED_VALUE companion). */
+  const LINE_DASHED_VALUE: Record<string, number[]> = {
+    solid: [6, 6],
+    dashed: [6, 6],
+    dotted: [2, 4]
   }
 
   /** Role → stylePaths slot key. Partial so a lookup miss stays truthy-
@@ -220,7 +234,7 @@ export function attachFloatingToolbar (
     if (mapped !== undefined) {
       return mapped
     }
-    return DEFAULT_ROLE_PATHS[role]
+    return DEFAULT_ROLE_PATHS[role !== '' ? `${control.kind}:${role}` : control.kind]
   }
 
   /** Write a resolved StylePath — routes to extendData when the path's
@@ -310,6 +324,15 @@ export function attachFloatingToolbar (
       title: s.title,
       active: currentPathValue(path) === s.value,
       onClick: () => {
+        const dashed = (LINE_DASHED_VALUE as Record<string, number[] | undefined>)[s.value]
+        if (dashed !== undefined && path[0] === 'styles' && path[2] === 'style' && current !== null) {
+          // Single update carrying both keys — renderers prefer
+          // <ch>.dashedValue over style when both exist, and two separate
+          // updates would double-emit 'update' (persist + broadcast twice).
+          const channel = path[1]
+          manager.update(current.id, { styles: { [channel]: { style: s.value, dashedValue: dashed } } })
+          return
+        }
         patchPath(path, s.value)
       }
     })))
@@ -716,7 +739,9 @@ export function attachFloatingToolbar (
   // ── lifecycle ───────────────────────────────────────────────────────────
 
   function show (overlay: Overlay): void {
-    if (destroyed) {
+    // Same filter as onSelect — a direct host call on a ghost/synced/
+    // in-progress overlay must not surface functional-looking controls.
+    if (destroyed || overlay.isDrawing() || overlay.ghost || overlay.synced) {
       return
     }
     hide()
@@ -852,6 +877,7 @@ export function attachFloatingToolbar (
       chart.unsubscribeAction('onZoom', onPanOrZoom)
       chart.unsubscribeAction('onScroll', onPanOrZoom)
       chart.unsubscribeAction('onVisibleRangeChange', onPanOrZoom)
+      chart.unsubscribeAction('onOverlayChange', onKernelOverlayChange)
       if (typeof document !== 'undefined') {
         document.removeEventListener('mousemove', onDragMove, true)
         document.removeEventListener('mouseup', onDragEnd, true)

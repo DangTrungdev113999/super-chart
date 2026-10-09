@@ -828,6 +828,15 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
       } finally {
         applyingInternal = false
       }
+      // Per-overlay change emits — an open settings dialog/toolbar keyed to
+      // a restored id must refresh its fields (the bare emit below only
+      // reaches listeners that don't filter by payload.overlay).
+      apply.restore.forEach(d => {
+        const restored = chart.getOverlayById(d.id)
+        if (restored !== null) {
+          emit('change', { overlay: restored })
+        }
+      })
       emit('change', {})
       return true
     },
@@ -863,6 +872,12 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
       } finally {
         applyingInternal = false
       }
+      apply.restore.forEach(d => {
+        const restored = chart.getOverlayById(d.id)
+        if (restored !== null) {
+          emit('change', { overlay: restored })
+        }
+      })
       emit('change', {})
       return true
     },

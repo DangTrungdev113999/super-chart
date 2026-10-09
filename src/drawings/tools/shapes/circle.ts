@@ -13,6 +13,7 @@
  */
 
 import type { Overlay, OverlayFigure, OverlayTemplate } from '../../../component/Overlay'
+import type Point from '../../../common/Point'
 
 import { isValid } from '../../../common/utils/typeChecks'
 import { computeResizeCursor, createAnchorFigures } from '../../interaction/anchors'
@@ -52,6 +53,33 @@ import type { ShapeExtendData } from './shapeCommon'
 
 // Pills + strips always use TV blue, regardless of shape color.
 const AXIS_PILL_COLOR = '#2962FF'
+
+/**
+ * Re-snap the edge anchor so it carries the CENTER's pixel delta — keeps
+ * radius = |edge − center| exact on log/percentage axes where a shared
+ * Δvalue translates non-uniformly in pixels.
+ */
+function snapEdgeToCenterPixelDelta (overlay: Overlay<ShapeExtendData>, prevPoints: Array<Partial<Point>>, nowPoints: Overlay<ShapeExtendData>['points']): void {
+  const chart = shapeChartOf(overlay)
+  if (chart === undefined) {
+    return
+  }
+  const prevCenter = pointToCoordinate(chart, overlay.paneId, isValid(prevPoints[0]) ? prevPoints[0] : {})
+  const prevEdge = pointToCoordinate(chart, overlay.paneId, isValid(prevPoints[1]) ? prevPoints[1] : {})
+  const nowCenter = pointToCoordinate(chart, overlay.paneId, isValid(nowPoints[0]) ? nowPoints[0] : {})
+  const target = nowPoints[1]
+  if (prevCenter === null || prevEdge === null || nowCenter === null || !isValid(target)) {
+    return
+  }
+  translatePointByPixelDelta(
+    chart,
+    overlay.paneId,
+    target,
+    prevEdge,
+    nowCenter.x - prevCenter.x,
+    nowCenter.y - prevCenter.y
+  )
+}
 
 const circle: OverlayTemplate<ShapeExtendData> = {
   name: 'circle',
@@ -132,27 +160,15 @@ const circle: OverlayTemplate<ShapeExtendData> = {
     if (params.figureKey !== 'anchor_0') {
       return
     }
-    const chart = shapeChartOf(this)
-    if (chart === undefined) {
-      return
-    }
-    const prev = params.prevPoints
-    const now = params.points
-    const prevCenter = pointToCoordinate(chart, this.paneId, isValid(prev[0]) ? prev[0] : {})
-    const prevEdge = pointToCoordinate(chart, this.paneId, isValid(prev[1]) ? prev[1] : {})
-    const nowCenter = pointToCoordinate(chart, this.paneId, isValid(now[0]) ? now[0] : {})
-    const target = now[1]
-    if (prevCenter === null || prevEdge === null || nowCenter === null || !isValid(target)) {
-      return
-    }
-    translatePointByPixelDelta(
-      chart,
-      this.paneId,
-      target,
-      prevEdge,
-      nowCenter.x - prevCenter.x,
-      nowCenter.y - prevCenter.y
-    )
+    snapEdgeToCenterPixelDelta(this, params.prevPoints, params.points)
+  },
+
+  performEventBodyMove: function (this: Overlay<ShapeExtendData>, params) {
+    // Body drags translate every stored point by a constant Δvalue — on
+    // log/percentage axes equal value-delta ≠ equal pixel-delta, so the
+    // radius visibly warps mid-drag. Re-snap the edge to the center's
+    // pixel delta to hold the radius invariant.
+    snapEdgeToCenterPixelDelta(this, params.prevPoints, params.points)
   },
 
   // ─── X axis: diameter strip + edge pills while selected/hovered ───

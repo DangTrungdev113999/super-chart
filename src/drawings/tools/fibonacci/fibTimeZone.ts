@@ -47,6 +47,7 @@ const fibTimeZone: OverlayTemplate<FibTimeZoneExtendData> = {
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,
+  extendData: { fib: { levels: FIB_TIME_ZONE_LEVELS } },
   createPointFigures: ({ overlay, coordinates, bounding, isSelected, isHovered, isTouch }) => {
     const figures: OverlayFigure[] = []
     if (coordinates.length < 2) {

@@ -10245,6 +10245,15 @@ function createDrawingManager(chart, options) {
             finally {
                 applyingInternal = false;
             }
+            // Per-overlay change emits — an open settings dialog/toolbar keyed to
+            // a restored id must refresh its fields (the bare emit below only
+            // reaches listeners that don't filter by payload.overlay).
+            apply.restore.forEach(function (d) {
+                var restored = chart.getOverlayById(d.id);
+                if (restored !== null) {
+                    emit('change', { overlay: restored });
+                }
+            });
             emit('change', {});
             return true;
         },
@@ -10281,6 +10290,12 @@ function createDrawingManager(chart, options) {
             finally {
                 applyingInternal = false;
             }
+            apply.restore.forEach(function (d) {
+                var restored = chart.getOverlayById(d.id);
+                if (restored !== null) {
+                    emit('change', { overlay: restored });
+                }
+            });
             emit('change', {});
             return true;
         },
@@ -10398,6 +10413,13 @@ var LINE_RECIPE = __spreadArray([
 var FIB_RECIPE = __spreadArray([
     { kind: 'color', role: 'line' }, { kind: 'levels' }, { kind: 'style', role: 'line' },
     { kind: 'width' }
+], __read(TAIL), false);
+/**
+ * Tools that pin every figure color (level.color / FIB_TREND_*) and only read
+ * `styles.line.size` — the line color/style controls would be dead UI.
+ */
+var FIB_LEVELS_RECIPE = __spreadArray([
+    { kind: 'levels' }, { kind: 'width' }
 ], __read(TAIL), false);
 /**
  * Stroke/fill live under `styles.<channel>.border*` / `.color` — the channel
@@ -10565,22 +10587,22 @@ function buildCatalog() {
                 {
                     id: 'fibonacci',
                     items: [
-                        item('fibRetracement', 'fibonacciLine', 'Fib Retracement', 'fibRetracement', caps({ anchorCount: 2 }), FIB_RECIPE, { hotkey: 'F' }),
-                        item('fibTimeZone', 'fibTimeZone', 'Fib Time Zone', 'fibTimeZone', caps({ anchorCount: 2 }), FIB_RECIPE),
-                        item('fibChannel', 'fibChannel', 'Fib Channel', 'parallelChannel', caps({ anchorCount: 3 }), FIB_RECIPE),
+                        item('fibRetracement', 'fibonacciLine', 'Fib Retracement', 'fibRetracement', caps({ anchorCount: 2 }), FIB_LEVELS_RECIPE, { hotkey: 'F' }),
+                        item('fibTimeZone', 'fibTimeZone', 'Fib Time Zone', 'fibTimeZone', caps({ anchorCount: 2 }), FIB_LEVELS_RECIPE),
+                        item('fibChannel', 'fibChannel', 'Fib Channel', 'parallelChannel', caps({ anchorCount: 3 }), FIB_LEVELS_RECIPE),
                         item('fibCircles', 'fibCircles', 'Fib Circles', 'circle', caps({ anchorCount: 2 }), FIB_RECIPE),
                         item('fibSpeedFan', 'fibSpeedFan', 'Fib Speed Resistance Fan', 'trendLine', caps({ anchorCount: 2 }), FIB_RECIPE),
                         item('fibSpeedArcs', 'fibSpeedArcs', 'Fib Speed Resistance Arcs', 'arc', caps({ anchorCount: 2 }), FIB_RECIPE),
                         item('fibSpiral', 'fibSpiral', 'Fib Spiral', 'arc', caps({ anchorCount: 2 }), FIB_RECIPE),
                         item('fibWedge', 'fibWedge', 'Fib Wedge', 'triangle', caps({ anchorCount: 3 }), FIB_RECIPE),
-                        item('fibExtension', 'fibExtension', 'Trend-Based Fib Extension', 'fibRetracement', caps({ anchorCount: 3 }), FIB_RECIPE),
-                        item('fibTimeExtension', 'fibTimeExtension', 'Trend-Based Fib Time', 'fibTimeZone', caps({ anchorCount: 3 }), FIB_RECIPE)
+                        item('fibExtension', 'fibExtension', 'Trend-Based Fib Extension', 'fibRetracement', caps({ anchorCount: 3 }), FIB_LEVELS_RECIPE),
+                        item('fibTimeExtension', 'fibTimeExtension', 'Trend-Based Fib Time', 'fibTimeZone', caps({ anchorCount: 3 }), FIB_LEVELS_RECIPE)
                     ]
                 },
                 {
                     id: 'gann',
                     items: [
-                        item('gannFan', 'gannFan', 'Gann Fan', 'trendLine', caps({ anchorCount: 2 }), FIB_RECIPE),
+                        item('gannFan', 'gannFan', 'Gann Fan', 'trendLine', caps({ anchorCount: 2 }), FIB_LEVELS_RECIPE),
                         item('gannBox', 'gannBox', 'Gann Box', 'rect', caps({ anchorCount: 2 }), FIB_RECIPE),
                         item('gannSquare', 'gannSquare', 'Gann Square', 'rect', caps({ anchorCount: 2 }), FIB_RECIPE),
                         item('gannFixed', 'gannFixed', 'Gann Square Fixed', 'rect', caps({ anchorCount: 1 }), FIB_RECIPE),
@@ -10681,7 +10703,14 @@ function buildCatalog() {
                         item('circle', 'circle', 'Circle', 'circle', caps({ anchorCount: 2 }), shapeRecipe('circle')),
                         item('ellipse', 'ellipse', 'Ellipse', 'ellipse', caps({ anchorCount: 2 }), shapeRecipe('circle')),
                         item('triangle', 'triangle', 'Triangle', 'triangle', caps({ anchorCount: 3 }), shapeRecipe('polygon')),
-                        item('arc', 'arc', 'Arc', 'arc', caps({ anchorCount: 3 }), shapeRecipe('arc', 'polygon')),
+                        // Arc's stroke channel is arc.{color,style,size} (not
+                        // border*) — the generic shapeRecipe would write dead keys.
+                        item('arc', 'arc', 'Arc', 'arc', caps({ anchorCount: 3 }), __spreadArray([
+                            { kind: 'color', role: 'line', path: ['styles', 'arc', 'color'] },
+                            { kind: 'color', role: 'fill', path: ['styles', 'polygon', 'color'] },
+                            { kind: 'style', role: 'line', path: ['styles', 'arc', 'style'] },
+                            { kind: 'width', path: ['styles', 'arc', 'size'] }
+                        ], __read(TAIL), false)),
                         item('curve', 'curve', 'Curve', 'curve', caps({ anchorCount: 2 }), PATH_RECIPE),
                         item('doubleCurve', 'doubleCurve', 'Double Curve', 'curve', caps({ anchorCount: 2 }), PATH_RECIPE),
                         item('polyline', 'polyline', 'Polyline', 'polyline', caps({ anchorCount: -1 }), shapeRecipe('polygon'))
@@ -11289,15 +11318,28 @@ function attachFloatingToolbar(chart, manager, hooks) {
     }
     // ── control renderers ───────────────────────────────────────────────────
     /**
-     * Default role→styles path for controls without an explicit `path` and no
-     * matching entry in the item's stylePaths — the styles.line/polygon/text
-     * convention shared by line-drawn and text tools.
+     * Default kind/role→styles path for controls without an explicit `path`
+     * and no matching entry in the item's stylePaths — keyed the same way as
+     * ROLE_PATH_KEYS (`kind:role` for colors, `kind` for the rest). Writing a
+     * bare role here would corrupt the channel (a 'style' control must never
+     * fall back to a color path).
      */
     var DEFAULT_ROLE_PATHS = {
-        line: ['styles', 'line', 'color'],
-        fill: ['styles', 'polygon', 'color'],
-        text: ['styles', 'text', 'color'],
-        background: ['styles', 'rect', 'color']
+        'color:line': ['styles', 'line', 'color'],
+        'color:fill': ['styles', 'polygon', 'color'],
+        'color:text': ['styles', 'text', 'color'],
+        'color:background': ['styles', 'rect', 'color'],
+        'style:line': ['styles', 'line', 'style'],
+        width: ['styles', 'line', 'size'],
+        text: ['styles', 'text', 'size'],
+        textAlign: ['styles', 'text', 'align']
+    };
+    /** Companion dash pattern for a styles.line.style write (mirrors the
+     * settings dialog's DASHED_VALUE companion). */
+    var LINE_DASHED_VALUE = {
+        solid: [6, 6],
+        dashed: [6, 6],
+        dotted: [2, 4]
     };
     /** Role → stylePaths slot key. Partial so a lookup miss stays truthy-
      * checkable (Record<string, K> claims every key exists). */
@@ -11325,7 +11367,7 @@ function attachFloatingToolbar(chart, manager, hooks) {
         if (mapped !== undefined) {
             return mapped;
         }
-        return DEFAULT_ROLE_PATHS[role];
+        return DEFAULT_ROLE_PATHS[role !== '' ? "".concat(control.kind, ":").concat(role) : control.kind];
     }
     /** Write a resolved StylePath — routes to extendData when the path's
      * root says so (measure/position tools style through extendData). */
@@ -11422,6 +11464,16 @@ function attachFloatingToolbar(chart, manager, hooks) {
             title: s.title,
             active: currentPathValue(path) === s.value,
             onClick: function () {
+                var _a;
+                var dashed = LINE_DASHED_VALUE[s.value];
+                if (dashed !== undefined && path[0] === 'styles' && path[2] === 'style' && current !== null) {
+                    // Single update carrying both keys — renderers prefer
+                    // <ch>.dashedValue over style when both exist, and two separate
+                    // updates would double-emit 'update' (persist + broadcast twice).
+                    var channel = path[1];
+                    manager.update(current.id, { styles: (_a = {}, _a[channel] = { style: s.value, dashedValue: dashed }, _a) });
+                    return;
+                }
                 patchPath(path, s.value);
             }
         }); }));
@@ -11813,7 +11865,9 @@ function attachFloatingToolbar(chart, manager, hooks) {
     }
     // ── lifecycle ───────────────────────────────────────────────────────────
     function show(overlay) {
-        if (destroyed) {
+        // Same filter as onSelect — a direct host call on a ghost/synced/
+        // in-progress overlay must not surface functional-looking controls.
+        if (destroyed || overlay.isDrawing() || overlay.ghost || overlay.synced) {
             return;
         }
         hide();
@@ -11946,6 +12000,7 @@ function attachFloatingToolbar(chart, manager, hooks) {
             chart.unsubscribeAction('onZoom', onPanOrZoom);
             chart.unsubscribeAction('onScroll', onPanOrZoom);
             chart.unsubscribeAction('onVisibleRangeChange', onPanOrZoom);
+            chart.unsubscribeAction('onOverlayChange', onKernelOverlayChange);
             if (typeof document !== 'undefined') {
                 document.removeEventListener('mousemove', onDragMove, true);
                 document.removeEventListener('mouseup', onDragEnd, true);
@@ -14612,7 +14667,7 @@ function createDrawingsApi(chart, options) {
             var overlay = chart.getOverlayById(id);
             // A mid-draw overlay rejects edits — a Coordinates commit would
             // recompute currentStep from the patch and corrupt the armed tool.
-            if (overlay === null || overlay.isDrawing() || overlay.ghost) {
+            if (overlay === null || overlay.isDrawing() || overlay.ghost || overlay.synced) {
                 return false;
             }
             settingsDialog.open(overlay);
@@ -38164,6 +38219,7 @@ var fibChannel = {
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
+    extendData: { fib: { levels: FIB_EXTENSION_LEVELS } },
     createPointFigures: function (_a) {
         var _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p;
         var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
@@ -38319,6 +38375,7 @@ var fibExtension = {
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
+    extendData: { fib: { levels: FIB_EXTENSION_LEVELS } },
     createPointFigures: function (_a) {
         var _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
         var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
@@ -38471,6 +38528,9 @@ var fibRetracement = {
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
+    // Seed fib.levels so the levels editor/persistence have a real array to
+    // edit — without it the toolbar's Levels section finds nothing.
+    extendData: { fib: { levels: FIB_RETRACEMENT_LEVELS } },
     createPointFigures: function (_a) {
         var _b, _c, _d, _e, _f, _g, _h, _j, _k;
         var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
@@ -38593,6 +38653,7 @@ var fibTimeExtension = {
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
+    extendData: { fib: { levels: FIB_TIME_EXTENSION_LEVELS } },
     createPointFigures: function (_a) {
         var _b, _c, _d, _e, _f, _g, _h;
         var overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
@@ -38740,6 +38801,7 @@ var fibTimeZone = {
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
+    extendData: { fib: { levels: FIB_TIME_ZONE_LEVELS } },
     createPointFigures: function (_a) {
         var _b, _c, _d, _e, _f, _g, _h;
         var overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
@@ -48636,6 +48698,25 @@ var arc = {
  */
 // Pills + strips always use TV blue, regardless of shape color.
 var AXIS_PILL_COLOR$1 = '#2962FF';
+/**
+ * Re-snap the edge anchor so it carries the CENTER's pixel delta — keeps
+ * radius = |edge − center| exact on log/percentage axes where a shared
+ * Δvalue translates non-uniformly in pixels.
+ */
+function snapEdgeToCenterPixelDelta(overlay, prevPoints, nowPoints) {
+    var chart = lineChartOf(overlay);
+    if (chart === undefined) {
+        return;
+    }
+    var prevCenter = pointToCoordinate(chart, overlay.paneId, isValid(prevPoints[0]) ? prevPoints[0] : {});
+    var prevEdge = pointToCoordinate(chart, overlay.paneId, isValid(prevPoints[1]) ? prevPoints[1] : {});
+    var nowCenter = pointToCoordinate(chart, overlay.paneId, isValid(nowPoints[0]) ? nowPoints[0] : {});
+    var target = nowPoints[1];
+    if (prevCenter === null || prevEdge === null || nowCenter === null || !isValid(target)) {
+        return;
+    }
+    translatePointByPixelDelta(chart, overlay.paneId, target, prevEdge, nowCenter.x - prevCenter.x, nowCenter.y - prevCenter.y);
+}
 var circle = {
     name: 'circle',
     totalStep: 3,
@@ -48709,20 +48790,14 @@ var circle = {
         if (params.figureKey !== 'anchor_0') {
             return;
         }
-        var chart = lineChartOf(this);
-        if (chart === undefined) {
-            return;
-        }
-        var prev = params.prevPoints;
-        var now = params.points;
-        var prevCenter = pointToCoordinate(chart, this.paneId, isValid(prev[0]) ? prev[0] : {});
-        var prevEdge = pointToCoordinate(chart, this.paneId, isValid(prev[1]) ? prev[1] : {});
-        var nowCenter = pointToCoordinate(chart, this.paneId, isValid(now[0]) ? now[0] : {});
-        var target = now[1];
-        if (prevCenter === null || prevEdge === null || nowCenter === null || !isValid(target)) {
-            return;
-        }
-        translatePointByPixelDelta(chart, this.paneId, target, prevEdge, nowCenter.x - prevCenter.x, nowCenter.y - prevCenter.y);
+        snapEdgeToCenterPixelDelta(this, params.prevPoints, params.points);
+    },
+    performEventBodyMove: function (params) {
+        // Body drags translate every stored point by a constant Δvalue — on
+        // log/percentage axes equal value-delta ≠ equal pixel-delta, so the
+        // radius visibly warps mid-drag. Re-snap the edge to the center's
+        // pixel delta to hold the radius invariant.
+        snapEdgeToCenterPixelDelta(this, params.prevPoints, params.points);
     },
     // ─── X axis: diameter strip + edge pills while selected/hovered ───
     createXAxisFigures: function (_a) {
@@ -49285,6 +49360,9 @@ var ellipse = {
 var parallelogram = {
     name: 'parallelogram',
     totalStep: 4,
+    // The derived 4th vertex is an affine extrapolation and can lie far
+    // outside the anchor hull — culling only tests stored anchors.
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -49842,6 +49920,9 @@ var rect = {
 var rotatedRect = {
     name: 'rotatedRect',
     totalStep: 4,
+    // Normal-projected far corners escape the anchor hull — culling only
+    // tests stored anchors.
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,

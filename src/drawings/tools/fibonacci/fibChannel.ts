@@ -77,6 +77,7 @@ const fibChannel: OverlayTemplate<FibChannelExtendData> = {
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,
+  extendData: { fib: { levels: FIB_EXTENSION_LEVELS } },
   createPointFigures: ({ chart, overlay, coordinates, bounding, yAxis, isSelected, isHovered, isTouch }) => {
     const figures: OverlayFigure[] = []
     if (coordinates.length < 2) {

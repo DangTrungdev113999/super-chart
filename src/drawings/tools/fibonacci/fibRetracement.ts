@@ -55,6 +55,9 @@ const fibRetracement: OverlayTemplate<FibRetracementExtendData> = {
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,
+  // Seed fib.levels so the levels editor/persistence have a real array to
+  // edit — without it the toolbar's Levels section finds nothing.
+  extendData: { fib: { levels: FIB_RETRACEMENT_LEVELS } },
   createPointFigures: ({ chart, overlay, coordinates, bounding, yAxis, isSelected, isHovered, isTouch }) => {
     const figures: OverlayFigure[] = []
     // Emit anchors BEFORE the arity return — a restored/incomplete overlay

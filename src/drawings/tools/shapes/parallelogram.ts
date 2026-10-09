@@ -43,6 +43,9 @@ import type { ShapeExtendData } from './shapeCommon'
 const parallelogram: OverlayTemplate<ShapeExtendData> = {
   name: 'parallelogram',
   totalStep: 4,
+  // The derived 4th vertex is an affine extrapolation and can lie far
+  // outside the anchor hull — culling only tests stored anchors.
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

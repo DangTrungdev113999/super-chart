@@ -512,7 +512,7 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
       const overlay = chart.getOverlayById(id)
       // A mid-draw overlay rejects edits — a Coordinates commit would
       // recompute currentStep from the patch and corrupt the armed tool.
-      if (overlay === null || overlay.isDrawing() || overlay.ghost) {
+      if (overlay === null || overlay.isDrawing() || overlay.ghost || overlay.synced) {
         return false
       }
       settingsDialog.open(overlay)

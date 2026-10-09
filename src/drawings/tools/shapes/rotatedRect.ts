@@ -46,6 +46,9 @@ import type { ShapeExtendData } from './shapeCommon'
 const rotatedRect: OverlayTemplate<ShapeExtendData> = {
   name: 'rotatedRect',
   totalStep: 4,
+  // Normal-projected far corners escape the anchor hull — culling only
+  // tests stored anchors.
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,
