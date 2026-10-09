@@ -26,6 +26,7 @@ export type UndoCommand =
   | { kind: 'create', snapshot: SerializedDrawing }
   | { kind: 'remove', snapshot: SerializedDrawing }
   | { kind: 'update', id: string, before: SerializedDrawing, after: SerializedDrawing }
+  | { kind: 'batch', commands: UndoCommand[] }
 
 /**
  * Operations the manager applies to the chart to perform an undo/redo.
@@ -35,6 +36,13 @@ export type UndoCommand =
 export interface UndoApply {
   remove: string[]
   restore: SerializedDrawing[]
+  /**
+   * Ordered sub-applies for 'batch' commands — present INSTEAD of
+   * remove/restore contents on a batch. Applying remove-then-restore per
+   * element preserves intra-batch ordering (a flat merge can't express
+   * "restore X, then remove X" for create→remove same-id sequences).
+   */
+  ops?: UndoApply[]
 }
 
 const DEFAULT_MAX_HISTORY = 100
@@ -50,6 +58,13 @@ export interface DrawingHistory {
   redo: () => UndoApply | null
   canUndo: () => boolean
   canRedo: () => boolean
+  /**
+   * Coalesce every push inside a begin/end window into one undoable
+   * gesture — bulk removes (Remove All) undo as a single step.
+   * endBatch is idempotent; nested begins collapse into the outer batch.
+   */
+  beginBatch: () => void
+  endBatch: () => void
   /** Drop every command referencing the id — a remote remove must not let undo resurrect it. */
   invalidateOverlay: (id: string) => void
   clear: () => void
@@ -60,6 +75,8 @@ export function createDrawingHistory (options?: { maxHistory?: number }): Drawin
   const max = options?.maxHistory ?? DEFAULT_MAX_HISTORY
   let undoStack: UndoCommand[] = []
   let redoStack: UndoCommand[] = []
+  let batchDepth = 0
+  let pendingBatch: UndoCommand[] | null = null
 
   function applyOf (cmd: UndoCommand, direction: 'undo' | 'redo'): UndoApply {
     switch (cmd.kind) {
@@ -75,6 +92,18 @@ export function createDrawingHistory (options?: { maxHistory?: number }): Drawin
         const snapshot = direction === 'undo' ? cmd.before : cmd.after
         return { remove: [], restore: [snapshot] }
       }
+      case 'batch': {
+        // Ordered per-child applies — undo unwinds children in reverse,
+        // redo replays forward. Flattening into one remove/restore pair
+        // would lose ordering for same-id create→remove sequences (zombie
+        // resurrect on undo).
+        const ordered = direction === 'undo' ? [...cmd.commands].reverse() : cmd.commands
+        const ops: UndoApply[] = []
+        for (const child of ordered) {
+          ops.push(applyOf(child, direction))
+        }
+        return { remove: [], restore: [], ops }
+      }
     }
   }
 
@@ -84,6 +113,11 @@ export function createDrawingHistory (options?: { maxHistory?: number }): Drawin
     },
 
     push (cmd: UndoCommand): void {
+      if (batchDepth > 0) {
+        ;(pendingBatch ??= []).push(cmd)
+        redoStack = []
+        return
+      }
       undoStack.push(cmd)
       if (undoStack.length > max) {
         undoStack.splice(0, undoStack.length - max)
@@ -93,6 +127,11 @@ export function createDrawingHistory (options?: { maxHistory?: number }): Drawin
     },
 
     pushUpdate (id: string, before: SerializedDrawing, after: SerializedDrawing): void {
+      if (batchDepth > 0) {
+        ;(pendingBatch ??= []).push({ kind: 'update', id, before, after })
+        redoStack = []
+        return
+      }
       const top = undoStack.length > 0 ? undoStack[undoStack.length - 1] : undefined
       if (
         top !== undefined &&
@@ -138,6 +177,32 @@ export function createDrawingHistory (options?: { maxHistory?: number }): Drawin
       return redoStack.length > 0
     },
 
+    beginBatch (): void {
+      batchDepth += 1
+      pendingBatch ??= []
+    },
+
+    endBatch (): void {
+      if (batchDepth === 0) {
+        return
+      }
+      batchDepth -= 1
+      if (batchDepth > 0) {
+        return
+      }
+      const collected = pendingBatch
+      pendingBatch = null
+      if (collected === null || collected.length === 0) {
+        return
+      }
+      // Single-command batches stay a plain command — undo reads identical.
+      undoStack.push(collected.length === 1 ? collected[0] : { kind: 'batch', commands: collected })
+      if (undoStack.length > max) {
+        undoStack.splice(0, undoStack.length - max)
+      }
+      redoStack = []
+    },
+
     invalidateOverlay (id: string): void {
       const keep = (cmd: UndoCommand): boolean => {
         switch (cmd.kind) {
@@ -146,15 +211,23 @@ export function createDrawingHistory (options?: { maxHistory?: number }): Drawin
             return cmd.snapshot.id !== id
           case 'update':
             return cmd.id !== id
+          case 'batch': {
+            cmd.commands = cmd.commands.filter(keep)
+            // An emptied batch is dead weight — drop it outright.
+            return cmd.commands.length > 0
+          }
         }
       }
       undoStack = undoStack.filter(keep)
       redoStack = redoStack.filter(keep)
+      pendingBatch = pendingBatch?.filter(keep) ?? null
     },
 
     clear (): void {
       undoStack = []
       redoStack = []
+      batchDepth = 0
+      pendingBatch = null
     }
   }
 }

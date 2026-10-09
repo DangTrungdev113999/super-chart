@@ -19,8 +19,9 @@ import { getOverlayTemplate } from '../extension/overlay/index'
 import { logWarn } from '../common/utils/logger'
 import type { Overlay, OverlayCreate, OverlayChangeEvent } from '../component/Overlay'
 import { serializeOverlay, serializedToOverlayCreate, serializedFingerprint, type SerializedDrawing } from './serialize'
-import { createDrawingHistory, type DrawingHistory } from './history'
+import { createDrawingHistory, type DrawingHistory, type UndoApply } from './history'
 import type { DrawingStore, DrawingScope, DrawingStoreEvent } from './persistence'
+import { getDrawingInteractionState } from './interaction/snap45'
 
 /**
  * DrawingManager — OBSERVE + shadow state.
@@ -50,14 +51,19 @@ export interface DrawingManagerOptions {
 }
 
 export interface DrawingManager {
-  /** Arm a drawing tool — subsequent clicks collect its points. */
+  /**
+   * Arm a drawing tool — subsequent clicks collect its points.
+   * `continuous`/`mode` default to the chart's interaction-state toggles
+   * (stay-in-drawing / magnet) so every arm path — palette click, hotkey,
+   * programmatic — behaves identically.
+   */
   activate: (name: string, opts?: { continuous?: boolean, extendData?: unknown, points?: OverlayCreate['points'], mode?: OverlayCreate['mode'] }) => Nullable<string>
   deactivate: () => void
   activeTool: () => string | null
 
   /** Programmatic create — already-finished overlays (AI / restore paths). */
   create: (spec: OverlayCreate) => Nullable<string>
-  update: (id: string, patch: Partial<Pick<OverlayCreate, 'points' | 'styles' | 'extendData' | 'lock' | 'visible' | 'mode' | 'modeSensitivity' | 'zLevel'>>) => boolean
+  update: (id: string, patch: Partial<Pick<OverlayCreate, 'points' | 'styles' | 'extendData' | 'lock' | 'visible' | 'mode' | 'modeSensitivity' | 'zLevel'>>, opts?: { skipHistory?: boolean }) => boolean
   remove: (id: string) => boolean
   list: () => SerializedDrawing[]
   get: (id: string) => Nullable<Overlay>
@@ -69,6 +75,13 @@ export interface DrawingManager {
   redo: () => boolean
   canUndo: () => boolean
   canRedo: () => boolean
+
+  /**
+   * Coalesce every history push inside begin/end into ONE undoable
+   * gesture — a bulk clear() must not mint one undo step per drawing.
+   */
+  beginUndoBatch: () => void
+  endUndoBatch: () => void
 
   attachStore: (store: DrawingStore | null) => void
   flush: () => Promise<void>
@@ -113,6 +126,20 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
   let store: DrawingStore | null = options?.store ?? null
   let activeToolName: string | null = null
   let continuousTool: string | null = null
+  /** Spec carried by stay-in-drawing re-arms — seed points never carry
+   *  (a re-arm must start empty); extendData carries, mode is re-read live
+   *  from the interaction toggles at each re-arm. */
+  let continuousSpec: { mode?: OverlayCreate['mode'], extendData?: unknown } | null = null
+  /** Identity of the overlay currently occupying the progress slot for the
+   *  armed tool — bookkeeping clears only when THIS overlay goes away, so a
+   *  displaced same-name overlay can't disarm the tool that just armed. */
+  let armedOverlayId: string | null = null
+  /** True inside activate()'s createOverlay call — the displaced-overlay
+   *  'remove' emitted there must not clear bookkeeping the call just set. */
+  let activatingOverlay = false
+  /** Ids whose next 'update' commit skips the undo stack — bulk chrome
+   *  gestures (lock-all/hide-all) must not mint one entry per drawing. */
+  const skipHistoryIds = new Set<string>()
   let applyDepth = 0 // beginApply/endApply nesting
   let applyingInternal = false // manager-originated ops must not self-record
   let remoteApplying = false // store events applied to chart — no re-persist
@@ -263,7 +290,96 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
     scheduleSave()
   }
 
+  /**
+   * Apply an undo/redo result. `ops` (batch children) run strictly in order —
+   * each element removes then restores, so same-id sequences like
+   * create→remove undo correctly instead of flattening into a zombie.
+   */
+  function applyHistoryOps (apply: UndoApply): void {
+    const ops = apply.ops ?? [apply]
+    applyingInternal = true
+    try {
+      for (const op of ops) {
+        op.remove.forEach(id => { chart.removeOverlay({ id }) })
+        op.restore.forEach(d => {
+          const create = serializedToOverlayCreate(d)
+          if (create === null) {
+            return
+          }
+          if (chart.getOverlayById(d.id) !== null) {
+            chart.overrideOverlay(create)
+          } else {
+            chart.createOverlay(create)
+          }
+          shadow.set(d.id, d)
+          persistUpsert(d)
+        })
+        op.remove.forEach(id => {
+          shadow.delete(id)
+          persistRemove(id)
+        })
+      }
+    } finally {
+      applyingInternal = false
+    }
+  }
+
+  /** Per-overlay change emits — an open settings dialog/toolbar keyed to a
+   *  restored id must refresh its fields (the bare emit only reaches
+   *  listeners that don't filter by payload.overlay). */
+  function emitRestored (apply: UndoApply): void {
+    const ops = apply.ops ?? [apply]
+    ops.forEach(op => {
+      op.restore.forEach(d => {
+        const restored = chart.getOverlayById(d.id)
+        if (restored !== null) {
+          emit('change', { overlay: restored })
+        }
+      })
+    })
+    emit('change', {})
+  }
+
   /** Commit a finished overlay: shadow + create command + persistence. */
+  /**
+   * Post-completion bookkeeping for an armed tool: stay-in-drawing re-arms
+   * (with extendData from the armed spec — seed points never carry — and
+   * mode re-read LIVE from the interaction toggles), otherwise disarm so
+   * activeTool()/toolChange reflect that nothing collects clicks.
+   * Gates on the overlay that just finished being the armed one — an
+   * unrelated drawEnd can never arm or disarm the user's tool.
+   */
+  function finishArmed (overlay: Overlay, wasArmed: boolean): void {
+    const interaction = getDrawingInteractionState(chart)
+    if (
+      wasArmed && overlay.id === armedOverlayId &&
+      overlay.name === continuousTool && interaction.stayInDrawing
+    ) {
+      const spec: OverlayCreate = { name: overlay.name, groupId: DRAWINGS_GROUP_ID }
+      if (interaction.magnet) {
+        spec.mode = 'weak_magnet'
+      }
+      if (continuousSpec?.extendData !== undefined) {
+        spec.extendData = continuousSpec.extendData
+      }
+      activatingOverlay = true
+      try {
+        const rearmId = chart.createOverlay(spec)
+        armedOverlayId = typeof rearmId === 'string' ? rearmId : null
+      } finally {
+        activatingOverlay = false
+      }
+      return
+    }
+    if (overlay.id === armedOverlayId || (activeToolName !== null && overlay.name === activeToolName)) {
+      activeToolName = null
+      continuousTool = null
+      continuousSpec = null
+      armedOverlayId = null
+      emit('toolChange', { tool: null })
+    }
+  }
+
   function commitCreate (overlay: Overlay): void {
     armed.delete(overlay.id)
     const serialized = trackShadow(overlay)
@@ -301,16 +417,11 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
         break
       }
       case 'drawEnd': {
+        // Capture before commitCreate drops it — re-arm must only fire for
+        // the overlay the tool actually armed, not any drawEnd in scope.
+        const wasArmed = armed.has(overlay.id)
         commitCreate(overlay)
-        // Stay-in-drawing: re-arm the tool for the next drawing.
-        if (continuousTool !== null && activeToolName === continuousTool) {
-          chart.createOverlay({ name: continuousTool, groupId: DRAWINGS_GROUP_ID })
-        } else if (activeToolName !== null && overlay.name === activeToolName) {
-          // Non-continuous tool finished — disarm so activeTool() and the
-          // toolChange event reflect that nothing is armed anymore.
-          activeToolName = null
-          emit('toolChange', { tool: null })
-        }
+        finishArmed(overlay, wasArmed)
         break
       }
       case 'editStart': {
@@ -357,6 +468,7 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
         // armed clears (also covers ghost→mirror promotion).
         if (armed.has(overlay.id) && !overlay.isDrawing()) {
           commitCreate(overlay)
+          finishArmed(overlay, true)
           break
         }
         // syncApplied: a peer's edit applied onto the canonical overlay —
@@ -379,7 +491,9 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
           break
         }
         if (before !== undefined && serializedFingerprint(before) !== serializedFingerprint(after)) {
-          if (!fromSync) {
+          // Bulk chrome ops (lock-all/hide-all) mark ids to skip the undo
+          // stack — 40 drawings locking at once must not mint 40 steps.
+          if (!fromSync && !skipHistoryIds.delete(overlay.id)) {
             history.pushUpdate(overlay.id, before, after)
           }
           persistUpsert(after)
@@ -398,6 +512,19 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
         // tombstone is needed, and an undo entry would resurrect a drawing
         // the template deliberately discarded.
         if (wasArmed && shadowed === undefined) {
+          // Host-side removeOverlay of the armed overlay (bypassing
+          // deactivate) still has to clear armed bookkeeping — otherwise
+          // activeTool() reports a tool that no longer collects clicks.
+          // Identity + activatingOverlay: re-arming the same tool displaces
+          // the old same-name overlay — that 'remove' must NOT disarm the
+          // arm that just replaced it.
+          if (!activatingOverlay && (overlay.id === armedOverlayId || overlay.name === activeToolName)) {
+            activeToolName = null
+            continuousTool = null
+            continuousSpec = null
+            armedOverlayId = null
+            emit('toolChange', { tool: null })
+          }
           return
         }
         // Epoch-tagged drop: an overlay stamped before the current scope
@@ -488,6 +615,17 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
       armed.clear()
       pendingEdit.clear()
       history.clear()
+      // Drop tool bookkeeping with the wipe — an async host remove of the
+      // armed overlay can arrive after armed.clear() and slip the 'remove'
+      // cleanup, leaving activeTool() armed against nothing.
+      const hadTool = activeToolName !== null
+      activeToolName = null
+      continuousTool = null
+      continuousSpec = null
+      armedOverlayId = null
+      if (hadTool) {
+        emit('toolChange', { tool: null })
+      }
       const afterLoad = (): void => {
         if (epoch === scopeEpoch) {
           switchInFlight = false
@@ -718,30 +856,65 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
       if (typeof name !== 'string' || name === '' || getOverlayTemplate(name) === null) {
         return null
       }
+      const interaction = getDrawingInteractionState(chart)
+      const continuous = opts?.continuous ?? interaction.stayInDrawing
+      const mode = opts?.mode ?? (interaction.magnet ? 'weak_magnet' : undefined)
       activeToolName = name
-      continuousTool = opts?.continuous === true ? name : null
-      emit('toolChange', { tool: name })
-      const id = chart.createOverlay({
-        name,
-        groupId: DRAWINGS_GROUP_ID,
-        extendData: opts?.extendData,
-        points: opts?.points,
-        ...(opts?.mode !== undefined ? { mode: opts.mode } : {})
-      })
+      continuousTool = continuous ? name : null
+      continuousSpec = continuous
+        ? { ...(mode !== undefined ? { mode } : {}), ...(opts?.extendData !== undefined ? { extendData: opts.extendData } : {}) }
+        : null
+      // The createOverlay inside this call can emit a displaced-overlay
+      // 'remove' for the previous in-progress drawing — activatingOverlay
+      // keeps that event from disarming the bookkeeping being set here.
+      activatingOverlay = true
+      let id: string | null = null
+      try {
+        id = chart.createOverlay({
+          name,
+          groupId: DRAWINGS_GROUP_ID,
+          extendData: opts?.extendData,
+          points: opts?.points,
+          ...(mode !== undefined ? { mode } : {})
+        }) as Nullable<string>
+      } catch (err) {
+        // Never claim an arm that failed — a createOverlay throw leaves
+        // listeners thinking a tool collects clicks when nothing exists.
+        activeToolName = null
+        continuousTool = null
+        continuousSpec = null
+        armedOverlayId = null
+        throw (err instanceof Error ? err : new Error(String(err)))
+      } finally {
+        activatingOverlay = false
+      }
+      const overlay = id !== null ? chart.getOverlayById(id) : null
+      if (overlay?.isDrawing() === true) {
+        armedOverlayId = overlay.id
+        // toolChange fires only after the armed overlay provably exists —
+        // listeners can trust activeTool() inside the emit.
+        emit('toolChange', { tool: name })
+      } else {
+        // Seed points satisfied the template at construction (or create
+        // failed) — nothing is armed, so nothing may stay armed in state.
+        activeToolName = null
+        continuousTool = null
+        continuousSpec = null
+        armedOverlayId = null
+      }
       return typeof id === 'string' ? id : null
     },
 
     deactivate () {
-      if (activeToolName === null) {
-        return
-      }
+      const hadTool = activeToolName !== null
       activeToolName = null
       continuousTool = null
+      continuousSpec = null
+      armedOverlayId = null
       // Disarm means disarm — an in-progress overlay still in the progress
       // slot would keep collecting clicks while activeTool() reports null.
-      // Target the progress slot, not an isDrawing scan: ghost mirrors are
-      // isDrawing() too and could win the find() before the real overlay.
-      // (The scan fallback stays for pre-registry edge states.)
+      // Runs even without an active tool: a stranded progress overlay (stale
+      // bookkeeping states) must not survive the disarm.
       const slot = chart.getChartStore().getProgressOverlayInfo()?.overlay
       const inProgress = slot !== undefined && !slot.ghost && !slot.synced
         ? slot
@@ -749,7 +922,9 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
       if (inProgress !== undefined) {
         chart.removeOverlay({ id: inProgress.id })
       }
-      emit('toolChange', { tool: null })
+      if (hadTool || inProgress !== undefined) {
+        emit('toolChange', { tool: null })
+      }
     },
 
     activeTool () {
@@ -773,8 +948,15 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
       return typeof id === 'string' ? id : null
     },
 
-    update (id, patch) {
-      return chart.overrideOverlay({ id, ...patch })
+    update (id, patch, opts) {
+      if (opts?.skipHistory === true) {
+        skipHistoryIds.add(id)
+      }
+      const ok = chart.overrideOverlay({ id, ...patch })
+      if (!ok) {
+        skipHistoryIds.delete(id)
+      }
+      return ok
     },
 
     remove (id) {
@@ -811,39 +993,8 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
       if (apply === null) {
         return false
       }
-      applyingInternal = true
-      try {
-        apply.remove.forEach(id => { chart.removeOverlay({ id }) })
-        apply.restore.forEach(d => {
-          const create = serializedToOverlayCreate(d)
-          if (create === null) {
-            return
-          }
-          if (chart.getOverlayById(d.id) !== null) {
-            chart.overrideOverlay(create)
-          } else {
-            chart.createOverlay(create)
-          }
-          shadow.set(d.id, d)
-          persistUpsert(d)
-        })
-        apply.remove.forEach(id => {
-          shadow.delete(id)
-          persistRemove(id)
-        })
-      } finally {
-        applyingInternal = false
-      }
-      // Per-overlay change emits — an open settings dialog/toolbar keyed to
-      // a restored id must refresh its fields (the bare emit below only
-      // reaches listeners that don't filter by payload.overlay).
-      apply.restore.forEach(d => {
-        const restored = chart.getOverlayById(d.id)
-        if (restored !== null) {
-          emit('change', { overlay: restored })
-        }
-      })
-      emit('change', {})
+      applyHistoryOps(apply)
+      emitRestored(apply)
       return true
     },
 
@@ -855,36 +1006,8 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
       if (apply === null) {
         return false
       }
-      applyingInternal = true
-      try {
-        apply.remove.forEach(id => { chart.removeOverlay({ id }) })
-        apply.restore.forEach(d => {
-          const create = serializedToOverlayCreate(d)
-          if (create === null) {
-            return
-          }
-          if (chart.getOverlayById(d.id) !== null) {
-            chart.overrideOverlay(create)
-          } else {
-            chart.createOverlay(create)
-          }
-          shadow.set(d.id, d)
-          persistUpsert(d)
-        })
-        apply.remove.forEach(id => {
-          shadow.delete(id)
-          persistRemove(id)
-        })
-      } finally {
-        applyingInternal = false
-      }
-      apply.restore.forEach(d => {
-        const restored = chart.getOverlayById(d.id)
-        if (restored !== null) {
-          emit('change', { overlay: restored })
-        }
-      })
-      emit('change', {})
+      applyHistoryOps(apply)
+      emitRestored(apply)
       return true
     },
 
@@ -894,6 +1017,14 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
 
     canRedo () {
       return history.canRedo()
+    },
+
+    beginUndoBatch () {
+      history.beginBatch()
+    },
+
+    endUndoBatch () {
+      history.endBatch()
     },
 
     attachStore (next) {

@@ -44,6 +44,8 @@ export {
   isAlign45Enabled,
   setMagnetEnabled,
   isMagnetEnabled,
+  setStayInDrawingEnabled,
+  isStayInDrawingEnabled,
   isSnap45Active,
   snap45Coordinate
 } from './interaction/snap45'
@@ -206,8 +208,8 @@ export { injectDrawingStyles, PALETTE as DRAWING_PALETTE } from './ui/styles'
 export { attachSettingsDialog } from './ui/settingsDialog'
 export type { SettingsDialog } from './ui/settingsDialog'
 
-// ─── Left tool palette (DP-6d) ───────────────────────────────────────────────
-export { mountToolPalette } from './ui/toolPalette'
+// ─── Left tool palette (DP-6d) — mount via `chart.drawings.mountToolbar`
+// so api.destroy() can tear it down; the raw function stays internal.
 export type { ToolPalette, ToolPaletteOptions } from './ui/toolPalette'
 export { buildSettingsTabs, VISIBLE_INTERVALS } from './ui/settingsSchema'
 export type {

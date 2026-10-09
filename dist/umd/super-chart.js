@@ -9352,7 +9352,10 @@ function createDrawingHistory(options) {
     var max = (_a = options === null || options === void 0 ? void 0 : options.maxHistory) !== null && _a !== void 0 ? _a : DEFAULT_MAX_HISTORY;
     var undoStack = [];
     var redoStack = [];
+    var batchDepth = 0;
+    var pendingBatch = null;
     function applyOf(cmd, direction) {
+        var e_1, _a;
         switch (cmd.kind) {
             case 'create':
                 return direction === 'undo'
@@ -9366,6 +9369,28 @@ function createDrawingHistory(options) {
                 var snapshot = direction === 'undo' ? cmd.before : cmd.after;
                 return { remove: [], restore: [snapshot] };
             }
+            case 'batch': {
+                // Ordered per-child applies — undo unwinds children in reverse,
+                // redo replays forward. Flattening into one remove/restore pair
+                // would lose ordering for same-id create→remove sequences (zombie
+                // resurrect on undo).
+                var ordered = direction === 'undo' ? __spreadArray([], __read(cmd.commands), false).reverse() : cmd.commands;
+                var ops = [];
+                try {
+                    for (var ordered_1 = __values(ordered), ordered_1_1 = ordered_1.next(); !ordered_1_1.done; ordered_1_1 = ordered_1.next()) {
+                        var child = ordered_1_1.value;
+                        ops.push(applyOf(child, direction));
+                    }
+                }
+                catch (e_1_1) { e_1 = { error: e_1_1 }; }
+                finally {
+                    try {
+                        if (ordered_1_1 && !ordered_1_1.done && (_a = ordered_1.return)) _a.call(ordered_1);
+                    }
+                    finally { if (e_1) throw e_1.error; }
+                }
+                return { remove: [], restore: [], ops: ops };
+            }
         }
     }
     return {
@@ -9373,6 +9398,11 @@ function createDrawingHistory(options) {
             return undoStack.length;
         },
         push: function (cmd) {
+            if (batchDepth > 0) {
+                (pendingBatch !== null && pendingBatch !== void 0 ? pendingBatch : (pendingBatch = [])).push(cmd);
+                redoStack = [];
+                return;
+            }
             undoStack.push(cmd);
             if (undoStack.length > max) {
                 undoStack.splice(0, undoStack.length - max);
@@ -9381,6 +9411,11 @@ function createDrawingHistory(options) {
             redoStack = [];
         },
         pushUpdate: function (id, before, after) {
+            if (batchDepth > 0) {
+                (pendingBatch !== null && pendingBatch !== void 0 ? pendingBatch : (pendingBatch = [])).push({ kind: 'update', id: id, before: before, after: after });
+                redoStack = [];
+                return;
+            }
             var top = undoStack.length > 0 ? undoStack[undoStack.length - 1] : undefined;
             if (top !== undefined &&
                 top.kind === 'update' &&
@@ -9419,7 +9454,32 @@ function createDrawingHistory(options) {
         canRedo: function () {
             return redoStack.length > 0;
         },
+        beginBatch: function () {
+            batchDepth += 1;
+            pendingBatch !== null && pendingBatch !== void 0 ? pendingBatch : (pendingBatch = []);
+        },
+        endBatch: function () {
+            if (batchDepth === 0) {
+                return;
+            }
+            batchDepth -= 1;
+            if (batchDepth > 0) {
+                return;
+            }
+            var collected = pendingBatch;
+            pendingBatch = null;
+            if (collected === null || collected.length === 0) {
+                return;
+            }
+            // Single-command batches stay a plain command — undo reads identical.
+            undoStack.push(collected.length === 1 ? collected[0] : { kind: 'batch', commands: collected });
+            if (undoStack.length > max) {
+                undoStack.splice(0, undoStack.length - max);
+            }
+            redoStack = [];
+        },
         invalidateOverlay: function (id) {
+            var _a;
             var keep = function (cmd) {
                 switch (cmd.kind) {
                     case 'create':
@@ -9427,15 +9487,89 @@ function createDrawingHistory(options) {
                         return cmd.snapshot.id !== id;
                     case 'update':
                         return cmd.id !== id;
+                    case 'batch': {
+                        cmd.commands = cmd.commands.filter(keep);
+                        // An emptied batch is dead weight — drop it outright.
+                        return cmd.commands.length > 0;
+                    }
                 }
             };
             undoStack = undoStack.filter(keep);
             redoStack = redoStack.filter(keep);
+            pendingBatch = (_a = pendingBatch === null || pendingBatch === void 0 ? void 0 : pendingBatch.filter(keep)) !== null && _a !== void 0 ? _a : null;
         },
         clear: function () {
             undoStack = [];
             redoStack = [];
+            batchDepth = 0;
+            pendingBatch = null;
         }
+    };
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var states = new WeakMap();
+function getDrawingInteractionState(chart) {
+    var state = states.get(chart);
+    if (state === undefined) {
+        state = { align45: false, magnet: false, stayInDrawing: false };
+        states.set(chart, state);
+    }
+    return state;
+}
+function setAlign45Enabled(chart, enabled) {
+    getDrawingInteractionState(chart).align45 = enabled;
+}
+function isAlign45Enabled(chart) {
+    return getDrawingInteractionState(chart).align45;
+}
+function setMagnetEnabled(chart, enabled) {
+    getDrawingInteractionState(chart).magnet = enabled;
+}
+function isMagnetEnabled(chart) {
+    return getDrawingInteractionState(chart).magnet;
+}
+function setStayInDrawingEnabled(chart, enabled) {
+    getDrawingInteractionState(chart).stayInDrawing = enabled;
+}
+function isStayInDrawingEnabled(chart) {
+    return getDrawingInteractionState(chart).stayInDrawing;
+}
+/**
+ * Whether a move should snap to 45° increments — Shift held during the
+ * gesture, or the persistent toolbar toggle.
+ */
+function isSnap45Active(chart, event) {
+    return (event === null || event === void 0 ? void 0 : event.shiftKey) === true || isAlign45Enabled(chart);
+}
+/**
+ * Snap `to` onto the nearest 45° ray from `from`, preserving distance.
+ * Operates in pixel space — convert Point↔Coordinate at the call site.
+ */
+function snap45Coordinate(to, from) {
+    var dx = to.x - from.x;
+    var dy = to.y - from.y;
+    var distance = Math.sqrt(dx * dx + dy * dy);
+    if (distance === 0) {
+        return to;
+    }
+    var angle = Math.atan2(dy, dx);
+    var snapped = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+    return {
+        x: from.x + distance * Math.cos(snapped),
+        y: from.y + distance * Math.sin(snapped)
     };
 }
 
@@ -9480,6 +9614,20 @@ function createDrawingManager(chart, options) {
     var store = (_a = options === null || options === void 0 ? void 0 : options.store) !== null && _a !== void 0 ? _a : null;
     var activeToolName = null;
     var continuousTool = null;
+    /** Spec carried by stay-in-drawing re-arms — seed points never carry
+     *  (a re-arm must start empty); extendData carries, mode is re-read live
+     *  from the interaction toggles at each re-arm. */
+    var continuousSpec = null;
+    /** Identity of the overlay currently occupying the progress slot for the
+     *  armed tool — bookkeeping clears only when THIS overlay goes away, so a
+     *  displaced same-name overlay can't disarm the tool that just armed. */
+    var armedOverlayId = null;
+    /** True inside activate()'s createOverlay call — the displaced-overlay
+     *  'remove' emitted there must not clear bookkeeping the call just set. */
+    var activatingOverlay = false;
+    /** Ids whose next 'update' commit skips the undo stack — bulk chrome
+     *  gestures (lock-all/hide-all) must not mint one entry per drawing. */
+    var skipHistoryIds = new Set();
     var applyDepth = 0; // beginApply/endApply nesting
     var applyingInternal = false; // manager-originated ops must not self-record
     var remoteApplying = false; // store events applied to chart — no re-persist
@@ -9676,7 +9824,107 @@ function createDrawingManager(chart, options) {
         bucket.remove.add(id);
         scheduleSave();
     }
+    /**
+     * Apply an undo/redo result. `ops` (batch children) run strictly in order —
+     * each element removes then restores, so same-id sequences like
+     * create→remove undo correctly instead of flattening into a zombie.
+     */
+    function applyHistoryOps(apply) {
+        var e_2, _a;
+        var _b;
+        var ops = (_b = apply.ops) !== null && _b !== void 0 ? _b : [apply];
+        applyingInternal = true;
+        try {
+            try {
+                for (var ops_1 = __values(ops), ops_1_1 = ops_1.next(); !ops_1_1.done; ops_1_1 = ops_1.next()) {
+                    var op = ops_1_1.value;
+                    op.remove.forEach(function (id) { chart.removeOverlay({ id: id }); });
+                    op.restore.forEach(function (d) {
+                        var create = serializedToOverlayCreate(d);
+                        if (create === null) {
+                            return;
+                        }
+                        if (chart.getOverlayById(d.id) !== null) {
+                            chart.overrideOverlay(create);
+                        }
+                        else {
+                            chart.createOverlay(create);
+                        }
+                        shadow.set(d.id, d);
+                        persistUpsert(d);
+                    });
+                    op.remove.forEach(function (id) {
+                        shadow.delete(id);
+                        persistRemove(id);
+                    });
+                }
+            }
+            catch (e_2_1) { e_2 = { error: e_2_1 }; }
+            finally {
+                try {
+                    if (ops_1_1 && !ops_1_1.done && (_a = ops_1.return)) _a.call(ops_1);
+                }
+                finally { if (e_2) throw e_2.error; }
+            }
+        }
+        finally {
+            applyingInternal = false;
+        }
+    }
+    /** Per-overlay change emits — an open settings dialog/toolbar keyed to a
+     *  restored id must refresh its fields (the bare emit only reaches
+     *  listeners that don't filter by payload.overlay). */
+    function emitRestored(apply) {
+        var _a;
+        var ops = (_a = apply.ops) !== null && _a !== void 0 ? _a : [apply];
+        ops.forEach(function (op) {
+            op.restore.forEach(function (d) {
+                var restored = chart.getOverlayById(d.id);
+                if (restored !== null) {
+                    emit('change', { overlay: restored });
+                }
+            });
+        });
+        emit('change', {});
+    }
     /** Commit a finished overlay: shadow + create command + persistence. */
+    /**
+     * Post-completion bookkeeping for an armed tool: stay-in-drawing re-arms
+     * (with extendData from the armed spec — seed points never carry — and
+     * mode re-read LIVE from the interaction toggles), otherwise disarm so
+     * activeTool()/toolChange reflect that nothing collects clicks.
+     * Gates on the overlay that just finished being the armed one — an
+     * unrelated drawEnd can never arm or disarm the user's tool.
+     */
+    function finishArmed(overlay, wasArmed) {
+        var interaction = getDrawingInteractionState(chart);
+        if (wasArmed && overlay.id === armedOverlayId &&
+            overlay.name === continuousTool && interaction.stayInDrawing) {
+            var spec = { name: overlay.name, groupId: DRAWINGS_GROUP_ID };
+            if (interaction.magnet) {
+                spec.mode = 'weak_magnet';
+            }
+            if ((continuousSpec === null || continuousSpec === void 0 ? void 0 : continuousSpec.extendData) !== undefined) {
+                spec.extendData = continuousSpec.extendData;
+            }
+            activatingOverlay = true;
+            try {
+                var rearmId = chart.createOverlay(spec);
+                armedOverlayId = typeof rearmId === 'string' ? rearmId : null;
+            }
+            finally {
+                activatingOverlay = false;
+            }
+            return;
+        }
+        if (overlay.id === armedOverlayId || (activeToolName !== null && overlay.name === activeToolName)) {
+            activeToolName = null;
+            continuousTool = null;
+            continuousSpec = null;
+            armedOverlayId = null;
+            emit('toolChange', { tool: null });
+        }
+    }
     function commitCreate(overlay) {
         armed.delete(overlay.id);
         var serialized = trackShadow(overlay);
@@ -9713,17 +9961,11 @@ function createDrawingManager(chart, options) {
                 break;
             }
             case 'drawEnd': {
+                // Capture before commitCreate drops it — re-arm must only fire for
+                // the overlay the tool actually armed, not any drawEnd in scope.
+                var wasArmed = armed.has(overlay.id);
                 commitCreate(overlay);
-                // Stay-in-drawing: re-arm the tool for the next drawing.
-                if (continuousTool !== null && activeToolName === continuousTool) {
-                    chart.createOverlay({ name: continuousTool, groupId: DRAWINGS_GROUP_ID });
-                }
-                else if (activeToolName !== null && overlay.name === activeToolName) {
-                    // Non-continuous tool finished — disarm so activeTool() and the
-                    // toolChange event reflect that nothing is armed anymore.
-                    activeToolName = null;
-                    emit('toolChange', { tool: null });
-                }
+                finishArmed(overlay, wasArmed);
                 break;
             }
             case 'editStart': {
@@ -9771,6 +10013,7 @@ function createDrawingManager(chart, options) {
                 // armed clears (also covers ghost→mirror promotion).
                 if (armed.has(overlay.id) && !overlay.isDrawing()) {
                     commitCreate(overlay);
+                    finishArmed(overlay, true);
                     break;
                 }
                 // syncApplied: a peer's edit applied onto the canonical overlay —
@@ -9793,7 +10036,9 @@ function createDrawingManager(chart, options) {
                     break;
                 }
                 if (before !== undefined && serializedFingerprint(before) !== serializedFingerprint(after)) {
-                    if (!fromSync) {
+                    // Bulk chrome ops (lock-all/hide-all) mark ids to skip the undo
+                    // stack — 40 drawings locking at once must not mint 40 steps.
+                    if (!fromSync && !skipHistoryIds.delete(overlay.id)) {
                         history.pushUpdate(overlay.id, before, after);
                     }
                     persistUpsert(after);
@@ -9812,6 +10057,19 @@ function createDrawingManager(chart, options) {
                 // tombstone is needed, and an undo entry would resurrect a drawing
                 // the template deliberately discarded.
                 if (wasArmed && shadowed === undefined) {
+                    // Host-side removeOverlay of the armed overlay (bypassing
+                    // deactivate) still has to clear armed bookkeeping — otherwise
+                    // activeTool() reports a tool that no longer collects clicks.
+                    // Identity + activatingOverlay: re-arming the same tool displaces
+                    // the old same-name overlay — that 'remove' must NOT disarm the
+                    // arm that just replaced it.
+                    if (!activatingOverlay && (overlay.id === armedOverlayId || overlay.name === activeToolName)) {
+                        activeToolName = null;
+                        continuousTool = null;
+                        continuousSpec = null;
+                        armedOverlayId = null;
+                        emit('toolChange', { tool: null });
+                    }
                     return;
                 }
                 // Epoch-tagged drop: an overlay stamped before the current scope
@@ -9898,6 +10156,17 @@ function createDrawingManager(chart, options) {
             armed.clear();
             pendingEdit.clear();
             history.clear();
+            // Drop tool bookkeeping with the wipe — an async host remove of the
+            // armed overlay can arrive after armed.clear() and slip the 'remove'
+            // cleanup, leaving activeTool() armed against nothing.
+            var hadTool = activeToolName !== null;
+            activeToolName = null;
+            continuousTool = null;
+            continuousSpec = null;
+            armedOverlayId = null;
+            if (hadTool) {
+                emit('toolChange', { tool: null });
+            }
             var afterLoad = function () {
                 if (epoch === scopeEpoch) {
                     switchInFlight = false;
@@ -10145,30 +10414,68 @@ function createDrawingManager(chart, options) {
     bindStore();
     return {
         activate: function (name, opts) {
+            var _a, _b;
             // Guard empty/unregistered tool names — activating '' emits a phantom
             // toolChange and leaves activeTool() reporting an armed tool that
             // createOverlay can never instantiate.
             if (typeof name !== 'string' || name === '' || getOverlayTemplate(name) === null) {
                 return null;
             }
+            var interaction = getDrawingInteractionState(chart);
+            var continuous = (_a = opts === null || opts === void 0 ? void 0 : opts.continuous) !== null && _a !== void 0 ? _a : interaction.stayInDrawing;
+            var mode = (_b = opts === null || opts === void 0 ? void 0 : opts.mode) !== null && _b !== void 0 ? _b : (interaction.magnet ? 'weak_magnet' : undefined);
             activeToolName = name;
-            continuousTool = (opts === null || opts === void 0 ? void 0 : opts.continuous) === true ? name : null;
-            emit('toolChange', { tool: name });
-            var id = chart.createOverlay(__assign({ name: name, groupId: DRAWINGS_GROUP_ID, extendData: opts === null || opts === void 0 ? void 0 : opts.extendData, points: opts === null || opts === void 0 ? void 0 : opts.points }, ((opts === null || opts === void 0 ? void 0 : opts.mode) !== undefined ? { mode: opts.mode } : {})));
+            continuousTool = continuous ? name : null;
+            continuousSpec = continuous
+                ? __assign(__assign({}, (mode !== undefined ? { mode: mode } : {})), ((opts === null || opts === void 0 ? void 0 : opts.extendData) !== undefined ? { extendData: opts.extendData } : {})) : null;
+            // The createOverlay inside this call can emit a displaced-overlay
+            // 'remove' for the previous in-progress drawing — activatingOverlay
+            // keeps that event from disarming the bookkeeping being set here.
+            activatingOverlay = true;
+            var id = null;
+            try {
+                id = chart.createOverlay(__assign({ name: name, groupId: DRAWINGS_GROUP_ID, extendData: opts === null || opts === void 0 ? void 0 : opts.extendData, points: opts === null || opts === void 0 ? void 0 : opts.points }, (mode !== undefined ? { mode: mode } : {})));
+            }
+            catch (err) {
+                // Never claim an arm that failed — a createOverlay throw leaves
+                // listeners thinking a tool collects clicks when nothing exists.
+                activeToolName = null;
+                continuousTool = null;
+                continuousSpec = null;
+                armedOverlayId = null;
+                throw (err instanceof Error ? err : new Error(String(err)));
+            }
+            finally {
+                activatingOverlay = false;
+            }
+            var overlay = id !== null ? chart.getOverlayById(id) : null;
+            if ((overlay === null || overlay === void 0 ? void 0 : overlay.isDrawing()) === true) {
+                armedOverlayId = overlay.id;
+                // toolChange fires only after the armed overlay provably exists —
+                // listeners can trust activeTool() inside the emit.
+                emit('toolChange', { tool: name });
+            }
+            else {
+                // Seed points satisfied the template at construction (or create
+                // failed) — nothing is armed, so nothing may stay armed in state.
+                activeToolName = null;
+                continuousTool = null;
+                continuousSpec = null;
+                armedOverlayId = null;
+            }
             return typeof id === 'string' ? id : null;
         },
         deactivate: function () {
             var _a;
-            if (activeToolName === null) {
-                return;
-            }
+            var hadTool = activeToolName !== null;
             activeToolName = null;
             continuousTool = null;
+            continuousSpec = null;
+            armedOverlayId = null;
             // Disarm means disarm — an in-progress overlay still in the progress
             // slot would keep collecting clicks while activeTool() reports null.
-            // Target the progress slot, not an isDrawing scan: ghost mirrors are
-            // isDrawing() too and could win the find() before the real overlay.
-            // (The scan fallback stays for pre-registry edge states.)
+            // Runs even without an active tool: a stranded progress overlay (stale
+            // bookkeeping states) must not survive the disarm.
             var slot = (_a = chart.getChartStore().getProgressOverlayInfo()) === null || _a === void 0 ? void 0 : _a.overlay;
             var inProgress = slot !== undefined && !slot.ghost && !slot.synced
                 ? slot
@@ -10176,7 +10483,9 @@ function createDrawingManager(chart, options) {
             if (inProgress !== undefined) {
                 chart.removeOverlay({ id: inProgress.id });
             }
-            emit('toolChange', { tool: null });
+            if (hadTool || inProgress !== undefined) {
+                emit('toolChange', { tool: null });
+            }
         },
         activeTool: function () {
             return activeToolName;
@@ -10194,8 +10503,15 @@ function createDrawingManager(chart, options) {
             var id = chart.createOverlay(__assign(__assign(__assign({}, spec), { groupId: (_b = spec.groupId) !== null && _b !== void 0 ? _b : DRAWINGS_GROUP_ID }), (completed ? { completed: true } : {})));
             return typeof id === 'string' ? id : null;
         },
-        update: function (id, patch) {
-            return chart.overrideOverlay(__assign({ id: id }, patch));
+        update: function (id, patch, opts) {
+            if ((opts === null || opts === void 0 ? void 0 : opts.skipHistory) === true) {
+                skipHistoryIds.add(id);
+            }
+            var ok = chart.overrideOverlay(__assign({ id: id }, patch));
+            if (!ok) {
+                skipHistoryIds.delete(id);
+            }
+            return ok;
         },
         remove: function (id) {
             return chart.removeOverlay({ id: id });
@@ -10226,41 +10542,8 @@ function createDrawingManager(chart, options) {
             if (apply === null) {
                 return false;
             }
-            applyingInternal = true;
-            try {
-                apply.remove.forEach(function (id) { chart.removeOverlay({ id: id }); });
-                apply.restore.forEach(function (d) {
-                    var create = serializedToOverlayCreate(d);
-                    if (create === null) {
-                        return;
-                    }
-                    if (chart.getOverlayById(d.id) !== null) {
-                        chart.overrideOverlay(create);
-                    }
-                    else {
-                        chart.createOverlay(create);
-                    }
-                    shadow.set(d.id, d);
-                    persistUpsert(d);
-                });
-                apply.remove.forEach(function (id) {
-                    shadow.delete(id);
-                    persistRemove(id);
-                });
-            }
-            finally {
-                applyingInternal = false;
-            }
-            // Per-overlay change emits — an open settings dialog/toolbar keyed to
-            // a restored id must refresh its fields (the bare emit below only
-            // reaches listeners that don't filter by payload.overlay).
-            apply.restore.forEach(function (d) {
-                var restored = chart.getOverlayById(d.id);
-                if (restored !== null) {
-                    emit('change', { overlay: restored });
-                }
-            });
-            emit('change', {});
+            applyHistoryOps(apply);
+            emitRestored(apply);
             return true;
         },
         redo: function () {
@@ -10271,38 +10554,8 @@ function createDrawingManager(chart, options) {
             if (apply === null) {
                 return false;
             }
-            applyingInternal = true;
-            try {
-                apply.remove.forEach(function (id) { chart.removeOverlay({ id: id }); });
-                apply.restore.forEach(function (d) {
-                    var create = serializedToOverlayCreate(d);
-                    if (create === null) {
-                        return;
-                    }
-                    if (chart.getOverlayById(d.id) !== null) {
-                        chart.overrideOverlay(create);
-                    }
-                    else {
-                        chart.createOverlay(create);
-                    }
-                    shadow.set(d.id, d);
-                    persistUpsert(d);
-                });
-                apply.remove.forEach(function (id) {
-                    shadow.delete(id);
-                    persistRemove(id);
-                });
-            }
-            finally {
-                applyingInternal = false;
-            }
-            apply.restore.forEach(function (d) {
-                var restored = chart.getOverlayById(d.id);
-                if (restored !== null) {
-                    emit('change', { overlay: restored });
-                }
-            });
-            emit('change', {});
+            applyHistoryOps(apply);
+            emitRestored(apply);
             return true;
         },
         canUndo: function () {
@@ -10310,6 +10563,12 @@ function createDrawingManager(chart, options) {
         },
         canRedo: function () {
             return history.canRedo();
+        },
+        beginUndoBatch: function () {
+            history.beginBatch();
+        },
+        endUndoBatch: function () {
+            history.endBatch();
         },
         attachStore: function (next) {
             if (destroyed) {
@@ -11115,66 +11374,6 @@ function getDrawingIcon(iconId) {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var states = new WeakMap();
-function getDrawingInteractionState(chart) {
-    var state = states.get(chart);
-    if (state === undefined) {
-        state = { align45: false, magnet: false };
-        states.set(chart, state);
-    }
-    return state;
-}
-function setAlign45Enabled(chart, enabled) {
-    getDrawingInteractionState(chart).align45 = enabled;
-}
-function isAlign45Enabled(chart) {
-    return getDrawingInteractionState(chart).align45;
-}
-function setMagnetEnabled(chart, enabled) {
-    getDrawingInteractionState(chart).magnet = enabled;
-}
-function isMagnetEnabled(chart) {
-    return getDrawingInteractionState(chart).magnet;
-}
-/**
- * Whether a move should snap to 45° increments — Shift held during the
- * gesture, or the persistent toolbar toggle.
- */
-function isSnap45Active(chart, event) {
-    return (event === null || event === void 0 ? void 0 : event.shiftKey) === true || isAlign45Enabled(chart);
-}
-/**
- * Snap `to` onto the nearest 45° ray from `from`, preserving distance.
- * Operates in pixel space — convert Point↔Coordinate at the call site.
- */
-function snap45Coordinate(to, from) {
-    var dx = to.x - from.x;
-    var dy = to.y - from.y;
-    var distance = Math.sqrt(dx * dx + dy * dy);
-    if (distance === 0) {
-        return to;
-    }
-    var angle = Math.atan2(dy, dx);
-    var snapped = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
-    return {
-        x: from.x + distance * Math.cos(snapped),
-        y: from.y + distance * Math.sin(snapped)
-    };
-}
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 /**
  * CSS-in-TS for the drawings UI — injected once per document, prefixed
  * `sc-drw-`. No .css file, no shadow DOM, no custom elements: the bundle
@@ -11188,7 +11387,7 @@ var PALETTE = [
     '#ffeb3b', '#ff9800', '#f23645', '#e91e63',
     '#9c27b0', '#673ab7'
 ];
-var CSS = "\n.sc-drw-toolbar {\n  position: absolute;\n  top: 0;\n  left: 0;\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  padding: 2px 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  line-height: 1;\n  user-select: none;\n  white-space: nowrap;\n  will-change: transform;\n}\n.sc-drw-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 26px;\n  height: 26px;\n  padding: 0;\n  margin: 0;\n  border: none;\n  border-radius: 3px;\n  background: transparent;\n  color: #d1d4dc;\n  cursor: pointer;\n}\n.sc-drw-btn:hover { background: #2a2e39; color: #ffffff; }\n.sc-drw-btn:active { background: #363c4e; }\n.sc-drw-btn[data-on=\"true\"] { color: #2962ff; }\n.sc-drw-btn[data-on=\"true\"]:hover { color: #4c7dff; }\n.sc-drw-btn svg { display: block; width: 16px; height: 16px; }\n.sc-drw-btn--wide { width: auto; padding: 0 6px; font-size: 11px; }\n.sc-drw-grip {\n  cursor: grab;\n  color: #5d6372;\n  width: 14px;\n}\n.sc-drw-grip:active { cursor: grabbing; }\n.sc-drw-sep {\n  width: 1px;\n  height: 18px;\n  margin: 0 2px;\n  background: #2a2e39;\n}\n.sc-drw-swatch {\n  width: 14px;\n  height: 14px;\n  border-radius: 2px;\n  border: 1px solid rgba(255, 255, 255, 0.25);\n}\n.sc-drw-menu {\n  position: absolute;\n  top: 0;\n  left: 0;\n  min-width: 120px;\n  padding: 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  z-index: 10;\n}\n.sc-drw-menu-item {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  width: 100%;\n  padding: 5px 8px;\n  border: none;\n  border-radius: 3px;\n  background: transparent;\n  color: inherit;\n  font: inherit;\n  text-align: left;\n  cursor: pointer;\n}\n.sc-drw-menu-item:hover { background: #2a2e39; }\n.sc-drw-menu-item[data-on=\"true\"] { color: #4c7dff; }\n.sc-drw-menu-item svg { width: 14px; height: 14px; flex: none; }\n.sc-drw-menu-label {\n  padding: 4px 8px 2px;\n  color: #787b86;\n  font-size: 10px;\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n}\n.sc-drw-palette {\n  display: grid;\n  grid-template-columns: repeat(7, 18px);\n  gap: 4px;\n  padding: 4px;\n}\n.sc-drw-palette-cell {\n  width: 18px;\n  height: 18px;\n  padding: 0;\n  border: 1px solid rgba(255, 255, 255, 0.12);\n  border-radius: 2px;\n  cursor: pointer;\n}\n.sc-drw-palette-cell:hover { transform: scale(1.15); border-color: #ffffff; }\n.sc-drw-palette--inline {\n  display: none;\n  position: absolute;\n  top: 100%;\n  left: 0;\n  margin-top: 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);\n  z-index: 5;\n}\n.sc-drw-field:hover .sc-drw-palette--inline { display: grid; }\n.sc-drw-dialog {\n  position: absolute;\n  top: 0;\n  left: 0;\n  width: 240px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 6px;\n  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  user-select: none;\n  will-change: transform;\n  z-index: 20;\n}\n.sc-drw-dialog-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 6px 8px;\n  font-weight: 600;\n  cursor: grab;\n  border-bottom: 1px solid #2a2e39;\n}\n.sc-drw-dialog-header:active { cursor: grabbing; }\n.sc-drw-dialog-tabs {\n  display: flex;\n  gap: 2px;\n  padding: 4px 6px 0;\n  border-bottom: 1px solid #2a2e39;\n}\n.sc-drw-dialog-tab {\n  padding: 4px 8px;\n  border: none;\n  border-radius: 3px 3px 0 0;\n  background: transparent;\n  color: #787b86;\n  font: inherit;\n  cursor: pointer;\n}\n.sc-drw-dialog-tab:hover { color: #d1d4dc; }\n.sc-drw-dialog-tab[data-on=\"true\"] {\n  color: #ffffff;\n  background: #2a2e39;\n}\n.sc-drw-dialog-body {\n  max-height: 320px;\n  overflow-y: auto;\n  padding: 8px;\n}\n.sc-drw-section {\n  padding: 6px 2px 3px;\n  color: #787b86;\n  font-size: 10px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n}\n.sc-drw-field {\n  position: relative;\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  padding: 3px 2px;\n  min-height: 24px;\n}\n.sc-drw-field-label {\n  flex: 1;\n  color: #9aa0ae;\n}\n.sc-drw-field-control {\n  position: relative;\n  display: flex;\n  align-items: center;\n  gap: 6px;\n}\n.sc-drw-input {\n  width: 110px;\n  padding: 3px 6px;\n  border: 1px solid #2a2e39;\n  border-radius: 3px;\n  background: #131722;\n  color: #d1d4dc;\n  font: inherit;\n}\n.sc-drw-input:focus { outline: none; border-color: #2962ff; }\n.sc-drw-input--narrow { width: 64px; }\n.sc-drw-color {\n  width: 26px;\n  height: 22px;\n  padding: 0;\n  border: 1px solid #2a2e39;\n  border-radius: 3px;\n  background: transparent;\n  cursor: pointer;\n}\n.sc-drw-levels {\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n  width: 100%;\n}\n.sc-drw-level-row {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  padding: 2px 0;\n}\n/* \u2500\u2500 Left tool palette (toolPalette.ts) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */\n.sc-drw-tools {\n  position: relative;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 2px;\n  width: 40px;\n  height: 100%;\n  padding: 4px 0;\n  background: #1e222d;\n  border-right: 1px solid #2a2e39;\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  line-height: 1;\n  user-select: none;\n}\n.sc-drw-tools-group {\n  position: relative;\n  display: flex;\n}\n.sc-drw-tools-btn {\n  width: 32px;\n  height: 32px;\n}\n.sc-drw-tools-btn svg { width: 18px; height: 18px; }\n.sc-drw-tools-icon {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n}\n.sc-drw-tools-icon svg { display: block; }\n.sc-drw-tools-caret {\n  position: absolute;\n  right: -1px;\n  bottom: -1px;\n  width: 10px;\n  height: 10px;\n  padding: 0;\n  margin: 0;\n  border: none;\n  background: transparent;\n  cursor: pointer;\n}\n.sc-drw-tools-caret::before {\n  content: '';\n  position: absolute;\n  right: 1px;\n  bottom: 1px;\n  border-left: 4px solid transparent;\n  border-bottom: 4px solid #5d6372;\n}\n.sc-drw-tools-caret:hover::before { border-bottom-color: #d1d4dc; }\n.sc-drw-tools-group:hover .sc-drw-tools-caret::before { border-bottom-color: #9598a1; }\n.sc-drw-tools-chrome {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 2px;\n  margin-top: auto;\n  padding-top: 4px;\n  border-top: 1px solid #2a2e39;\n}\n.sc-drw-flyout {\n  position: absolute;\n  left: calc(100% + 1px);\n  min-width: 190px;\n  max-height: 100%;\n  overflow-y: auto;\n  padding: 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  z-index: 20;\n}\n.sc-drw-flyout-item {\n  padding: 6px 8px;\n}\n.sc-drw-flyout-item--disabled {\n  opacity: 0.4;\n  cursor: default;\n}\n.sc-drw-flyout-item--disabled:hover { background: transparent; }\n.sc-drw-flyout-icon {\n  display: inline-flex;\n  flex: none;\n  color: #b2b5be;\n}\n.sc-drw-flyout-icon svg { width: 16px; height: 16px; }\n.sc-drw-flyout-title { flex: 1; }\n.sc-drw-flyout-key {\n  color: #787b86;\n  font-size: 10px;\n  text-transform: uppercase;\n}\n";
+var CSS = "\n.sc-drw-toolbar {\n  position: absolute;\n  top: 0;\n  left: 0;\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  padding: 2px 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  line-height: 1;\n  user-select: none;\n  white-space: nowrap;\n  will-change: transform;\n}\n.sc-drw-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 26px;\n  height: 26px;\n  padding: 0;\n  margin: 0;\n  border: none;\n  border-radius: 3px;\n  background: transparent;\n  color: #d1d4dc;\n  cursor: pointer;\n}\n.sc-drw-btn:hover { background: #2a2e39; color: #ffffff; }\n.sc-drw-btn:active { background: #363c4e; }\n.sc-drw-btn[data-on=\"true\"] { color: #2962ff; }\n.sc-drw-btn[data-on=\"true\"]:hover { color: #4c7dff; }\n.sc-drw-btn svg { display: block; width: 16px; height: 16px; }\n.sc-drw-btn--wide { width: auto; padding: 0 6px; font-size: 11px; }\n.sc-drw-grip {\n  cursor: grab;\n  color: #5d6372;\n  width: 14px;\n}\n.sc-drw-grip:active { cursor: grabbing; }\n.sc-drw-sep {\n  width: 1px;\n  height: 18px;\n  margin: 0 2px;\n  background: #2a2e39;\n}\n.sc-drw-swatch {\n  width: 14px;\n  height: 14px;\n  border-radius: 2px;\n  border: 1px solid rgba(255, 255, 255, 0.25);\n}\n.sc-drw-menu {\n  position: absolute;\n  top: 0;\n  left: 0;\n  min-width: 120px;\n  padding: 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  z-index: 10;\n}\n.sc-drw-menu-item {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  width: 100%;\n  padding: 5px 8px;\n  border: none;\n  border-radius: 3px;\n  background: transparent;\n  color: inherit;\n  font: inherit;\n  text-align: left;\n  cursor: pointer;\n}\n.sc-drw-menu-item:hover { background: #2a2e39; }\n.sc-drw-menu-item[data-on=\"true\"] { color: #4c7dff; }\n.sc-drw-menu-item svg { width: 14px; height: 14px; flex: none; }\n.sc-drw-menu-label {\n  padding: 4px 8px 2px;\n  color: #787b86;\n  font-size: 10px;\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n}\n.sc-drw-palette {\n  display: grid;\n  grid-template-columns: repeat(7, 18px);\n  gap: 4px;\n  padding: 4px;\n}\n.sc-drw-palette-cell {\n  width: 18px;\n  height: 18px;\n  padding: 0;\n  border: 1px solid rgba(255, 255, 255, 0.12);\n  border-radius: 2px;\n  cursor: pointer;\n}\n.sc-drw-palette-cell:hover { transform: scale(1.15); border-color: #ffffff; }\n.sc-drw-palette--inline {\n  display: none;\n  position: absolute;\n  top: 100%;\n  left: 0;\n  margin-top: 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);\n  z-index: 5;\n}\n.sc-drw-field:hover .sc-drw-palette--inline { display: grid; }\n.sc-drw-dialog {\n  position: absolute;\n  top: 0;\n  left: 0;\n  width: 240px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 6px;\n  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  user-select: none;\n  will-change: transform;\n  z-index: 20;\n}\n.sc-drw-dialog-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 6px 8px;\n  font-weight: 600;\n  cursor: grab;\n  border-bottom: 1px solid #2a2e39;\n}\n.sc-drw-dialog-header:active { cursor: grabbing; }\n.sc-drw-dialog-tabs {\n  display: flex;\n  gap: 2px;\n  padding: 4px 6px 0;\n  border-bottom: 1px solid #2a2e39;\n}\n.sc-drw-dialog-tab {\n  padding: 4px 8px;\n  border: none;\n  border-radius: 3px 3px 0 0;\n  background: transparent;\n  color: #787b86;\n  font: inherit;\n  cursor: pointer;\n}\n.sc-drw-dialog-tab:hover { color: #d1d4dc; }\n.sc-drw-dialog-tab[data-on=\"true\"] {\n  color: #ffffff;\n  background: #2a2e39;\n}\n.sc-drw-dialog-body {\n  max-height: 320px;\n  overflow-y: auto;\n  padding: 8px;\n}\n.sc-drw-section {\n  padding: 6px 2px 3px;\n  color: #787b86;\n  font-size: 10px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n}\n.sc-drw-field {\n  position: relative;\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  padding: 3px 2px;\n  min-height: 24px;\n}\n.sc-drw-field-label {\n  flex: 1;\n  color: #9aa0ae;\n}\n.sc-drw-field-control {\n  position: relative;\n  display: flex;\n  align-items: center;\n  gap: 6px;\n}\n.sc-drw-input {\n  width: 110px;\n  padding: 3px 6px;\n  border: 1px solid #2a2e39;\n  border-radius: 3px;\n  background: #131722;\n  color: #d1d4dc;\n  font: inherit;\n}\n.sc-drw-input:focus { outline: none; border-color: #2962ff; }\n.sc-drw-input--narrow { width: 64px; }\n.sc-drw-color {\n  width: 26px;\n  height: 22px;\n  padding: 0;\n  border: 1px solid #2a2e39;\n  border-radius: 3px;\n  background: transparent;\n  cursor: pointer;\n}\n.sc-drw-levels {\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n  width: 100%;\n}\n.sc-drw-level-row {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  padding: 2px 0;\n}\n/* \u2500\u2500 Left tool palette (toolPalette.ts) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */\n.sc-drw-tools {\n  position: relative;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 2px;\n  width: 40px;\n  height: 100%;\n  padding: 4px 0;\n  background: #1e222d;\n  border-right: 1px solid #2a2e39;\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  line-height: 1;\n  user-select: none;\n  overflow-y: auto;\n  overflow-x: hidden;\n  scrollbar-width: thin;\n}\n.sc-drw-tools-group {\n  position: relative;\n  display: flex;\n}\n.sc-drw-tools-btn {\n  width: 32px;\n  height: 32px;\n}\n.sc-drw-tools-btn svg { width: 18px; height: 18px; }\n.sc-drw-tools-icon {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n}\n.sc-drw-tools-icon svg { display: block; }\n.sc-drw-tools-caret {\n  position: absolute;\n  right: -1px;\n  bottom: -1px;\n  /* invisible but generous hit area \u2014 the visible triangle stays 4px. */\n  width: 16px;\n  height: 14px;\n  padding: 0;\n  margin: 0;\n  border: none;\n  background: transparent;\n  cursor: pointer;\n}\n.sc-drw-tools-caret::before {\n  content: '';\n  position: absolute;\n  right: 1px;\n  bottom: 1px;\n  border-left: 4px solid transparent;\n  border-bottom: 4px solid #5d6372;\n}\n.sc-drw-tools-caret:hover::before { border-bottom-color: #d1d4dc; }\n.sc-drw-tools-group:hover .sc-drw-tools-caret::before { border-bottom-color: #9598a1; }\n.sc-drw-tools-chrome {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 2px;\n  margin-top: auto;\n  padding-top: 4px;\n  border-top: 1px solid #2a2e39;\n}\n.sc-drw-flyout {\n  /* position:fixed + document.body \u2014 the palette's rail can scroll\n     (overflow-y:auto) so an in-rail flyout would be clipped. */\n  position: fixed;\n  min-width: 190px;\n  max-height: calc(100vh - 16px);\n  overflow-y: auto;\n  padding: 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  z-index: 20;\n}\n.sc-drw-flyout-item {\n  padding: 6px 8px;\n}\n.sc-drw-flyout-item--disabled {\n  opacity: 0.4;\n  cursor: default;\n}\n.sc-drw-flyout-item--disabled:hover { background: transparent; }\n.sc-drw-flyout-icon {\n  display: inline-flex;\n  flex: none;\n  color: #b2b5be;\n}\n.sc-drw-flyout-icon svg { width: 16px; height: 16px; }\n.sc-drw-flyout-title { flex: 1; }\n.sc-drw-flyout-key {\n  color: #787b86;\n  font-size: 10px;\n  text-transform: uppercase;\n}\n";
 /** Inject the drawings UI stylesheet — idempotent, SSR-safe. */
 function injectDrawingStyles() {
     if (typeof document === 'undefined') {
@@ -14269,7 +14468,7 @@ function humanize(id) {
 }
 function mountToolPalette(container, chart, api, options) {
     var e_1, _a, e_2, _b;
-    var _c;
+    var _c, _d;
     injectDrawingStyles();
     var label = (_c = options === null || options === void 0 ? void 0 : options.label) !== null && _c !== void 0 ? _c : (function (_id, fallback) { return fallback; });
     var groups = api.catalog().filter(function (g) { return (options === null || options === void 0 ? void 0 : options.groups) === undefined || options.groups.includes(g.id); });
@@ -14277,6 +14476,9 @@ function mountToolPalette(container, chart, api, options) {
         // Honor the caller's ordering — filter() keeps catalog order.
         groups.sort(function (a, b) { return options.groups.indexOf(a.id) - options.groups.indexOf(b.id); });
     }
+    // The palette may mount inside another document (iframe) — bind DOM and
+    // listeners to the container's own document, never the module-global one.
+    var ownerDoc = container.ownerDocument;
     var root = createDom('div');
     root.className = 'sc-drw-tools';
     /** group id → last armed catalog item (defaults to first available). */
@@ -14285,11 +14487,19 @@ function mountToolPalette(container, chart, api, options) {
     var groupButtons = new Map();
     /** catalog item id → flyout row, for active highlight inside flyouts. */
     var itemButtons = new Map();
+    /** group id → caret button, for aria-expanded + Esc focus return. */
+    var carets = new Map();
     var flyout = null;
     var flyoutGroup = null;
+    // Touch fires a compatibility mouseenter right before click — a caret tap
+    // on a different group would hover-switch then instantly toggle-close the
+    // flyout it just opened. Timestamped switches let the click handler tell
+    // "this tap opened it" from "close the already-open flyout".
+    var hoverSwitchGroup = null;
+    var hoverSwitchAt = 0;
     var destroyed = false;
-    // Chrome toggle state — local to this mount.
-    var stayInDrawing = false;
+    // Chrome toggle state — local to this mount (magnet/stay persist in the
+    // chart's interaction state; lock/hide are bulk one-shot gestures).
     var allLocked = false;
     var allHidden = false;
     function firstAvailable(group) {
@@ -14314,20 +14524,34 @@ function mountToolPalette(container, chart, api, options) {
     function armItem(item) {
         var _a;
         if (item.nonTool === true || item.overlayName === '') {
+            // Non-tool picks still stick as the group's rail icon (TV parity —
+            // the cursor dropdown keeps the last-picked mode showing).
+            var owner_1 = findGroupOf(item);
+            if (owner_1 !== null) {
+                lastUsed.set(owner_1.id, item);
+                updateGroupIcons();
+            }
             var handled = ((_a = options === null || options === void 0 ? void 0 : options.onNonTool) === null || _a === void 0 ? void 0 : _a.call(options, item)) === true;
             if (!handled) {
                 api.deactivate();
             }
             return;
         }
+        // Catalog availability can flip after mount (setCatalogItemAvailable)
+        // — re-check before arming, not just in the flyout renderer.
+        if (!item.available) {
+            return;
+        }
+        // magnet/stay resolve inside activate() from the chart's interaction
+        // state — identical semantics for palette clicks and hotkeys.
+        var id = api.activate(item.id);
+        if (id === null) {
+            return;
+        }
         var owner = findGroupOf(item);
         if (owner !== null) {
             lastUsed.set(owner.id, item);
         }
-        api.activate(item.id, {
-            continuous: stayInDrawing,
-            mode: isMagnetEnabled(chart) ? 'weak_magnet' : 'normal'
-        });
         updateGroupIcons();
     }
     function findGroupOf(item) {
@@ -14378,6 +14602,7 @@ function mountToolPalette(container, chart, api, options) {
                     iconHost.innerHTML = getDrawingIcon(current.iconId);
                 }
                 btn.title = label(current.id, current.title);
+                btn.setAttribute('aria-label', btn.title);
             }
         }
         catch (e_6_1) { e_6 = { error: e_6_1 }; }
@@ -14431,17 +14656,32 @@ function mountToolPalette(container, chart, api, options) {
             finally { if (e_8) throw e_8.error; }
         }
     }
-    function closeFlyout() {
+    function closeFlyout(returnFocus) {
         var _a;
-        (_a = flyout === null || flyout === void 0 ? void 0 : flyout.parentElement) === null || _a === void 0 ? void 0 : _a.removeChild(flyout);
+        if (returnFocus === void 0) { returnFocus = false; }
+        if (flyout === null) {
+            return;
+        }
+        (_a = flyout.parentElement) === null || _a === void 0 ? void 0 : _a.removeChild(flyout);
         flyout = null;
+        var closing = flyoutGroup;
         flyoutGroup = null;
         // Rows are rebuilt per flyout — drop the refs so detached nodes don't
         // accumulate across opens.
         itemButtons.clear();
+        if (closing !== null) {
+            var caret = carets.get(closing);
+            caret === null || caret === void 0 ? void 0 : caret.setAttribute('aria-expanded', 'false');
+            // Keyboard dismissal returns focus to the trigger (TV/menu parity).
+            if (returnFocus) {
+                caret === null || caret === void 0 ? void 0 : caret.focus();
+            }
+        }
     }
-    function openFlyout(group, anchor) {
+    function openFlyout(group, anchor, viaKeyboard) {
         var e_9, _a, e_10, _b;
+        var _c, _d, _e;
+        if (viaKeyboard === void 0) { viaKeyboard = false; }
         if (flyoutGroup === group.id) {
             closeFlyout();
             return;
@@ -14449,9 +14689,11 @@ function mountToolPalette(container, chart, api, options) {
         closeFlyout();
         var menu = createDom('div');
         menu.className = 'sc-drw-flyout';
+        menu.setAttribute('role', 'menu');
+        var firstRow = null;
         try {
-            for (var _c = __values(group.sections), _d = _c.next(); !_d.done; _d = _c.next()) {
-                var section = _d.value;
+            for (var _f = __values(group.sections), _g = _f.next(); !_g.done; _g = _f.next()) {
+                var section = _g.value;
                 if (group.sections.length > 1) {
                     var head = createDom('div');
                     head.className = 'sc-drw-menu-label';
@@ -14460,12 +14702,28 @@ function mountToolPalette(container, chart, api, options) {
                 }
                 var _loop_1 = function (it) {
                     var row = createDom('button');
+                    row.type = 'button';
                     row.className = 'sc-drw-menu-item sc-drw-flyout-item';
-                    row.innerHTML = "<span class=\"sc-drw-flyout-icon\">".concat(getDrawingIcon(it.iconId), "</span>") +
-                        "<span class=\"sc-drw-flyout-title\">".concat(label(it.id, it.title), "</span>") +
-                        (it.hotkey !== undefined ? "<span class=\"sc-drw-flyout-key\">".concat(it.hotkey, "</span>") : '');
+                    row.setAttribute('role', 'menuitem');
+                    row.setAttribute('data-tool-id', it.id);
+                    var icon = createDom('span');
+                    icon.className = 'sc-drw-flyout-icon';
+                    icon.innerHTML = getDrawingIcon(it.iconId);
+                    var title = createDom('span');
+                    title.className = 'sc-drw-flyout-title';
+                    // Host-supplied i18n strings are never interpolated into innerHTML
+                    // (same rule as floatingToolbar).
+                    title.textContent = label(it.id, it.title);
+                    row.appendChild(icon);
+                    row.appendChild(title);
+                    if (it.hotkey !== undefined) {
+                        var key = createDom('span');
+                        key.className = 'sc-drw-flyout-key';
+                        key.textContent = it.hotkey;
+                        row.appendChild(key);
+                    }
                     if (!it.available) {
-                        row.setAttribute('disabled', 'true');
+                        row.disabled = true;
                         row.classList.add('sc-drw-flyout-item--disabled');
                     }
                     else {
@@ -14476,18 +14734,21 @@ function mountToolPalette(container, chart, api, options) {
                         });
                     }
                     itemButtons.set(it.id, row);
+                    if (firstRow === null && !row.disabled) {
+                        firstRow = row;
+                    }
                     menu.appendChild(row);
                 };
                 try {
-                    for (var _e = (e_10 = void 0, __values(section.items)), _f = _e.next(); !_f.done; _f = _e.next()) {
-                        var it = _f.value;
+                    for (var _h = (e_10 = void 0, __values(section.items)), _j = _h.next(); !_j.done; _j = _h.next()) {
+                        var it = _j.value;
                         _loop_1(it);
                     }
                 }
                 catch (e_10_1) { e_10 = { error: e_10_1 }; }
                 finally {
                     try {
-                        if (_f && !_f.done && (_b = _e.return)) _b.call(_e);
+                        if (_j && !_j.done && (_b = _h.return)) _b.call(_h);
                     }
                     finally { if (e_10) throw e_10.error; }
                 }
@@ -14496,22 +14757,36 @@ function mountToolPalette(container, chart, api, options) {
         catch (e_9_1) { e_9 = { error: e_9_1 }; }
         finally {
             try {
-                if (_d && !_d.done && (_a = _c.return)) _a.call(_c);
+                if (_g && !_g.done && (_a = _f.return)) _a.call(_f);
             }
             finally { if (e_9) throw e_9.error; }
         }
-        // Vertical-align the flyout with the group button; clamp inside the
-        // container so a bottom group doesn't overflow the palette.
-        var rootRect = root.getBoundingClientRect();
+        // Fixed + ownerDocument.body so the flyout survives scrollable/clipping
+        // hosts (overflow on the rail, overflow:hidden ancestors).
         var aRect = anchor.getBoundingClientRect();
-        menu.style.top = "".concat(Math.max(0, aRect.top - rootRect.top), "px");
-        root.appendChild(menu);
-        var overflow = menu.offsetTop + menu.offsetHeight - root.clientHeight;
-        if (overflow > 0) {
-            menu.style.top = "".concat(Math.max(0, menu.offsetTop - overflow), "px");
+        var win = ownerDoc.defaultView;
+        var vh = (_c = win === null || win === void 0 ? void 0 : win.innerHeight) !== null && _c !== void 0 ? _c : 0;
+        var vw = (_d = win === null || win === void 0 ? void 0 : win.innerWidth) !== null && _d !== void 0 ? _d : 0;
+        menu.style.left = "".concat(aRect.right + 1, "px");
+        menu.style.top = "".concat(Math.max(0, aRect.top), "px");
+        ownerDoc.body.appendChild(menu);
+        // Clamp to the viewport: bottom groups slide up, near-right-edge hosts
+        // flip the flyout to the left of the rail.
+        var mRect = menu.getBoundingClientRect();
+        if (mRect.bottom > vh - 4) {
+            menu.style.top = "".concat(Math.max(0, vh - mRect.height - 4), "px");
+        }
+        if (mRect.right > vw - 4) {
+            menu.style.left = "".concat(Math.max(0, aRect.left - mRect.width - 1), "px");
         }
         flyout = menu;
         flyoutGroup = group.id;
+        (_e = carets.get(group.id)) === null || _e === void 0 ? void 0 : _e.setAttribute('aria-expanded', 'true');
+        // Keyboard-opened menus hand focus to the first row (click-opened ones
+        // stay on the rail — a mouse user's pointer is already there).
+        if (viaKeyboard && firstRow !== null) {
+            firstRow.focus();
+        }
         updateActiveHighlight();
     }
     // ── Rail buttons ─────────────────────────────────────────────────────────
@@ -14521,8 +14796,9 @@ function mountToolPalette(container, chart, api, options) {
         var wrap = createDom('div');
         wrap.className = 'sc-drw-tools-group';
         var b = createDom('button');
+        b.type = 'button';
         b.className = 'sc-drw-btn sc-drw-tools-btn';
-        b.title = current !== null ? label(current.id, current.title) : group.id;
+        b.title = current !== null ? label(current.id, current.title) : humanize(group.id);
         b.setAttribute('aria-label', b.title);
         b.innerHTML = "<span class=\"sc-drw-tools-icon\">".concat(getDrawingIcon((_b = current === null || current === void 0 ? void 0 : current.iconId) !== null && _b !== void 0 ? _b : group.iconId), "</span>");
         b.addEventListener('click', function (e) {
@@ -14532,22 +14808,40 @@ function mountToolPalette(container, chart, api, options) {
             if (pick !== null) {
                 armItem(pick);
             }
+            // A pick via the rail icon is still a pick — a different group's
+            // flyout left open would be a stale menu over a newly-armed tool.
+            closeFlyout();
         });
         wrap.appendChild(b);
         // Caret opens the flyout — only when the group has >1 entry.
         var itemCount = group.sections.reduce(function (n, s) { return n + s.items.length; }, 0);
         if (itemCount > 1) {
             var caret = createDom('button');
+            caret.type = 'button';
             caret.className = 'sc-drw-tools-caret';
-            caret.setAttribute('aria-label', 'More tools');
+            caret.setAttribute('aria-label', label('moreTools', 'More tools'));
+            caret.setAttribute('aria-haspopup', 'menu');
+            caret.setAttribute('aria-expanded', 'false');
             caret.addEventListener('click', function (e) {
                 e.stopPropagation();
-                openFlyout(group, wrap);
+                // Touch: this tap's synthesized mouseenter may have just switched
+                // the flyout to this group — that counts as the open, not a toggle.
+                var justOpened = flyoutGroup === group.id &&
+                    hoverSwitchGroup === group.id && Date.now() - hoverSwitchAt < 500;
+                if (justOpened) {
+                    hoverSwitchGroup = null;
+                    return;
+                }
+                // detail===0 = keyboard-triggered click — hand focus to the menu.
+                openFlyout(group, wrap, e.detail === 0);
             });
             wrap.appendChild(caret);
+            carets.set(group.id, caret);
             // Hover-to-open reads like TV on dense rails.
             wrap.addEventListener('mouseenter', function () {
                 if (flyout !== null && flyoutGroup !== group.id) {
+                    hoverSwitchGroup = group.id;
+                    hoverSwitchAt = Date.now();
                     openFlyout(group, wrap);
                 }
             });
@@ -14572,8 +14866,10 @@ function mountToolPalette(container, chart, api, options) {
     if ((options === null || options === void 0 ? void 0 : options.chrome) !== false) {
         var footer_1 = createDom('div');
         footer_1.className = 'sc-drw-tools-chrome';
+        var chromeSetOn_1 = new Map();
         var addChromeButton = function (c) {
             var b = createDom('button');
+            b.type = 'button';
             b.className = 'sc-drw-btn sc-drw-tools-btn';
             b.title = label(c.id, c.title);
             b.setAttribute('aria-label', b.title);
@@ -14586,7 +14882,9 @@ function mountToolPalette(container, chart, api, options) {
                     b.removeAttribute('data-on');
                 }
             };
+            chromeSetOn_1.set(c.id, setOn);
             b.addEventListener('click', function (e) {
+                var _a, _b;
                 e.stopPropagation();
                 switch (c.id) {
                     case 'magnet': {
@@ -14596,30 +14894,40 @@ function mountToolPalette(container, chart, api, options) {
                         break;
                     }
                     case 'stayInDrawing': {
-                        stayInDrawing = !stayInDrawing;
-                        setOn(stayInDrawing);
+                        var next = !isStayInDrawingEnabled(chart);
+                        setStayInDrawingEnabled(chart, next);
+                        setOn(next);
                         break;
                     }
                     case 'lockAll': {
                         allLocked = !allLocked;
-                        api.list().forEach(function (d) { api.update(d.id, { lock: allLocked }); });
+                        // skipHistory — one bulk gesture must not mint one undo step
+                        // per drawing.
+                        api.list().forEach(function (d) { api.update(d.id, { lock: allLocked }, { skipHistory: true }); });
                         setOn(allLocked);
                         break;
                     }
                     case 'hideAll': {
                         allHidden = !allHidden;
-                        api.list().forEach(function (d) { api.update(d.id, { visible: !allHidden }); });
+                        api.list().forEach(function (d) { api.update(d.id, { visible: !allHidden }, { skipHistory: true }); });
                         setOn(allHidden);
                         break;
                     }
                     case 'removeAll': {
-                        api.clear();
+                        // includeLocked — Lock All then Remove All must not deadlock.
+                        api.clear({ includeLocked: true });
+                        allLocked = false;
+                        allHidden = false;
+                        (_a = chromeSetOn_1.get('lockAll')) === null || _a === void 0 ? void 0 : _a(false);
+                        (_b = chromeSetOn_1.get('hideAll')) === null || _b === void 0 ? void 0 : _b(false);
                         break;
                     }
                 }
             });
             if (c.id === 'magnet')
                 setOn(isMagnetEnabled(chart));
+            if (c.id === 'stayInDrawing')
+                setOn(isStayInDrawingEnabled(chart));
             footer_1.appendChild(b);
         };
         try {
@@ -14642,24 +14950,69 @@ function mountToolPalette(container, chart, api, options) {
         updateActiveHighlight();
     });
     var onDocPointer = function (e) {
-        if (flyout !== null && e.target instanceof Node && !root.contains(e.target)) {
+        var f = flyout;
+        if (f === null)
+            return;
+        // composedPath survives shadow-DOM retargeting; contains() checks the
+        // flyout too — it lives on ownerDocument.body, outside the rail root.
+        var path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+        var inside = path.length > 0
+            ? (path.includes(root) || path.includes(f))
+            : (e.target instanceof Node && (root.contains(e.target) || f.contains(e.target)));
+        if (!inside) {
             closeFlyout();
         }
     };
-    document.addEventListener('pointerdown', onDocPointer, true);
+    ownerDoc.addEventListener('pointerdown', onDocPointer, true);
+    // Esc with an open flyout closes ONLY the flyout (TV parity — the first
+    // Esc dismisses the menu; a second disarms/deselects). Capture phase +
+    // stopPropagation pre-empts the drawings keyboard layer's bubble-phase
+    // document listener (it was bound earlier and would otherwise cancel the
+    // in-progress drawing in the same keypress).
+    var onDocKey = function (e) {
+        if (e.key === 'Escape' && flyout !== null) {
+            e.stopPropagation();
+            e.preventDefault();
+            closeFlyout(true);
+        }
+    };
+    ownerDoc.addEventListener('keydown', onDocKey, true);
+    // A fixed-position flyout can't track a moving anchor — closing beats
+    // floating disconnected (scroll on any ancestor, rail scroll, resize).
+    // Scroll inside the flyout itself must not close it.
+    var onDocScroll = function (e) {
+        var f = flyout;
+        if (f === null)
+            return;
+        if (e.target instanceof Node && f.contains(e.target))
+            return;
+        closeFlyout();
+    };
+    ownerDoc.addEventListener('scroll', onDocScroll, true);
+    var onWinResize = function () {
+        closeFlyout();
+    };
+    (_d = ownerDoc.defaultView) === null || _d === void 0 ? void 0 : _d.addEventListener('resize', onWinResize);
     container.appendChild(root);
+    // A tool armed before mountToolbar() gets its highlight immediately —
+    // not on the next toolChange.
+    updateActiveHighlight();
     return {
         destroy: function () {
-            var _a;
+            var _a, _b;
             if (destroyed)
                 return;
             destroyed = true;
-            document.removeEventListener('pointerdown', onDocPointer, true);
+            ownerDoc.removeEventListener('pointerdown', onDocPointer, true);
+            ownerDoc.removeEventListener('keydown', onDocKey, true);
+            ownerDoc.removeEventListener('scroll', onDocScroll, true);
+            (_a = ownerDoc.defaultView) === null || _a === void 0 ? void 0 : _a.removeEventListener('resize', onWinResize);
             unbindTool();
             closeFlyout();
-            (_a = root.parentElement) === null || _a === void 0 ? void 0 : _a.removeChild(root);
+            (_b = root.parentElement) === null || _b === void 0 ? void 0 : _b.removeChild(root);
             groupButtons.clear();
             itemButtons.clear();
+            carets.clear();
         }
     };
 }
@@ -14828,6 +15181,7 @@ function createDrawingsApi(chart, options) {
     var selectedId = null;
     /** Mounted tool palettes — tracked so `destroy()` tears them all down. */
     var palettes = new Set();
+    var apiDestroyed = false;
     var unbindSelection = [
         manager.on('select', function (p) {
             var _a, _b;
@@ -14875,7 +15229,13 @@ function createDrawingsApi(chart, options) {
         ? null
         : bindDrawingKeyboard({
             onEscape: function () {
-                if (!cancelInProgress()) {
+                if (cancelInProgress() || manager.activeTool() !== null) {
+                    // Esc exits the tool entirely — also disarms so a stay-in-drawing
+                    // re-arm can't survive the cancel, and clears phantom-arm states
+                    // (armed bookkeeping with no in-progress overlay) the same way.
+                    manager.deactivate();
+                }
+                else {
                     manager.deselect();
                 }
             },
@@ -14918,9 +15278,11 @@ function createDrawingsApi(chart, options) {
             onHotkey: function (key) {
                 // TradingView bare-letter tool shortcuts — only activate tools the
                 // catalog marks available (unimplemented entries stay inert).
+                // Through the facade so catalog-id resolution + magnet/stay
+                // interaction-state toggles apply identically to a palette click.
                 var item = findCatalogItemByHotkey(key);
                 if (item !== null) {
-                    manager.activate(item.overlayName);
+                    api.activate(item.id);
                 }
             }
         });
@@ -15079,23 +15441,31 @@ function createDrawingsApi(chart, options) {
             var nameSet = (filter === null || filter === void 0 ? void 0 : filter.ids) !== undefined ? new Set(filter.ids) : null;
             var includeLocked = (filter === null || filter === void 0 ? void 0 : filter.includeLocked) === true;
             var removed = [];
-            chart.getOverlays({ groupId: 'drawings' }).forEach(function (o) {
-                if (o.isDrawing() || o.ghost || o.synced) {
-                    return;
-                }
-                if (nameSet !== null && !nameSet.has(o.id)) {
-                    return;
-                }
-                if (name !== undefined && o.name !== name) {
-                    return;
-                }
-                if (o.lock && !includeLocked) {
-                    return;
-                }
-                if (chart.removeOverlay({ id: o.id })) {
-                    removed.push(o.id);
-                }
-            });
+            // One Remove All click = one undo gesture — the per-overlay removes
+            // inside the batch collapse into a single history command.
+            manager.beginUndoBatch();
+            try {
+                chart.getOverlays({ groupId: 'drawings' }).forEach(function (o) {
+                    if (o.isDrawing() || o.ghost || o.synced) {
+                        return;
+                    }
+                    if (nameSet !== null && !nameSet.has(o.id)) {
+                        return;
+                    }
+                    if (name !== undefined && o.name !== name) {
+                        return;
+                    }
+                    if (o.lock && !includeLocked) {
+                        return;
+                    }
+                    if (chart.removeOverlay({ id: o.id })) {
+                        removed.push(o.id);
+                    }
+                });
+            }
+            finally {
+                manager.endUndoBatch();
+            }
             return removed;
         }, openSettings: function (id) {
             var overlay = chart.getOverlayById(id);
@@ -15107,6 +15477,12 @@ function createDrawingsApi(chart, options) {
             settingsDialog.open(overlay);
             return true;
         }, mountToolbar: function (container, opts) {
+            // A palette mounted after destroy() would never be torn down —
+            // return an inert handle rather than leaking listeners into a dead
+            // chart.
+            if (apiDestroyed) {
+                return { destroy: function () { return undefined; } };
+            }
             // The palette drives `activate`/`list`/`clear` through the facade so
             // catalog-id resolution applies.
             var palette = mountToolPalette(container, chart, api, opts);
@@ -15123,6 +15499,7 @@ function createDrawingsApi(chart, options) {
                 manager.attachStore((_a = opts.store) !== null && _a !== void 0 ? _a : null);
             }
         }, destroy: function () {
+            apiDestroyed = true;
             unbindKeyboard === null || unbindKeyboard === void 0 ? void 0 : unbindKeyboard();
             unbindSelection.forEach(function (unsub) {
                 unsub();
@@ -52967,6 +53344,7 @@ exports.init = init;
 exports.isAlign45Enabled = isAlign45Enabled;
 exports.isMagnetEnabled = isMagnetEnabled;
 exports.isSnap45Active = isSnap45Active;
+exports.isStayInDrawingEnabled = isStayInDrawingEnabled;
 exports.isVisibleOnInterval = isVisibleOnInterval;
 exports.measureText = measureText;
 exports.normalizedDevicePixelRatio = normalizedDevicePixelRatio;
@@ -52980,6 +53358,7 @@ exports.registerXAxis = registerXAxis;
 exports.registerYAxis = registerYAxis;
 exports.setAlign45Enabled = setAlign45Enabled;
 exports.setMagnetEnabled = setMagnetEnabled;
+exports.setStayInDrawingEnabled = setStayInDrawingEnabled;
 exports.snap45Coordinate = snap45Coordinate;
 exports.textBoxDataEqual = textBoxDataEqual;
 exports.textBoxFont = textBoxFont;

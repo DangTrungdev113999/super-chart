@@ -1094,7 +1094,12 @@ export type DrawingsEventCallback = (payload: {
 	tool?: string | null;
 }) => void;
 export interface DrawingManager {
-	/** Arm a drawing tool — subsequent clicks collect its points. */
+	/**
+	 * Arm a drawing tool — subsequent clicks collect its points.
+	 * `continuous`/`mode` default to the chart's interaction-state toggles
+	 * (stay-in-drawing / magnet) so every arm path — palette click, hotkey,
+	 * programmatic — behaves identically.
+	 */
 	activate: (name: string, opts?: {
 		continuous?: boolean;
 		extendData?: unknown;
@@ -1105,7 +1110,9 @@ export interface DrawingManager {
 	activeTool: () => string | null;
 	/** Programmatic create — already-finished overlays (AI / restore paths). */
 	create: (spec: OverlayCreate) => Nullable<string>;
-	update: (id: string, patch: Partial<Pick<OverlayCreate, "points" | "styles" | "extendData" | "lock" | "visible" | "mode" | "modeSensitivity" | "zLevel">>) => boolean;
+	update: (id: string, patch: Partial<Pick<OverlayCreate, "points" | "styles" | "extendData" | "lock" | "visible" | "mode" | "modeSensitivity" | "zLevel">>, opts?: {
+		skipHistory?: boolean;
+	}) => boolean;
 	remove: (id: string) => boolean;
 	list: () => SerializedDrawing[];
 	get: (id: string) => Nullable<Overlay>;
@@ -1115,6 +1122,12 @@ export interface DrawingManager {
 	redo: () => boolean;
 	canUndo: () => boolean;
 	canRedo: () => boolean;
+	/**
+	 * Coalesce every history push inside begin/end into ONE undoable
+	 * gesture — a bulk clear() must not mint one undo step per drawing.
+	 */
+	beginUndoBatch: () => void;
+	endUndoBatch: () => void;
 	attachStore: (store: DrawingStore | null) => void;
 	flush: () => Promise<void>;
 	/**
@@ -1391,9 +1404,10 @@ export interface DrawingToolGroup {
  */
 export interface ToolPaletteOptions {
 	/**
-	 * i18n hook — translate any catalog title. `id` is the item/section/
-	 * chrome id (e.g. 'trendLine', 'lines', 'lockAll'); `fallback` is the
-	 * built-in English title.
+	 * i18n hook — translate any catalog title. `id` is the item or chrome
+	 * id ('trendLine', 'lockAll'…); section headers arrive namespaced as
+	 * 'section:<id>' ('section:fibonacci') and the flyout caret as
+	 * 'moreTools'. `fallback` is the built-in English title.
 	 */
 	label?: (id: string, fallback: string) => string;
 	/**
@@ -2201,12 +2215,20 @@ export interface DrawingInteractionState {
 	 * mode they were drawn with.
 	 */
 	magnet: boolean;
+	/**
+	 * TradingView's "stay in drawing mode" — after each draw completes the
+	 * tool re-arms instead of falling back to the cursor. Read by
+	 * manager.activate unless the caller passes `continuous` explicitly.
+	 */
+	stayInDrawing: boolean;
 }
 export declare function getDrawingInteractionState(chart: Chart): DrawingInteractionState;
 export declare function setAlign45Enabled(chart: Chart, enabled: boolean): void;
 export declare function isAlign45Enabled(chart: Chart): boolean;
 export declare function setMagnetEnabled(chart: Chart, enabled: boolean): void;
 export declare function isMagnetEnabled(chart: Chart): boolean;
+export declare function setStayInDrawingEnabled(chart: Chart, enabled: boolean): void;
+export declare function isStayInDrawingEnabled(chart: Chart): boolean;
 /**
  * Whether a move should snap to 45° increments — Shift held during the
  * gesture, or the persistent toolbar toggle.

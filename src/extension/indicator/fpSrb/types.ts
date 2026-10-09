@@ -72,8 +72,8 @@ export interface SRBData {
   support?: number
 
   // Break events (fire at the bar where close crosses the level)
-  bUp?: boolean      // 'B' green — resistance broken + vol + NOT bull-wick
-  bDown?: boolean    // 'B' red   — support broken   + vol + NOT bear-wick
+  bUp?: boolean // 'B' green — resistance broken + vol + NOT bull-wick
+  bDown?: boolean // 'B' red   — support broken   + vol + NOT bear-wick
   bullWick?: boolean // 'Bull Wick' — resistance broken + bull-wick body
   bearWick?: boolean // 'Bear Wick' — support broken   + bear-wick body
 

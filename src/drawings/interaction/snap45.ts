@@ -34,6 +34,12 @@ export interface DrawingInteractionState {
    * mode they were drawn with.
    */
   magnet: boolean
+  /**
+   * TradingView's "stay in drawing mode" — after each draw completes the
+   * tool re-arms instead of falling back to the cursor. Read by
+   * manager.activate unless the caller passes `continuous` explicitly.
+   */
+  stayInDrawing: boolean
 }
 
 const states = new WeakMap<Chart, DrawingInteractionState>()
@@ -41,7 +47,7 @@ const states = new WeakMap<Chart, DrawingInteractionState>()
 export function getDrawingInteractionState (chart: Chart): DrawingInteractionState {
   let state = states.get(chart)
   if (state === undefined) {
-    state = { align45: false, magnet: false }
+    state = { align45: false, magnet: false, stayInDrawing: false }
     states.set(chart, state)
   }
   return state
@@ -61,6 +67,14 @@ export function setMagnetEnabled (chart: Chart, enabled: boolean): void {
 
 export function isMagnetEnabled (chart: Chart): boolean {
   return getDrawingInteractionState(chart).magnet
+}
+
+export function setStayInDrawingEnabled (chart: Chart, enabled: boolean): void {
+  getDrawingInteractionState(chart).stayInDrawing = enabled
+}
+
+export function isStayInDrawingEnabled (chart: Chart): boolean {
+  return getDrawingInteractionState(chart).stayInDrawing
 }
 
 /**

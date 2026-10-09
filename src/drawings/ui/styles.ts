@@ -280,6 +280,9 @@ const CSS = `
   font-size: 11px;
   line-height: 1;
   user-select: none;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
 }
 .sc-drw-tools-group {
   position: relative;
@@ -300,8 +303,9 @@ const CSS = `
   position: absolute;
   right: -1px;
   bottom: -1px;
-  width: 10px;
-  height: 10px;
+  /* invisible but generous hit area — the visible triangle stays 4px. */
+  width: 16px;
+  height: 14px;
   padding: 0;
   margin: 0;
   border: none;
@@ -328,10 +332,11 @@ const CSS = `
   border-top: 1px solid #2a2e39;
 }
 .sc-drw-flyout {
-  position: absolute;
-  left: calc(100% + 1px);
+  /* position:fixed + document.body — the palette's rail can scroll
+     (overflow-y:auto) so an in-rail flyout would be clipped. */
+  position: fixed;
   min-width: 190px;
-  max-height: 100%;
+  max-height: calc(100vh - 16px);
   overflow-y: auto;
   padding: 4px;
   background: #1e222d;

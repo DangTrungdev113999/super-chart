@@ -207,6 +207,7 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
   let selectedId: string | null = null
   /** Mounted tool palettes — tracked so `destroy()` tears them all down. */
   const palettes = new Set<ToolPalette>()
+  let apiDestroyed = false
   const unbindSelection = [
     manager.on('select', p => {
       selectedId = p.overlay?.id ?? null
@@ -261,7 +262,12 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
     ? null
     : bindDrawingKeyboard({
       onEscape: () => {
-        if (!cancelInProgress()) {
+        if (cancelInProgress() || manager.activeTool() !== null) {
+          // Esc exits the tool entirely — also disarms so a stay-in-drawing
+          // re-arm can't survive the cancel, and clears phantom-arm states
+          // (armed bookkeeping with no in-progress overlay) the same way.
+          manager.deactivate()
+        } else {
           manager.deselect()
         }
       },
@@ -304,9 +310,11 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
       onHotkey: (key) => {
         // TradingView bare-letter tool shortcuts — only activate tools the
         // catalog marks available (unimplemented entries stay inert).
+        // Through the facade so catalog-id resolution + magnet/stay
+        // interaction-state toggles apply identically to a palette click.
         const item = findCatalogItemByHotkey(key)
         if (item !== null) {
-          manager.activate(item.overlayName)
+          api.activate(item.id)
         }
       }
     })
@@ -499,23 +507,30 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
       const nameSet = filter?.ids !== undefined ? new Set(filter.ids) : null
       const includeLocked = filter?.includeLocked === true
       const removed: string[] = []
-      chart.getOverlays({ groupId: 'drawings' }).forEach(o => {
-        if (o.isDrawing() || o.ghost || o.synced) {
-          return
-        }
-        if (nameSet !== null && !nameSet.has(o.id)) {
-          return
-        }
-        if (name !== undefined && o.name !== name) {
-          return
-        }
-        if (o.lock && !includeLocked) {
-          return
-        }
-        if (chart.removeOverlay({ id: o.id })) {
-          removed.push(o.id)
-        }
-      })
+      // One Remove All click = one undo gesture — the per-overlay removes
+      // inside the batch collapse into a single history command.
+      manager.beginUndoBatch()
+      try {
+        chart.getOverlays({ groupId: 'drawings' }).forEach(o => {
+          if (o.isDrawing() || o.ghost || o.synced) {
+            return
+          }
+          if (nameSet !== null && !nameSet.has(o.id)) {
+            return
+          }
+          if (name !== undefined && o.name !== name) {
+            return
+          }
+          if (o.lock && !includeLocked) {
+            return
+          }
+          if (chart.removeOverlay({ id: o.id })) {
+            removed.push(o.id)
+          }
+        })
+      } finally {
+        manager.endUndoBatch()
+      }
       return removed
     },
 
@@ -531,6 +546,12 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
     },
 
     mountToolbar (container, opts) {
+      // A palette mounted after destroy() would never be torn down —
+      // return an inert handle rather than leaking listeners into a dead
+      // chart.
+      if (apiDestroyed) {
+        return { destroy: (): void => undefined }
+      }
       // The palette drives `activate`/`list`/`clear` through the facade so
       // catalog-id resolution applies.
       const palette = mountToolPalette(container, chart, api, opts)
@@ -550,6 +571,7 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
     },
 
     destroy () {
+      apiDestroyed = true
       unbindKeyboard?.()
       unbindSelection.forEach(unsub => {
         unsub()

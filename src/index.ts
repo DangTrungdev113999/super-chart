@@ -276,6 +276,8 @@ export {
   isAlign45Enabled,
   setMagnetEnabled,
   isMagnetEnabled,
+  setStayInDrawingEnabled,
+  isStayInDrawingEnabled,
   isSnap45Active,
   snap45Coordinate,
   bindDrawingKeyboard,
