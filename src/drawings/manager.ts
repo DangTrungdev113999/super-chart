@@ -150,13 +150,15 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
   }
 
   function trackShadow (overlay: Overlay): SerializedDrawing | null {
+    // Stamp BEFORE the serialize early-return — ghost/synced mirrors never
+    // serialize but still need an epoch, or a stale-epoch wipe check can't
+    // catch them: they'd fall through into the synced-remove branch and
+    // tombstone the canonical record in the shared store.
+    overlayEpoch.set(overlay, scopeEpoch)
     const serialized = serializeOverlay(overlay, { createdAt: shadow.get(overlay.id)?.createdAt })
     if (serialized === null) {
       return null
     }
-    // Stamp the overlay with the scope epoch it belongs to — a remove of a
-    // stale-epoch overlay at ANY later time is an old-scope wipe.
-    overlayEpoch.set(overlay, scopeEpoch)
     shadow.set(overlay.id, serialized)
     return serialized
   }
@@ -188,12 +190,19 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
   }
 
   async function flushStore (): Promise<void> {
-    if (store === null || pendingByScope.size === 0) {
+    if (store === null) {
       return
     }
     if (saveTimer !== null) {
       clearTimeout(saveTimer)
       saveTimer = null
+    }
+    // Join any in-flight apply even with nothing new to drain — flush() is
+    // the durability contract (pagehide, store swap) and must not resolve
+    // while a prior apply is still running.
+    await applyChain
+    if (pendingByScope.size === 0) {
+      return
     }
     // Drain every scope bucket — each keeps its own scope target, so a
     // symbol switch flushes old drawings to the OLD symbol's storage.
@@ -410,9 +419,14 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
           // owner chart. No local undo (undo would materialize a zombie the
           // owner still owns), but the remove MUST reach the shared store:
           // skipping it leaves the record alive and the drawing resurrects
-          // on every chart after reload.
+          // on every chart after reload. suppressSync marks a host bulk wipe
+          // (symbol-switch cleanup, full clear) — honoring it stops the wipe
+          // from tombstoning the canonical record and broadcasting
+          // removedIds to every peer tab.
           history.invalidateOverlay(overlay.id)
-          persistRemove(overlay.id)
+          if (overlay.suppressSync !== true) {
+            persistRemove(overlay.id)
+          }
           emit('change', { overlay })
           break
         }
@@ -478,16 +492,29 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
     }
   }
 
+  // Ids a remote store event applied while a load was in-flight — the
+  // remote state is fresher than the stored record about to materialize,
+  // so the record must not clobber it (zombie resurrect / stale overwrite).
+  let loadInFlight = false
+  const loadTouched = new Set<string>()
+
   async function loadScope (epoch?: number): Promise<void> {
     if (store === null) {
       return
     }
     try {
       const target = scope()
-      const { drawings } = await store.load(target)
+      loadInFlight = true
+      let drawings: SerializedDrawing[] = []
+      try {
+        ({ drawings } = await store.load(target))
+      } finally {
+        loadInFlight = false
+      }
       // Stale-load guard: a slower load for scope B resolving after a
       // switch to C must not materialize B's drawings on the C chart.
       if (destroyed || (epoch !== undefined && epoch !== scopeEpoch)) {
+        loadTouched.clear()
         return
       }
       applyDepth++
@@ -497,6 +524,9 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
           // null entries) must not abort the rest of the load, and a throw
           // here would otherwise surface as a "half-restored" chart.
           try {
+            if (loadTouched.has(d.id)) {
+              return
+            }
             if (d.completed) {
               // Same-id drawings already on the chart get overridden with the
               // stored state — createOverlay would dedupe silently and leave
@@ -519,9 +549,11 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
         })
       } finally {
         applyDepth = Math.max(0, applyDepth - 1)
+        loadTouched.clear()
       }
     } catch {
       // Load failure — the chart stays empty rather than half-restored.
+      loadTouched.clear()
     }
   }
 
@@ -532,6 +564,13 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
     const current = scope()
     if (event.scope.symbol !== current.symbol || event.scope.chartId !== current.chartId) {
       return
+    }
+    if (loadInFlight) {
+      // A load is awaiting resolution — record every remotely-touched id so
+      // the materialize pass can't clobber fresher remote state with the
+      // stale stored record (or resurrect a just-removed drawing).
+      event.drawings.forEach(d => { loadTouched.add(d.id) })
+      event.removedIds?.forEach(id => { loadTouched.add(id) })
     }
     remoteApplying = true
     applyingInternal = true

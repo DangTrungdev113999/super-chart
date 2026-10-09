@@ -640,11 +640,14 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
               if (!updated && !suppressMaterialize) {
                 // Follower may have attached after the overlay was created —
                 // materialize it instead of dropping the update. But only if
-                // the source still owns it: emits for a removed overlay can
-                // land a frame late (mid-drag delete), and resurrecting those
-                // would leave a zombie nobody owns.
+                // the source still owns it CANONICALLY: emits for a removed
+                // overlay can land a frame late (mid-drag delete), and a
+                // source-side orphan mirror (synced/ghost — e.g. stranded by
+                // a symbol-switch race) must never recreate a zombie with no
+                // canonical owner here.
                 try {
-                  if (source.getOverlays({ id: overlay.id }).length > 0) {
+                  const src = source.getOverlays({ id: overlay.id })[0]
+                  if (isValid(src) && !src.synced && !src.ghost) {
                     mirrorCreate(chart, overlay)
                   }
                 } catch {
