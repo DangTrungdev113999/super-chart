@@ -48,8 +48,10 @@ const cache = new WeakMap<object, Map<string, CacheEntry>>()
  * Above this count the signature switches to stride sampling — freehand
  * tools carry thousands of points and an O(N) signature per frame costs
  * more than the cache saves. The signature keeps length + first + last +
- * every STRIDE-th point: append-heavy freehand strokes always change the
- * tail, and a mid-edit still lands on a sampled index within STRIDE px.
+ * every STRIDE-th point. Mid-stroke vertex edits that fall between
+ * sampled indices are caught by figuresRev instead — every point
+ * mutation path (eventPressedPointMove / eventPressedOtherMove /
+ * eventMoveForDrawing / override({points})) bumps the revision.
  */
 const COORD_SIG_FULL = 64
 const COORD_SIG_STRIDE = 32
@@ -98,6 +100,26 @@ export interface FigureCacheOptions<E> {
 }
 
 /**
+ * Wrap provenance — tools may self-wrap callbacks with withFigureCache/
+ * withPerfPipeline for their own extraKey/cull needs, and the drawings
+ * registry wraps them AGAIN at registration. Two nested caches with
+ * independent signatures cause stale-through-inner hits (outer misses on
+ * a key the inner doesn't hash, inner returns stale, outer caches it)
+ * and double signature cost per frame. The registry collapses the layers
+ * via {@link rewrapFigureCache} — meta records the raw callback + merged
+ * options so only one cache lookup ever runs.
+ */
+interface WrapMeta<E> {
+  /** Innermost raw callback (unwraps nested layers). */
+  base: OverlayCreateFiguresCallback<E>
+  options?: FigureCacheOptions<E> & ViewportCullOptions
+  /** True when the base was composed with withViewportCull. */
+  viewportCull: boolean
+}
+
+const WRAP_META = new WeakMap<OverlayCreateFiguresCallback<never>, WrapMeta<never>>()
+
+/**
  * CONTRACT: the returned array is SHARED — the view and every subsequent
  * createFigures call see the same instance until the signature changes.
  * Templates must treat it as read-only (never push/splice/mutate figure
@@ -107,17 +129,23 @@ export function withFigureCache<E> (
   fn: OverlayCreateFiguresCallback<E>,
   options?: FigureCacheOptions<E>
 ): OverlayCreateFiguresCallback<E> {
-  return (params) => {
+  const wrapped = (params: OverlayCreateFiguresCallbackParams<E>): OverlayFigure[] => {
     let dataRev = ''
     if (options?.includeDataRev === true) {
       const list = params.chart.getDataList()
+      const first = list[0] as KLineData | undefined
       const last = list[list.length - 1] as KLineData | undefined
-      dataRev = `|d${list.length}:${last !== undefined ? last.close : ''}`
+      // length + window identity + last-bar OHLCV — same-length rewrites
+      // and last-bar updates that don't touch close still invalidate.
+      dataRev = `|d${list.length}:${first?.timestamp ?? ''}-${last?.timestamp ?? ''}:` +
+        `${last?.open ?? ''},${last?.high ?? ''},${last?.low ?? ''},${last?.close ?? ''},${last?.volume ?? ''}`
     }
     // envRev — Store's monotonic environment counter (theme, symbol,
-    // precision, period, formatters, locale, timezone). Absent on older
+    // precision, period, formatters, locale, timezone). It lives on the
+    // ChartStore, reached through Chart.getChartStore(); absent on older
     // kernels → 0, which simply keeps the previous behavior.
-    const envRev = (params.chart as { getEnvRev?: () => number }).getEnvRev?.() ?? 0
+    const envRev = (params.chart as unknown as { getChartStore?: () => ({ getEnvRev?: () => number } | null) })
+      .getChartStore?.()?.getEnvRev?.() ?? 0
     const signature =
       coordsSignature(params.coordinates) +
       `|r${params.overlay.figuresRev}` +
@@ -146,6 +174,35 @@ export function withFigureCache<E> (
     slots.set(slotKey, { signature, figures })
     return figures
   }
+  WRAP_META.set(
+    wrapped as unknown as OverlayCreateFiguresCallback<never>,
+    { base: fn as OverlayCreateFiguresCallback<never>, options: options as WrapMeta<never>['options'], viewportCull: false }
+  )
+  return wrapped
+}
+
+/**
+ * Collapse a self-wrapped callback into a single cache layer owned by the
+ * caller's options — the registry uses this so a tool that applied
+ * withFigureCache/withPerfPipeline itself doesn't pay two signature
+ * computations or suffer stale-through-inner hits. The returned wrapper
+ * keeps the tool's viewport-cull + extraKey and adopts the caller's
+ * slot/includeDataRev.
+ */
+export function rewrapFigureCache<E> (
+  fn: OverlayCreateFiguresCallback<E>,
+  options?: FigureCacheOptions<E>
+): OverlayCreateFiguresCallback<E> {
+  const meta = WRAP_META.get(fn as unknown as OverlayCreateFiguresCallback<never>) as WrapMeta<E> | undefined
+  if (meta === undefined) {
+    return withFigureCache(fn, options)
+  }
+  const inner = meta.viewportCull ? withViewportCull(meta.base, meta.options) : meta.base
+  return withFigureCache(inner, {
+    includeDataRev: options?.includeDataRev === true || meta.options?.includeDataRev === true,
+    extraKey: meta.options?.extraKey ?? options?.extraKey,
+    slot: options?.slot
+  })
 }
 
 export interface ViewportCullOptions {
@@ -194,5 +251,12 @@ export function withPerfPipeline<E> (
   fn: OverlayCreateFiguresCallback<E>,
   options?: FigureCacheOptions<E> & ViewportCullOptions
 ): OverlayCreateFiguresCallback<E> {
-  return withFigureCache(withViewportCull(fn, options), options)
+  const wrapped = withFigureCache(withViewportCull(fn, options), options)
+  // Tag with the RAW callback so rewrapFigureCache rebuilds cull+cache in
+  // one layer instead of treating the culled wrapper as the base.
+  WRAP_META.set(
+    wrapped as unknown as OverlayCreateFiguresCallback<never>,
+    { base: fn as OverlayCreateFiguresCallback<never>, options: options as WrapMeta<never>['options'], viewportCull: true }
+  )
+  return wrapped
 }

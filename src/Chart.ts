@@ -27,6 +27,7 @@ import type { DataLoader } from './common/DataLoader'
 import type VisibleRange from './common/VisibleRange'
 import type { Formatter, DecimalFold, LayoutChild, Options, ThousandsSeparator, ZoomAnchor } from './Options'
 import { createDrawingsApi } from './drawings/api'
+import { closeTextEditorSessions } from './drawings/editor/overlayTextEditor'
 import Animation from './common/Animation'
 import { createId } from './common/utils/id'
 import { createDom } from './common/utils/dom'
@@ -1215,6 +1216,10 @@ export default class ChartImp implements Chart {
   destroy (): void {
     this._drawingsApi?.destroy()
     this._drawingsApi = null
+    // Sessions opened via raw createOverlay paths (no drawings API ever
+    // touched) outlive _drawingsApi — close them or their document
+    // listeners + layout work leak past dispose.
+    closeTextEditorSessions(this)
     this._chartEvent.destroy()
     this._drawPanes.forEach(pane => {
       pane.destroy()

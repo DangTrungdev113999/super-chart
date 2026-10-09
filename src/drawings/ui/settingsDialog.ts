@@ -22,6 +22,7 @@ import type { PaneDomLayer } from '../dom/domLayer'
 import { getPaneDomLayer } from '../dom/domLayer'
 import type { DrawingManager } from '../manager'
 import { findCatalogItemByOverlay } from '../catalog'
+import { hasOpenTextEditorSession } from '../editor/overlayTextEditor'
 import { buildSettingsTabs, type SettingField, type SettingsDraft } from './settingsSchema'
 import { injectDrawingStyles, PALETTE } from './styles'
 
@@ -401,7 +402,11 @@ export function attachSettingsDialog (chart: Chart, manager: DrawingManager): Se
     if (e.key === 'Escape') {
       // Swallow the key — otherwise the shared drawing keyboard layer also
       // sees it and deselects the overlay / cancels the armed tool on top
-      // of the dialog closing.
+      // of the dialog closing. But a live text-editor session owns Escape
+      // first (commit-on-Escape) — let it pass through.
+      if (hasOpenTextEditorSession(chart)) {
+        return
+      }
       e.stopPropagation()
       e.preventDefault()
       close()
@@ -423,6 +428,11 @@ export function attachSettingsDialog (chart: Chart, manager: DrawingManager): Se
 
   function onDragMove (e: MouseEvent): void {
     if (dragState === null || element === null) {
+      return
+    }
+    // A missed mouseup (blur, iframe exit) must not drag buttonless.
+    if (e.buttons === 0) {
+      dragState = null
       return
     }
     pos = {
@@ -456,8 +466,11 @@ export function attachSettingsDialog (chart: Chart, manager: DrawingManager): Se
     docListenersBound = true
     document.addEventListener('mousedown', onDocumentMouseDown, true)
     document.addEventListener('keydown', onDocumentKeyDown, true)
-    document.addEventListener('mousemove', onDragMove)
-    document.addEventListener('mouseup', onDragEnd)
+    // Capture phase — a drag keeps the dialog under the cursor, so the
+    // release lands on it and the layer's stopPropagation would swallow a
+    // bubble-phase mouseup and strand dragState forever.
+    document.addEventListener('mousemove', onDragMove, true)
+    document.addEventListener('mouseup', onDragEnd, true)
     // Mouseup outside the window never dispatches — blur ends the drag.
     window.addEventListener('blur', onDragEnd)
     unsubRemove = manager.on('change', onOverlayChange)
@@ -470,8 +483,8 @@ export function attachSettingsDialog (chart: Chart, manager: DrawingManager): Se
     docListenersBound = false
     document.removeEventListener('mousedown', onDocumentMouseDown, true)
     document.removeEventListener('keydown', onDocumentKeyDown, true)
-    document.removeEventListener('mousemove', onDragMove)
-    document.removeEventListener('mouseup', onDragEnd)
+    document.removeEventListener('mousemove', onDragMove, true)
+    document.removeEventListener('mouseup', onDragEnd, true)
     window.removeEventListener('blur', onDragEnd)
     unsubRemove?.()
     unsubRemove = null

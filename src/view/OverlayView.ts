@@ -28,6 +28,8 @@ import type { EventOverlayInfoFigureType } from '../Store'
 
 import { PaneIdConstants } from '../pane/types'
 
+import { isVisibleOnInterval, periodToIntervalLabel } from '../drawings/types'
+
 import type DrawWidget from '../widget/DrawWidget'
 import type DrawPane from '../pane/DrawPane'
 
@@ -677,6 +679,12 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
     const pane = this.getWidget().getPane()
     const chart = pane.getChart()
     const chartStore = chart.getChartStore()
+    // Interval-visibility gate — the Visibility settings tab writes
+    // extendData.common.visibleIntervals; honoring it here hides the
+    // drawing on non-matching periods (main view AND axis figures).
+    if (!isVisibleOnInterval(overlay, periodToIntervalLabel(chartStore.getPeriod()))) {
+      return
+    }
     const yAxis = pane.getAxisComponent() as unknown as Nullable<YAxis>
     const xAxis = chart.getXAxisPane().getAxisComponent()
     const coordinates = points.map(point => {
@@ -696,23 +704,32 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
       return coordinate
     })
     if (coordinates.length > 0) {
-      // Viewport cull: bounded tools (cullable !== false) whose anchors all
-      // sit outside the padded widget bounds produce no visible figure and
-      // no reachable event target — skip figure creation + drawing. Tools
-      // that can paint into the viewport with offscreen anchors (extended
-      // lines, channels, pitchforks, time-level fibs, anchored text) opt
-      // out via `cullable: false`.
-      if (overlay.cullable !== false) {
+      // Viewport cull — bounded tools only (`cullable !== false`), main
+      // pane view only (`_canDrawPoints()` is false on axis widgets, whose
+      // converted coordinates live in a different space). The predicate is
+      // COMMON-DIRECTION: cull when every anchor lies beyond the same edge
+      // — hull-bounded figures can't cross a convex region without an
+      // anchor inside. "All anchors outside the box" is wrong: a segment
+      // between an above-viewport and a below-viewport anchor paints right
+      // through the middle. In-progress overlays are never culled — tools
+      // settle restore state inside createPointFigures.
+      if (overlay.cullable !== false && !overlay.isDrawing() && this._canDrawPoints()) {
         const { width, height } = this.getWidget().getBounding()
         const pad = Math.max(width, height)
-        let allOutside = true
+        let allLeft = true
+        let allRight = true
+        let allAbove = true
+        let allBelow = true
         for (const c of coordinates) {
-          if (c.x >= -pad && c.x <= width + pad && c.y >= -pad && c.y <= height + pad) {
-            allOutside = false
+          if (c.x >= -pad) allLeft = false
+          if (c.x <= width + pad) allRight = false
+          if (c.y >= -pad) allAbove = false
+          if (c.y <= height + pad) allBelow = false
+          if (!allLeft && !allRight && !allAbove && !allBelow) {
             break
           }
         }
-        if (allOutside) {
+        if (allLeft || allRight || allAbove || allBelow) {
           return
         }
       }

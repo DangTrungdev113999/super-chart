@@ -139,7 +139,10 @@ export function getExtendedCoordinates (
  */
 export function formatNum (val: number, precision?: number): string {
   const p = precision ?? 2
-  return val.toFixed(p).replace(/\.?0+$/, '')
+  const s = val.toFixed(p)
+  // Only strip when a decimal point exists — '100' at precision 0 would
+  // otherwise collapse to '1'.
+  return s.includes('.') ? s.replace(/\.?0+$/, '') : s
 }
 
 /**

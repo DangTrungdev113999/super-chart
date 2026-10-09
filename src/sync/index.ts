@@ -604,18 +604,21 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
               let updated = false
               if (event.type === 'progress') {
                 // Hot path — narrow payload, no structural changes.
+                // syncApplied tells the peer's drawings manager: persist
+                // this remote edit, but do NOT mint a local undo entry.
                 updated = chart.overrideOverlay({
                   id: overlay.id,
                   points: overlay.points.map(p => ({ ...p })),
                   visible: overlay.visible,
-                  skipDrawReplay: true
+                  skipDrawReplay: true,
+                  syncApplied: true
                 })
               } else {
                 // Forward the full mutable surface (styles/lock/mode/extendData/
                 // zLevel...) — but never paneId/name/groupId: paneId isn't
                 // re-keyed by overrideOverlay and identity fields can't change.
                 const { paneId: _p, name: _n, groupId: _g, ghost: _gh, suppressSync: _s, ...rest } = serializeOverlay(overlay)
-                updated = chart.overrideOverlay({ ...rest, skipDrawReplay: true })
+                updated = chart.overrideOverlay({ ...rest, skipDrawReplay: true, syncApplied: true })
               }
               if (!updated && !suppressMaterialize) {
                 // Follower may have attached after the overlay was created —

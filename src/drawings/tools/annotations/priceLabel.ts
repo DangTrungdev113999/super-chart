@@ -124,7 +124,12 @@ function openEditor (chart: Chart, overlay: Overlay<PriceLabelExtendData>): void
     },
     forbidLineBreaks: true,
     onCommit: (value) => {
-      commitText(chart, overlay, value)
+      // The editor seeds itself with the auto-formatted price — committing
+      // it verbatim would freeze the label as a static string and kill live
+      // price tracking forever. Unchanged => stay in auto mode (text '').
+      const isCandle = overlay.paneId === PaneIdConstants.CANDLE
+      const auto = formatPrecision(overlay.points[0]?.value ?? 0, getPrecision(chart, overlay, isCandle))
+      commitText(chart, overlay, value === auto ? '' : value)
     }
   })
 }

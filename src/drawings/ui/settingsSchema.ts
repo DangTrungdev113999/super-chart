@@ -109,22 +109,26 @@ function hasRecipeControl (item: DrawingToolItem | undefined, kind: string, role
   })
 }
 
-/** Locate a levels array on extendData — `levels` or `data.levels`. */
-function findLevelsPath (extendData: unknown): { owner: Record<string, unknown>, key: string, levels: unknown[] } | null {
+/** Locate a levels array on extendData — `fib.levels`, `levels`, or `data.levels` (fib-pack primary first). */
+function findLevelsPath (extendData: unknown): { path: string[], levels: unknown[] } | null {
   if (extendData === null || typeof extendData !== 'object') {
     return null
   }
   const ed = extendData as Record<string, unknown>
-  const candidates: Array<{ owner: Record<string, unknown>, key: string }> = [{ owner: ed, key: 'levels' }]
-  if (ed.data !== null && typeof ed.data === 'object') {
-    candidates.push({ owner: ed.data as Record<string, unknown>, key: 'levels' })
+  const candidates: Array<{ owner: Record<string, unknown>, path: string[] }> = []
+  if (ed.fib !== null && typeof ed.fib === 'object') {
+    candidates.push({ owner: ed.fib as Record<string, unknown>, path: ['fib', 'levels'] })
   }
-  for (const { owner, key } of candidates) {
-    const value = owner[key]
+  candidates.push({ owner: ed, path: ['levels'] })
+  if (ed.data !== null && typeof ed.data === 'object') {
+    candidates.push({ owner: ed.data as Record<string, unknown>, path: ['data', 'levels'] })
+  }
+  for (const { owner, path } of candidates) {
+    const value = owner[path[path.length - 1]]
     if (isArray(value) && value.length > 0) {
       const first = value[0]
       if (first !== null && typeof first === 'object') {
-        return { owner, key, levels: value }
+        return { path, levels: value }
       }
     }
   }
@@ -133,6 +137,7 @@ function findLevelsPath (extendData: unknown): { owner: Record<string, unknown>,
 
 function styleFields (overlay: Overlay, item: DrawingToolItem | undefined, draft: SettingsDraft): SettingField[] {
   const styles = (overlay.styles ?? {}) as Record<string, unknown>
+  const liveStyles = (): Record<string, unknown> => (overlay.styles ?? {}) as Record<string, unknown>
   const fields: SettingField[] = []
   const hasLine = styles.line !== undefined || hasRecipeControl(item, 'color', 'line') || hasRecipeControl(item, 'style', 'line')
   const hasText = item?.capabilities.hasText === true || styles.text !== undefined
@@ -144,7 +149,7 @@ function styleFields (overlay: Overlay, item: DrawingToolItem | undefined, draft
         id: 'lineColor',
         kind: 'color',
         label: 'Line color',
-        get: () => readPath(styles, ['line', 'color']),
+        get: () => readPath(liveStyles(), ['line', 'color']),
         set: v => { draft.style(['line', 'color'], v) }
       },
       {
@@ -154,7 +159,7 @@ function styleFields (overlay: Overlay, item: DrawingToolItem | undefined, draft
         min: 1,
         max: 8,
         step: 1,
-        get: () => readPath(styles, ['line', 'size']),
+        get: () => readPath(liveStyles(), ['line', 'size']),
         set: v => { draft.style(['line', 'size'], v) }
       },
       {
@@ -162,7 +167,7 @@ function styleFields (overlay: Overlay, item: DrawingToolItem | undefined, draft
         kind: 'select',
         label: 'Style',
         options: LINE_STYLE_OPTIONS,
-        get: () => readPath(styles, ['line', 'style']) ?? 'solid',
+        get: () => readPath(liveStyles(), ['line', 'style']) ?? 'solid',
         set: v => {
           draft.style(['line', 'style'], v)
           if (typeof v === 'string' && v in DASHED_VALUE) {
@@ -178,7 +183,7 @@ function styleFields (overlay: Overlay, item: DrawingToolItem | undefined, draft
       id: 'fillColor',
       kind: 'color',
       label: 'Fill color',
-      get: () => readPath(styles, ['polygon', 'color']),
+      get: () => readPath(liveStyles(), ['polygon', 'color']),
       set: v => { draft.style(['polygon', 'color'], v) }
     })
   }
@@ -188,7 +193,7 @@ function styleFields (overlay: Overlay, item: DrawingToolItem | undefined, draft
       id: 'backgroundColor',
       kind: 'color',
       label: 'Background',
-      get: () => readPath(styles, ['rect', 'color']),
+      get: () => readPath(liveStyles(), ['rect', 'color']),
       set: v => { draft.style(['rect', 'color'], v) }
     })
   }
@@ -199,7 +204,7 @@ function styleFields (overlay: Overlay, item: DrawingToolItem | undefined, draft
         id: 'textColor',
         kind: 'color',
         label: 'Text color',
-        get: () => readPath(styles, ['text', 'color']),
+        get: () => readPath(liveStyles(), ['text', 'color']),
         set: v => { draft.style(['text', 'color'], v) }
       },
       {
@@ -209,21 +214,21 @@ function styleFields (overlay: Overlay, item: DrawingToolItem | undefined, draft
         min: 8,
         max: 64,
         step: 1,
-        get: () => readPath(styles, ['text', 'size']),
+        get: () => readPath(liveStyles(), ['text', 'size']),
         set: v => { draft.style(['text', 'size'], v) }
       },
       {
         id: 'textBold',
         kind: 'checkbox',
         label: 'Bold',
-        get: () => readPath(styles, ['text', 'weight']) === 'bold',
+        get: () => readPath(liveStyles(), ['text', 'weight']) === 'bold',
         set: v => { draft.style(['text', 'weight'], v === true ? 'bold' : 'normal') }
       },
       {
         id: 'textItalic',
         kind: 'checkbox',
         label: 'Italic',
-        get: () => readPath(styles, ['text', 'style']) === 'italic',
+        get: () => readPath(liveStyles(), ['text', 'style']) === 'italic',
         set: v => { draft.style(['text', 'style'], v === true ? 'italic' : 'normal') }
       },
       {
@@ -231,7 +236,7 @@ function styleFields (overlay: Overlay, item: DrawingToolItem | undefined, draft
         kind: 'select',
         label: 'Align',
         options: TEXT_ALIGN_OPTIONS,
-        get: () => readPath(styles, ['text', 'align']) ?? 'center',
+        get: () => readPath(liveStyles(), ['text', 'align']) ?? 'center',
         set: v => { draft.style(['text', 'align'], v) }
       }
     )
@@ -259,21 +264,24 @@ function optionFields (overlay: Overlay, draft: SettingsDraft): SettingField[] {
 }
 
 function levelsField (overlay: Overlay, draft: SettingsDraft): SettingField | null {
-  const found = findLevelsPath(overlay.extendData)
-  if (found === null) {
+  if (findLevelsPath(overlay.extendData) === null) {
     return null
   }
-  const { owner, key } = found
   return {
     id: 'levels',
     kind: 'levels',
     label: 'Levels',
-    get: () => owner[key],
+    // Resolve through overlay.extendData on EVERY access — override()
+    // replaces extendData with a fresh clone per commit, so a captured
+    // owner object goes stale and silently discards later edits.
+    get: () => findLevelsPath(overlay.extendData)?.levels,
     set: v => {
       // Levels arrays are committed whole — deep-merging rows per index
       // would leak stale entries on removal.
-      const parentPath = owner === (overlay.extendData as Record<string, unknown>).data ? ['data', key] : [key]
-      draft.extendData(parentPath, v)
+      const live = findLevelsPath(overlay.extendData)
+      if (live !== null) {
+        draft.extendData(live.path, v)
+      }
     }
   }
 }

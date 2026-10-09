@@ -14,7 +14,7 @@
 
 import type { Overlay, OverlayFigure, OverlayTemplate } from '../../../component/Overlay'
 import type { Chart } from '../../../Chart'
-import { isFunction, isString, isValid } from '../../../common/utils/typeChecks'
+import { isFunction, isObject, isString, isValid } from '../../../common/utils/typeChecks'
 
 import { createAnchorFigures } from '../../interaction/anchors'
 import type { TextBoxData } from '../../text/textBox'
@@ -24,6 +24,7 @@ import {
   commitText,
   liveTextOf,
   openAnnotationEditor,
+  pointToCoordinate,
   resolvedTextStyles,
   textEditorHooks,
   type AnnotationTextStyle
@@ -77,6 +78,13 @@ function openEditor (chart: Chart, overlay: Overlay<PriceNoteExtendData>): void 
     chart,
     overlay,
     data: () => getBoxData(overlay),
+    // The label renders at the arrow TIP (pt.y - 63 with baseline 'bottom'),
+    // not at the anchor point — without the raised anchor the editor box
+    // covers the stem while the caret blinks 60px below the glyphs.
+    anchor: () => {
+      const c = pointToCoordinate(chart, overlay.paneId, overlay.points[0] ?? {})
+      return { x: c.x, y: c.y - (STEM_HEIGHT + ARROW_HEIGHT + 8) }
+    },
     forbidLineBreaks: true,
     onCommit: (value) => {
       commitText(chart, overlay, value)
@@ -171,10 +179,12 @@ const simpleAnnotation: OverlayTemplate<PriceNoteExtendData> = {
     return figures
   },
   onDrawEnd: ({ overlay, chart }) => {
-    if (isValid(overlay.extendData)) {
+    const ed = overlay.extendData
+    if (isValid(ed) && !isObject(ed)) {
       // Legacy string/function extendData — normalize to the object form so
-      // settings commits merge cleanly.
+      // settings commits merge cleanly. Object payloads keep their keys.
       overlay.extendData = { text: getText(overlay) }
+      overlay.invalidateFigures()
     }
     openEditor(chart, overlay)
   },

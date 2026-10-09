@@ -223,13 +223,18 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
         getChartStore: () => {
           getProgressOverlayInfo: () => Nullable<{ overlay: Overlay }>
           progressOverlayComplete: () => void
+          getOverlayById: (id: string) => Nullable<Overlay>
         }
       }).getChartStore()
+      // onDrawEnd BEFORE complete — identical ordering to every kernel
+      // path: the hook's writes (extendData normalization) must land in the
+      // committed snapshot, and a hook that removes the overlay (degenerate
+      // polyline) must not produce a create+remove history pair.
+      inProgress.onDrawEnd?.({ chart, overlay: inProgress })
       const progressInfo = chartStore.getProgressOverlayInfo()
       if (progressInfo?.overlay === inProgress) {
         chartStore.progressOverlayComplete()
       }
-      inProgress.onDrawEnd?.({ chart, overlay: inProgress })
       return true
     }
     return chart.removeOverlay({ id: inProgress.id })
@@ -495,7 +500,9 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
 
     openSettings (id) {
       const overlay = chart.getOverlayById(id)
-      if (overlay === null) {
+      // A mid-draw overlay rejects edits — a Coordinates commit would
+      // recompute currentStep from the patch and corrupt the armed tool.
+      if (overlay === null || overlay.isDrawing() || overlay.ghost) {
         return false
       }
       settingsDialog.open(overlay)

@@ -186,7 +186,7 @@ function buildCatalog (): DrawingToolGroup[] {
           id: 'channels',
           items: [
             item('parallelChannel', 'parallelStraightLine', 'Parallel Channel', 'parallelChannel', caps({ anchorCount: 3 }), LINE_RECIPE),
-            item('priceChannel', 'priceChannelLine', 'Price Channel', 'priceChannel', caps({ anchorCount: 2 }), LINE_RECIPE),
+            item('priceChannel', 'priceChannelLine', 'Price Channel', 'priceChannel', caps({ anchorCount: 3 }), LINE_RECIPE),
             item('flatTopBottom', 'flatTopBottom', 'Flat Top/Bottom', 'flatTopBottom', caps({ anchorCount: 3 }), LINE_RECIPE),
             item('disjointChannel', 'disjointChannel', 'Disjoint Channel', 'disjointChannel', caps({ anchorCount: 3 }), LINE_RECIPE),
             item('regressionTrend', 'regressionTrend', 'Regression Trend', 'parallelChannel', caps({ anchorCount: 2 }), LINE_RECIPE)

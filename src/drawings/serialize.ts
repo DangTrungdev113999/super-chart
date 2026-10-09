@@ -95,6 +95,47 @@ export function serializedToOverlayCreate (d: SerializedDrawing): OverlayCreate 
 }
 
 /**
+ * Clone extendData for persistence, dropping top-level transient keys —
+ * `_`-prefixed runtime fields (live edit buffers, hover markers) and
+ * `isEditing` (mid-edit flag: restoring it would hide a shape's label).
+ */
+function sanitizeExtendData (extendData: unknown): unknown {
+  const cloned = clone(extendData ?? undefined) as unknown
+  if (typeof cloned !== 'object' || cloned === null || Array.isArray(cloned)) {
+    return cloned
+  }
+  const src = cloned as Record<string, unknown>
+  const rec: Record<string, unknown> = {}
+  for (const key of Object.keys(src)) {
+    if (!key.startsWith('_') && key !== 'isEditing') {
+      rec[key] = src[key]
+    }
+  }
+  return rec
+}
+
+/**
+ * Key-order-insensitive stringify — `JSON.stringify` makes the fingerprint
+ * lie for hosts that rebuild objects with reordered keys.
+ */
+function stableStringify (value: unknown): string {
+  if (value === null || typeof value !== 'object') {
+    // JSON.stringify(undefined) returns undefined at runtime — guard the
+    // input instead of the result (the TS signature claims string).
+    if (value === undefined) {
+      return ''
+    }
+    return JSON.stringify(value)
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(',')}]`
+  }
+  const rec = value as Record<string, unknown>
+  const keys = Object.keys(rec).sort()
+  return `{${keys.map(k => `${JSON.stringify(k)}:${stableStringify(rec[k])}`).join(',')}}`
+}
+
+/**
  * Snapshot a live overlay. Returns null for anything that must NOT be
  * persisted: ghosts, sync mirrors, in-progress drawings, invisible
  * transient helpers.
@@ -133,7 +174,7 @@ export function serializeOverlay<E> (overlay: Overlay<E>, options?: { now?: numb
     mode: overlay.mode,
     modeSensitivity: overlay.modeSensitivity,
     zLevel: overlay.zLevel,
-    extendData: clone(overlay.extendData ?? undefined) ?? undefined,
+    extendData: sanitizeExtendData(overlay.extendData) as E | undefined,
     completed: true,
     positionPercents,
     // createdAt sticks to the first serialization — re-stamping it on every
@@ -146,7 +187,7 @@ export function serializeOverlay<E> (overlay: Overlay<E>, options?: { now?: numb
 /** Cheap structural fingerprint for change detection (persistence diff + undo before-images). */
 export function serializedFingerprint (d: SerializedDrawing): string {
   const pts = d.points.map(p => `${p.timestamp ?? ''},${p.value ?? ''},${p.dataIndex ?? ''},${p.interval ?? ''},${p.offset ?? ''}`).join(';')
-  return `${d.name}|${d.paneId ?? ''}|${d.groupId ?? ''}|${pts}|${JSON.stringify(d.styles ?? null)}|${JSON.stringify(d.extendData ?? null)}|${d.lock === true ? 1 : 0}${d.visible === false ? 0 : 1}|${d.mode ?? ''}|${d.modeSensitivity ?? ''}|${d.zLevel ?? ''}`
+  return `${d.name}|${d.paneId ?? ''}|${d.groupId ?? ''}|${pts}|${stableStringify(d.styles ?? null)}|${stableStringify(d.extendData ?? null)}|${d.lock === true ? 1 : 0}${d.visible === false ? 0 : 1}|${d.mode ?? ''}|${d.modeSensitivity ?? ''}|${d.zLevel ?? ''}`
 }
 
 // ─── v1 migration ────────────────────────────────────────────────
@@ -177,7 +218,12 @@ export function migrateDrawingV1toV2 (legacy: LegacyDrawingV1, fallbackNow?: num
     id: legacy.id,
     name: legacy.name,
     groupId: legacy.groupId ?? 'drawings',
-    points: legacy.points.map(p => ({ timestamp: p.timestamp, value: p.value, dataIndex: p.dataIndex })),
+    points: (Array.isArray(legacy.points) ? (legacy.points as unknown[]) : [])
+      .filter(p => p !== null && typeof p === 'object')
+      .map(p => {
+        const point = p as SerializedDrawingPoint
+        return { timestamp: point.timestamp, value: point.value, dataIndex: point.dataIndex }
+      }),
     styles: clone(legacy.styles ?? null) ?? undefined,
     lock: legacy.lock,
     visible: legacy.visible,

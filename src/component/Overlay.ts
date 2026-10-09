@@ -251,6 +251,14 @@ export interface Overlay<E = unknown> extends OverlayEventCollection<E> {
   syncRemoved?: boolean
 
   /**
+   * One-shot marker stamped by the sync layer on `overrideOverlay` patches
+   * that apply a REMOTE edit onto the canonical overlay. The drawings
+   * manager reads it to persist the change without minting a local undo
+   * entry, then clears it — never serialized, never persists on the instance.
+   */
+  syncApplied?: boolean
+
+  /**
    * Whether the overlay is visible
    */
   visible: boolean
@@ -575,6 +583,13 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
       _prevPressedPoint: _pp,
       _prevPressedPoints: _pps,
       _prevZLevel: _pz,
+      // Template/immutables — a host JS patch naming these would silently
+      // corrupt step boundaries, gesture routing, and cull classification.
+      totalStep: _ts,
+      freehand: _fh,
+      freehandMinDistance: _fmd,
+      groupId: _gid,
+      cullable: _cu,
       ...others
     } = overlay as Partial<Overlay<E>> & {
       completed?: boolean
@@ -668,6 +683,10 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
           prevPoints: this._prevPressedPoints
         })
       }
+      // Point writes invalidate the figure cache — stride-sampled
+      // signatures can't see a mid-array vertex edit on huge freehand
+      // paths, so the revision is the source of truth for mutations.
+      this.figuresRev++
     }
 
     // Restore-path flag: a create carrying completed must never enter the
@@ -749,6 +768,7 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
       newPoint.value = point.value
     }
     this.points[pointIndex] = newPoint
+    this.figuresRev++
     this.performEventMoveForDrawing?.({
       currentStep: this.currentStep,
       mode: this.mode,
@@ -791,6 +811,9 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
     if (isNumber(point.value)) {
       this.points[pointIndex].value = point.value
     }
+    // In-place vertex edits are invisible to the stride-sampled figure
+    // signature on >64-point paths — the revision is the mutation signal.
+    this.figuresRev++
     this.performEventPressedMove?.({
       currentStep: this.currentStep,
       points: this.points,
@@ -832,6 +855,7 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
         }
         return newPoint
       })
+      this.figuresRev++
       this.performEventBodyMove?.({
         currentStep: this.currentStep,
         points: this.points,

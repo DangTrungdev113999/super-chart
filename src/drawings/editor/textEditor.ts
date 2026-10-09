@@ -89,13 +89,13 @@ const EDITOR_PADDING = 2
 const OPENING_CLICK_GUARD_MS = 500
 
 const STYLE_ID = 'sc-text-editor-styles'
-let stylesInjected = false
 
 function ensureEditorStyles (): void {
-  if (stylesInjected || typeof document === 'undefined') {
+  // Id-marker dedupe (not a module-global flag) — a removed node or a
+  // second document/iframe still gets its styles.
+  if (typeof document === 'undefined' || document.getElementById(STYLE_ID) !== null) {
     return
   }
-  stylesInjected = true
   const style = document.createElement('style')
   style.id = STYLE_ID
   // Caret: TV blinks at 1s period (500 off / 500 on) starting 300ms after
@@ -113,6 +113,11 @@ const sharedWidthCache = createTextWidthCache()
 export interface TextEditorSession {
   readonly value: string
   readonly closed: boolean
+  /**
+   * Recompute the box layout + reposition — call when the anchor moved
+   * (scroll/zoom/pane resize) while the session stays open.
+   */
+  relayout: () => void
   /**
    * End the session — commits finalValue exactly once via onClose.
    */
@@ -374,6 +379,14 @@ class TextEditorSessionImp implements TextEditorSession {
       const dpr = window.devicePixelRatio
       this._caret.style.width = `${Math.max(2 * Math.floor(dpr), 2) / dpr}px`
       this._caret.style.background = this._options.caretColor ?? '#1e222d'
+    }
+  }
+
+  /** Public relayout — scroll/zoom/pane-resize while open re-anchors the box. */
+  relayout (): void {
+    if (!this._closed) {
+      this._relayout()
+      this._syncCaret()
     }
   }
 

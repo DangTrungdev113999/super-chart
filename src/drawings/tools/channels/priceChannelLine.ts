@@ -13,6 +13,7 @@
  */
 
 import type Coordinate from '../../../common/Coordinate'
+import type Bounding from '../../../common/Bounding'
 
 import type { Overlay, OverlayFigure, OverlayTemplate } from '../../../component/Overlay'
 
@@ -31,28 +32,33 @@ import {
   channelBandPolygon,
   channelFillColor,
   channelFillEnabled,
-  channelHandleFigure,
   channelStrokeOf,
   pushChannelXAxisPills,
   pushChannelYAxisPills
 } from './channelCommon'
 
 /**
- * 'priceChannelLine' — two-point price channel with TradingView
- * Flat Top/Bottom fill semantics: BOTH edges are horizontal, each at its
- * own anchor's price level, spanning the anchors' x-range. P0 and P1 are
- * diagonal corners of the band (the flat top and the flat bottom).
+ * 'priceChannelLine' — three-point slanted channel (upstream klinecharts
+ * `getParallelLines(coordinates, bounding, 1)` semantics):
  *
- * Handles:
- *   anchor_0 / anchor_1 — the two diagonal corners (free drag, Shift =
- *                         45° snap on the second corner)
- *   pcl_ne / pcl_sw     — the other two corners: horizontal drag moves
- *                         the matching side's index, vertical drag moves
- *                         the opposite anchor's price
+ *   P0–P1 — the middle line's slope+intercept (k, b)
+ *   P2    — fixes the FIRST parallel edge: same slope, intercept
+ *           b1 = P2.y - k·P2.x
+ *   MIRROR— a third line mirrored across the middle: intercept 2b - b1
+ *           (upstream's extendParallelLineCount = 1)
  *
- * Fill = TV ParallelChannelRenderer band over the quad
- * [P0, (P1.x,P0.y), P1, (P0.x,P1.y)], clipped to the anchor slab unless
- * extendLeft/extendRight is set.
+ * Degenerate P0.x === P1.x collapses to verticals at x0 (middle), x2
+ * (edge), and x0 + (x0 - x2) (mirror).
+ *
+ * Upstream always renders the lines across the FULL pane width, so
+ * extendLeft/extendRight default TRUE — serialized records from the
+ * legacy tool (3 points, no extendData) render identically. Clearing a
+ * flag clips the edges to the outermost anchor x on that side.
+ *
+ * Fill = band between the two OUTER edges (P2-parallel ↔ mirror) —
+ * channelBandPolygon clipped by each edge's half-plane toward the other.
+ *
+ * Handles: anchor_0/1/2 free drag (Shift on index 1 = 45° snap).
  *
  * extendData: extendLeft/extendRight, fillBackground/showBackground,
  * transparency (0-100), background {enabled,color,opacity},
@@ -61,14 +67,75 @@ import {
  */
 export interface PriceChannelLineExtendData extends ChannelExtendData {}
 
+/** The three rendered edges, in upstream order: middle, P2-side, mirror. */
+interface ChannelEdges {
+  middle: [Coordinate, Coordinate]
+  edge: [Coordinate, Coordinate]
+  mirror: [Coordinate, Coordinate]
+}
+
+function computeEdges (coordinates: Coordinate[], bounding: Bounding, extendLeft: boolean, extendRight: boolean): ChannelEdges | null {
+  if (coordinates.length < 2) {
+    return null
+  }
+  const c0 = coordinates[0]
+  const c1 = coordinates[1]
+  const c2 = coordinates[2]
+  const xs = coordinates.map(c => c.x)
+  const leftX = extendLeft ? 0 : Math.min(...xs)
+  const rightX = extendRight ? bounding.width : Math.max(...xs)
+
+  if (Math.abs(c1.x - c0.x) < 1e-10) {
+    // Degenerate vertical middle — parallel edges are verticals offset by
+    // the same x-distance as P2 is from the middle.
+    const middle: [Coordinate, Coordinate] = [{ x: c0.x, y: 0 }, { x: c0.x, y: bounding.height }]
+    if (!isValid(c2)) {
+      return { middle, edge: middle, mirror: middle }
+    }
+    const distance = c0.x - c2.x
+    return {
+      middle,
+      edge: [{ x: c2.x, y: 0 }, { x: c2.x, y: bounding.height }],
+      mirror: [{ x: c0.x + distance, y: 0 }, { x: c0.x + distance, y: bounding.height }]
+    }
+  }
+
+  const k = (c1.y - c0.y) / (c1.x - c0.x)
+  const b = c0.y - k * c0.x
+  const middle: [Coordinate, Coordinate] = [
+    { x: leftX, y: leftX * k + b },
+    { x: rightX, y: rightX * k + b }
+  ]
+  if (!isValid(c2)) {
+    return { middle, edge: middle, mirror: middle }
+  }
+  const b1 = c2.y - k * c2.x
+  const bm = 2 * b - b1
+  return {
+    middle,
+    edge: [
+      { x: leftX, y: leftX * k + b1 },
+      { x: rightX, y: rightX * k + b1 }
+    ],
+    mirror: [
+      { x: leftX, y: leftX * k + bm },
+      { x: rightX, y: rightX * k + bm }
+    ]
+  }
+}
+
 const priceChannelLine: OverlayTemplate<PriceChannelLineExtendData> = {
   name: 'priceChannelLine',
-  totalStep: 3,
+  totalStep: 4,
   cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,
   extendData: {
+    // Upstream renders the edges across the whole pane — default both
+    // extensions on so legacy records (no extendData) match pixel-for-pixel.
+    extendLeft: true,
+    extendRight: true,
     fillBackground: true,
     transparency: 80
   },
@@ -82,34 +149,25 @@ const priceChannelLine: OverlayTemplate<PriceChannelLineExtendData> = {
 
     const ext: PriceChannelLineExtendData = isValid(overlay.extendData) ? overlay.extendData : {}
     const stroke = channelStrokeOf(overlay, chart, ext)
-    const extendLeft = ext.extendLeft === true
-    const extendRight = ext.extendRight === true
+    const extendLeft = ext.extendLeft !== false
+    const extendRight = ext.extendRight !== false
     const precision = pricePrecisionOf(chart, overlay, yAxis, ext.pricePrecision)
 
-    const [c0, c1] = coordinates
-    const minX = Math.min(c0.x, c1.x)
-    const maxX = Math.max(c0.x, c1.x)
+    const edges = computeEdges(coordinates, bounding, extendLeft, extendRight)
+    if (edges === null) {
+      return figures
+    }
+    const hasEdge = isValid(coordinates[2]) &&
+      (Math.abs(edges.edge[0].x - edges.middle[0].x) > 1e-10 ||
+       Math.abs(edges.edge[0].y - edges.middle[0].y) > 1e-10)
 
-    // Flat edges at each anchor's own level, rendered over the anchor
-    // x-slab (extended to the pane edges when enabled).
-    const leftX = extendLeft ? 0 : minX
-    const rightX = extendRight ? bounding.width : maxX
-    const s1: Coordinate = { x: leftX, y: c0.y }
-    const e1: Coordinate = { x: rightX, y: c0.y }
-    const s2: Coordinate = { x: leftX, y: c1.y }
-    const e2: Coordinate = { x: rightX, y: c1.y }
-
-    // Fill — TV band polygon over the anchor quad (unextended anchors;
-    // the clip sequence applies the extension flags itself).
-    if (channelFillEnabled(ext) && Math.abs(c1.y - c0.y) > 1e-10) {
+    // Fill — the full channel region sits between the two OUTER edges
+    // (P2-parallel on one side of the middle, the mirror on the other).
+    if (hasEdge && channelFillEnabled(ext)) {
       const band = channelBandPolygon(
-        { x: c0.x, y: c0.y },
-        { x: c1.x, y: c0.y },
-        { x: c0.x, y: c1.y },
-        { x: c1.x, y: c1.y },
-        extendLeft,
-        extendRight,
-        bounding
+        edges.edge[0], edges.edge[1],
+        edges.mirror[0], edges.mirror[1],
+        extendLeft, extendRight, bounding
       )
       if (band.length >= 3) {
         figures.push({
@@ -123,32 +181,51 @@ const priceChannelLine: OverlayTemplate<PriceChannelLineExtendData> = {
     }
 
     figures.push({
-      key: 'pcl_line1',
+      key: 'pcl_middle',
       type: 'line',
-      attrs: { coordinates: [s1, e1] },
+      attrs: { coordinates: edges.middle },
       styles: stroke
     })
-    figures.push({
-      key: 'pcl_line2',
-      type: 'line',
-      attrs: { coordinates: [s2, e2] },
-      styles: stroke
-    })
-
-    // Price labels at the two levels (TradingView `showPrices` parity).
-    if (ext.showPrices === true || ext.showPriceLabels === true || ext.showPriceLabel === true) {
-      const points = overlay.points
-      const p0 = isValid(points[0]) ? points[0] : {}
-      const p1 = isValid(points[1]) ? points[1] : {}
-      pushSidePriceLabel(figures, 'pcl_price0', c0, p0.value, c0.x <= c1.x ? 'left' : 'right', stroke.color, precision)
-      pushSidePriceLabel(figures, 'pcl_price1', c1, p1.value, c1.x > c0.x ? 'right' : 'left', stroke.color, precision)
+    if (hasEdge) {
+      figures.push({
+        key: 'pcl_edge',
+        type: 'line',
+        attrs: { coordinates: edges.edge },
+        styles: stroke
+      })
+      figures.push({
+        key: 'pcl_mirror',
+        type: 'line',
+        attrs: { coordinates: edges.mirror },
+        styles: stroke
+      })
     }
 
-    const diagonalCursor = computeResizeCursor(c0, c1)
-    const antiCursor = computeResizeCursor(
-      { x: c0.x, y: c1.y },
-      { x: c1.x, y: c0.y }
-    )
+    // Price labels at each edge's right-end level (TradingView
+    // `showPrices` parity — the edge levels, not raw anchor values).
+    if (ext.showPrices === true || ext.showPriceLabels === true || ext.showPriceLabel === true) {
+      const rightEnd = (edge: [Coordinate, Coordinate]): Coordinate => edge[1].x >= edge[0].x ? edge[1] : edge[0]
+      const edgeValue = (y: number): number | undefined => {
+        if (yAxis === null) {
+          return undefined
+        }
+        const v = yAxis.convertFromPixel(y)
+        return isNumber(v) ? v : undefined
+      }
+      const cMid = rightEnd(edges.middle)
+      pushSidePriceLabel(figures, 'pcl_price_mid', cMid, edgeValue(cMid.y), 'right', stroke.color, precision)
+      if (hasEdge) {
+        const cEdge = rightEnd(edges.edge)
+        const cMirror = rightEnd(edges.mirror)
+        pushSidePriceLabel(figures, 'pcl_price_edge', cEdge, edgeValue(cEdge.y), 'right', stroke.color, precision)
+        pushSidePriceLabel(figures, 'pcl_price_mirror', cMirror, edgeValue(cMirror.y), 'right', stroke.color, precision)
+      }
+    }
+
+    // All anchors move along/alongside the middle line — same diagonal
+    // cursor for each (the parallel edge drags keep the slope anyway).
+    const diagonalCursor = computeResizeCursor(coordinates[0], coordinates[1])
+    const cursors = coordinates.map(() => diagonalCursor)
     figures.push(...createAnchorFigures({
       coordinates,
       isSelected,
@@ -156,25 +233,8 @@ const priceChannelLine: OverlayTemplate<PriceChannelLineExtendData> = {
       isDrawing: overlay.isDrawing(),
       lock: overlay.lock,
       isTouch,
-      cursors: [diagonalCursor, diagonalCursor]
+      cursors
     }))
-
-    // The other two corners — each drags its side's index plus the
-    // opposite anchor's price (Flat Top/Bottom corner-pin behavior).
-    const interactive = !overlay.lock && !overlay.isDrawing() &&
-      ((isSelected ?? false) || (isHovered ?? false))
-    if (interactive && Math.abs(c1.y - c0.y) > 1e-10 && Math.abs(c1.x - c0.x) > 1e-10) {
-      figures.push(channelHandleFigure('pcl_ne', { x: c1.x, y: c0.y }, {
-        pointIndex: 1,
-        cursor: antiCursor,
-        isTouch
-      }))
-      figures.push(channelHandleFigure('pcl_sw', { x: c0.x, y: c1.y }, {
-        pointIndex: 0,
-        cursor: antiCursor,
-        isTouch
-      }))
-    }
 
     return figures
   },
@@ -209,28 +269,7 @@ const priceChannelLine: OverlayTemplate<PriceChannelLineExtendData> = {
   },
 
   performEventPressedMove: function (this: Overlay<PriceChannelLineExtendData>, params) {
-    const points = params.points
-    const index = params.performPointIndex
-    const key = params.figureKey
-
-    if (key === 'pcl_ne' || key === 'pcl_sw') {
-      // Off-diagonal corner — kernel wrote the dragged index's point =
-      // cursor; restore its price and push the dragged level into the
-      // OPPOSITE anchor (each corner carries the other edge's level).
-      const dragged = points[index]
-      const otherIndex = 1 - index
-      const other = points[otherIndex]
-      const prev = isValid(params.prevPoints[index]) ? params.prevPoints[index] : {}
-      if (isValid(dragged) && isValid(other) && isNumber(dragged.value)) {
-        other.value = dragged.value
-        if (isNumber(prev.value)) {
-          dragged.value = prev.value
-        }
-      }
-      return
-    }
-
-    if (index === 1) {
+    if (params.performPointIndex === 1) {
       applySnap45(this, params, 0)
     }
   },

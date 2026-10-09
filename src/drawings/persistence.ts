@@ -272,7 +272,15 @@ export function withBroadcastSync (inner: DrawingStore, options?: { channelName?
   if (typeof globalThis.BroadcastChannel !== 'undefined') {
     channel = new globalThis.BroadcastChannel(channelName)
     channel.onmessage = (e: MessageEvent<DrawingStoreEvent>) => {
-      listeners.forEach(cb => { cb(e.data) })
+      // Per-listener isolation — one throwing subscriber (e.g. a malformed
+      // record crashing a deserializer) must not starve the rest.
+      listeners.forEach(cb => {
+        try {
+          cb(e.data)
+        } catch {
+          // swallow — same contract as Action.execute
+        }
+      })
     }
   }
   const post = (event: DrawingStoreEvent): void => { channel?.postMessage(event) }

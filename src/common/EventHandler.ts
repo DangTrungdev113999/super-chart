@@ -230,6 +230,7 @@ export default class EventHandlerImp {
 
     this._clearLongTapTimeout()
     this._resetClickTimeout()
+    this._resetTapTimeout()
   }
 
   private _mouseEnterHandler (enterEvent: MouseEvent): void {
@@ -611,6 +612,11 @@ export default class EventHandlerImp {
     this._clearLongTapTimeout()
     this._touchMoveStartCoordinate = null
     this._cancelTap = true
+    // A cancelled pinch leaves the middle coordinate armed — the next
+    // touchstart's _checkPinchState would run _stopPinch on a dead pinch
+    // and poison the fresh scroll anchor via pinchEndEvent.
+    this._startPinchMiddleCoordinate = null
+    this._startPinchDistance = 0
     if (this._unsubscribeRootTouchEvents !== null) {
       this._unsubscribeRootTouchEvents()
       this._unsubscribeRootTouchEvents = null
@@ -875,6 +881,11 @@ export default class EventHandlerImp {
     // dispatch mouseClickEvent/doubleTapEvent that commit drawing points
     // or force-complete an in-progress overlay at the release position.
     this._cancelTap = true
+    // A pinch also retires the tap window — without this a quick
+    // pinch-flick + immediate tap reaches _tapCount 2 inside 500ms and
+    // fires a phantom doubleTapEvent (chart reset / force-complete).
+    this._tapCount = 0
+    this._resetTapTimeout()
 
     if (isValid(this._handler.pinchStartEvent)) {
       this._handler.pinchStartEvent({ x: 0, y: 0, pageX: 0, pageY: 0 })
@@ -902,8 +913,22 @@ export default class EventHandlerImp {
     }
 
     if (isValid(this._handler.pinchEndEvent)) {
-      const coord = remaining ?? { x: 0, y: 0 }
-      this._handler.pinchEndEvent({ ...coord, pageX: 0, pageY: 0 })
+      if (remaining !== null && touches !== undefined && touches.length === 1) {
+        // Container-space payload (clientX - box.left) — the scroll anchor
+        // it re-seats is widget-local and resolved handler-side; passing
+        // page coords here would offset the anchor by the container's
+        // absolute page position and teleport the scroll on the next move.
+        this._handler.pinchEndEvent({
+          x: touches[0].clientX - this._target.getBoundingClientRect().left,
+          y: touches[0].clientY - this._target.getBoundingClientRect().top,
+          pageX: touches[0].pageX,
+          pageY: touches[0].pageY
+        }, 1)
+      } else {
+        // No finger remains — the handler must DISARM the scroll anchor,
+        // not re-seat it at a manufactured origin.
+        this._handler.pinchEndEvent({ x: 0, y: 0, pageX: 0, pageY: 0 }, 0)
+      }
     }
   }
 

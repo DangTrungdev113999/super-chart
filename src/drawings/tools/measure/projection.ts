@@ -89,6 +89,7 @@ function lerpHex (c1: string, c2: string, t: number): string {
 const projection: OverlayTemplate<ProjectionExtendData> = {
   name: 'projection',
   totalStep: 4,
+  cullable: false,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,

@@ -272,7 +272,12 @@ export default class Event implements EventHandler {
       if (pressed.points.length < 2) {
         chartStore.removeOverlay({ id: pressed.id })
       } else {
-        chartStore.progressOverlayComplete()
+        // onDrawEnd BEFORE complete — measure-style tools delete themselves
+        // in the hook; skipping it strands the ruler on the chart forever.
+        pressed.onDrawEnd?.({ chart: this._chart, overlay: pressed })
+        if (chartStore.getOverlayById(pressed.id) !== null) {
+          chartStore.progressOverlayComplete()
+        }
       }
       chartStore.setPressedOverlayInfo({ paneId: '', overlay: null, figureType: 'none', figureIndex: -1, figure: null })
       this._chart.updatePane(UpdateLevel.Overlay)
@@ -292,13 +297,26 @@ export default class Event implements EventHandler {
     return false
   }
 
-  pinchEndEvent (e: MouseTouchEvent): boolean {
+  pinchEndEvent (e: MouseTouchEvent, hasRemaining?: number): boolean {
     // One finger may remain after pinch — re-anchor the scroll baseline to
-    // its current position, or the accumulated pinch displacement applies
-    // at once as a scroll jump on the next touchmove.
-    if (this._startScrollCoordinate !== null) {
-      this._startScrollCoordinate = { x: e.x, y: e.y }
+    // its current WIDGET-LOCAL position, or the accumulated pinch
+    // displacement applies at once as a scroll jump on the next touchmove.
+    // When no finger remains the anchor is disarmed — keeping it would let
+    // the release compute a fling from a stale/fake origin (teleport).
+    if (this._startScrollCoordinate === null) {
+      return false
+    }
+    if (hasRemaining === 0) {
+      this._startScrollCoordinate = null
+      return false
+    }
+    const { widget } = this._findWidgetByEvent(e)
+    if (widget?.getName() === WidgetNameConstants.MAIN) {
+      const event = this._makeWidgetEvent(e, widget)
+      this._startScrollCoordinate = { x: event.x, y: event.y }
       this._flingStartTime = new Date().getTime()
+    } else {
+      this._startScrollCoordinate = null
     }
     return false
   }
@@ -327,6 +345,12 @@ export default class Event implements EventHandler {
   mouseDownEvent (e: MouseTouchEvent): boolean {
     const { pane, widget } = this._findWidgetByEvent(e)
     this._mouseDownWidget = widget
+    // A mouse grab on a hybrid touchscreen can land mid-fling — stop the
+    // inertial raf or scroll() and the drag fight over the scroll anchor.
+    if (this._flingScrollRequestId !== null) {
+      cancelAnimationFrame(this._flingScrollRequestId)
+      this._flingScrollRequestId = null
+    }
     if (widget !== null) {
       const event = this._makeWidgetEvent(e, widget)
       const name = widget.getName()
@@ -569,14 +593,32 @@ export default class Event implements EventHandler {
         return false
       }
     )
+    // Indicator hover also ends on surface exit — _clearIndicatorHover is
+    // otherwise only reachable from a move inside the surface.
+    this._clearIndicatorHover()
+    // Notify the last-hovered widget itself (separator strips track leave to
+    // reset their active drag styling).
+    this._mouseMoveTriggerWidgetInfo.widget?.dispatchEvent('mouseLeaveEvent', e)
     // Reset so re-entering fires widget mouseEnter again.
     this._mouseMoveTriggerWidgetInfo = { pane: null, widget: null }
     return true
   }
 
   touchStartEvent (e: MouseTouchEvent): boolean {
+    // Crosshair suppression is per-gesture — a drag/pinch/cancel path that
+    // skips tapEvent would otherwise leave the flag armed and eat the NEXT
+    // tap's crosshair. Clearing here (before this gesture can re-arm it)
+    // bounds the flag to the gesture that set it.
+    this._touchCancelCrosshair = false
     const { pane, widget } = this._findWidgetByEvent(e)
     this._mouseDownWidget = widget
+    // Cancel an in-flight fling for ANY touch — a touch on an axis or
+    // separator during inertial scroll must still stop the raf or it keeps
+    // scrolling underneath the new gesture.
+    if (this._flingScrollRequestId !== null) {
+      cancelAnimationFrame(this._flingScrollRequestId)
+      this._flingScrollRequestId = null
+    }
     if (widget !== null) {
       const event = this._makeWidgetEvent(e, widget)
       event.preventDefault?.()
@@ -584,14 +626,6 @@ export default class Event implements EventHandler {
       switch (name) {
         case WidgetNameConstants.MAIN: {
           const chartStore = this._chart.getChartStore()
-          // Cancel an in-flight fling BEFORE dispatching — a touch landing on
-          // an overlay figure consumes the event and early-returns, but the
-          // inertial scroll raf must still stop or it keeps scrolling
-          // underneath the anchor drag/stroke.
-          if (this._flingScrollRequestId !== null) {
-            cancelAnimationFrame(this._flingScrollRequestId)
-            this._flingScrollRequestId = null
-          }
           if (widget.dispatchEvent('mouseDownEvent', event)) {
             this._touchCancelCrosshair = true
             this._touchCoordinate = null

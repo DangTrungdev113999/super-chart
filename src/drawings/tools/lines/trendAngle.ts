@@ -162,8 +162,11 @@ const trendAngle: OverlayTemplate<TrendAngleExtendData> = {
         x: c1.x,
         y: c1.y,
         r: ARC_RADIUS,
-        startAngle: 0,
-        endAngle: -angleRad
+        // canvas arc() with ccw=false normalizes end<start into a full
+        // 2π−θ sweep — for a rising line (angleRad>0) that draws the
+        // COMPLEMENT wedge. Order angles so the sweep always covers θ.
+        startAngle: Math.min(0, -angleRad),
+        endAngle: Math.max(0, -angleRad)
       },
       styles: {
         color: lineColor,
@@ -240,6 +243,32 @@ const trendAngle: OverlayTemplate<TrendAngleExtendData> = {
   performEventPressedMove: function (this: Overlay<TrendAngleExtendData>, params) {
     // Dragging the second anchor re-measures angle + distance (TV parity);
     // dragging P1 keeps the stored angle — the line translates rigidly.
+    if (params.performPointIndex === 0) {
+      // Rigid translate: the rendered endpoint follows P1 through the
+      // stored angle+distance, so translate the STORED p2 by the same
+      // drag delta — otherwise points[1] keeps its drag-start value and
+      // serialized geometry desyncs from what the user sees (the y-axis
+      // pill shows the stale price too).
+      const prev = params.prevPoints[0]
+      const curr = params.points[0]
+      const prev2 = params.prevPoints[1]
+      const p2 = params.points[1]
+      if (isValid(prev) && isValid(curr) && isValid(prev2) && isValid(p2)) {
+        if (isNumber(curr.dataIndex) && isNumber(prev.dataIndex) && isNumber(prev2.dataIndex)) {
+          p2.dataIndex = prev2.dataIndex + (curr.dataIndex - prev.dataIndex)
+          if (isNumber(prev2.timestamp) && isNumber(prev.timestamp) && isNumber(curr.timestamp)) {
+            p2.timestamp = prev2.timestamp + (curr.timestamp - prev.timestamp)
+          }
+        } else if (isNumber(curr.timestamp) && isNumber(prev.timestamp) && isNumber(prev2.timestamp)) {
+          p2.timestamp = prev2.timestamp + (curr.timestamp - prev.timestamp)
+        }
+        if (isNumber(curr.value) && isNumber(prev.value) && isNumber(prev2.value)) {
+          p2.value = prev2.value + (curr.value - prev.value)
+        }
+        this.invalidateFigures()
+      }
+      return
+    }
     if (params.performPointIndex !== 1) {
       return
     }

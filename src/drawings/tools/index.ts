@@ -19,7 +19,7 @@ import type {
   OverlayTemplate
 } from '../../component/Overlay'
 
-import { withFigureCache } from '../interaction/perf'
+import { rewrapFigureCache } from '../interaction/perf'
 
 import textNote from './text'
 
@@ -149,7 +149,7 @@ function withDrawingsFigureCache<E> (
     fn: OverlayCreateFiguresCallback<E> | null | undefined,
     slot: string
   ): OverlayCreateFiguresCallback<E> | null =>
-    (fn == null ? null : withFigureCache(fn, { ...cacheOpts, slot }))
+    (fn == null ? null : rewrapFigureCache(fn, { ...cacheOpts, slot }))
   return {
     ...template,
     createPointFigures: wrap(template.createPointFigures, 'point'),

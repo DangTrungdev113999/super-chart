@@ -15,7 +15,7 @@
 import type { Chart } from '../../../Chart'
 import type Coordinate from '../../../common/Coordinate'
 import type Point from '../../../common/Point'
-import { isNumber, isString } from '../../../common/utils/typeChecks'
+import { isNumber, isObject, isString } from '../../../common/utils/typeChecks'
 import type { Overlay } from '../../../component/Overlay'
 
 import { openOverlayTextEditor } from '../../editor/overlayTextEditor'
@@ -134,7 +134,13 @@ export function commitText<E extends object> (
   chart.overrideOverlay({
     id: overlay.id,
     paneId: overlay.paneId,
-    extendData: { ...overlay.extendData, ...patch, text: value }
+    // Legacy payloads arrive as raw strings/functions — spreading a string
+    // would write char-index keys ({'0':'h','1':'i',...}) into extendData.
+    extendData: {
+      ...(isObject(overlay.extendData) ? overlay.extendData : {}),
+      ...patch,
+      text: value
+    }
   })
 }
 

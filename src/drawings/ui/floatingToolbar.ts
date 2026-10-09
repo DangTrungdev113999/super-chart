@@ -590,13 +590,31 @@ export function attachFloatingToolbar (
     element.style.transform = `translate3d(${pos.x}px, ${pos.y}px, 0)`
   }
 
+  function clampPos (x: number, y: number): { x: number, y: number } {
+    if (element === null || layer === null) {
+      return { x, y }
+    }
+    const host = layer.getElement()
+    const tw = element.offsetWidth
+    const th = element.offsetHeight
+    return {
+      x: Math.max(4, Math.min(x, Math.max(4, host.clientWidth - tw - 4))),
+      y: Math.max(4, Math.min(y, Math.max(4, host.clientHeight - th - 4)))
+    }
+  }
+
   function onDragMove (e: MouseEvent): void {
     if (dragState === null || element === null) {
       return
     }
+    // A missed mouseup (blur, iframe exit) must not drag buttonless.
+    if (e.buttons === 0) {
+      dragState = null
+      return
+    }
     const dx = e.clientX - dragState.startX
     const dy = e.clientY - dragState.startY
-    pos = { x: Math.round(dragState.baseX + dx), y: Math.round(dragState.baseY + dy) }
+    pos = clampPos(Math.round(dragState.baseX + dx), Math.round(dragState.baseY + dy))
     element.style.transform = `translate3d(${pos.x}px, ${pos.y}px, 0)`
     const bounds = overlayBounds()
     if (bounds !== null) {
@@ -635,6 +653,7 @@ export function attachFloatingToolbar (
 
   function hide (): void {
     closeMenu()
+    dragState = null
     unmount?.()
     unmount = null
     element = null
@@ -699,8 +718,11 @@ export function attachFloatingToolbar (
   chart.subscribeAction('onVisibleRangeChange', onPanOrZoom)
 
   if (typeof document !== 'undefined') {
-    document.addEventListener('mousemove', onDragMove)
-    document.addEventListener('mouseup', onDragEnd)
+    // Capture phase — the drag keeps the element under the cursor, so a
+    // release lands on it and the layer's stopPropagation would swallow a
+    // bubble-phase listener and strand dragState forever.
+    document.addEventListener('mousemove', onDragMove, true)
+    document.addEventListener('mouseup', onDragEnd, true)
     // Releasing the button outside the window never delivers mouseup —
     // window blur ends the drag or the next mousemove drags buttonless.
     window.addEventListener('blur', onDragEnd)
@@ -719,8 +741,8 @@ export function attachFloatingToolbar (
       chart.unsubscribeAction('onScroll', onPanOrZoom)
       chart.unsubscribeAction('onVisibleRangeChange', onPanOrZoom)
       if (typeof document !== 'undefined') {
-        document.removeEventListener('mousemove', onDragMove)
-        document.removeEventListener('mouseup', onDragEnd)
+        document.removeEventListener('mousemove', onDragMove, true)
+        document.removeEventListener('mouseup', onDragEnd, true)
         window.removeEventListener('blur', onDragEnd)
       }
     }

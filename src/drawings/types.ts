@@ -61,3 +61,15 @@ export function isVisibleOnInterval (overlay: { extendData?: unknown }, interval
   const { visibleIntervals } = getCommonState(overlay)
   return visibleIntervals === undefined || visibleIntervals.length === 0 || visibleIntervals.includes(interval)
 }
+
+const PERIOD_TYPE_SUFFIX: Record<string, string> = {
+  second: 's', minute: 'm', hour: 'h', day: 'D', week: 'W', month: 'M', year: 'Y'
+}
+
+/** Map a chart Period to the TV-style interval labels used by visibleIntervals. */
+export function periodToIntervalLabel (period: { type?: string, span?: number } | null | undefined): string {
+  if (period?.type === undefined) {
+    return ''
+  }
+  return `${period.span ?? 1}${PERIOD_TYPE_SUFFIX[period.type] ?? period.type}`
+}

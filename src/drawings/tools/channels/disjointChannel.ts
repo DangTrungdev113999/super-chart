@@ -104,7 +104,11 @@ const disjointChannel: OverlayTemplate<DisjointChannelExtendData> = {
     const hasMirror = coordinates.length >= 3
     const cornerP: Coordinate = { x: t.x, y: hasMirror ? coordinates[2].y : 0 }
     const cornerA: Coordinate = { x: b.x, y: cornerP.y + (t.y - b.y) }
-    const [s2, e2] = getExtendedCoordinates(cornerA, cornerP, bounding.width, bounding.height, extendLeft, extendRight)
+    // Degenerate mirrored edge (b.x === t.x): extension would read the
+    // zero-width edge as vertical and paint a full-height phantom line.
+    const [s2, e2] = cornerA.x === cornerP.x
+      ? [cornerA, cornerP]
+      : getExtendedCoordinates(cornerA, cornerP, bounding.width, bounding.height, extendLeft, extendRight)
 
     // Fill — TradingView DisjointChannelRenderer quad [b, t, P, A].
     if (hasMirror && channelFillEnabled(ext)) {

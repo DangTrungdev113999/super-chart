@@ -55,6 +55,11 @@ export function closeTextEditorSessions (chart: Chart): void {
   sessions.delete(chart)
 }
 
+/** Whether any text-editor session is live on this chart. */
+export function hasOpenTextEditorSession (chart: Chart): boolean {
+  return (sessions.get(chart)?.size ?? 0) > 0
+}
+
 interface ChartWithUpdatePane {
   updatePane?: (level: UpdateLevel, paneId?: string) => void
 }
@@ -110,13 +115,21 @@ export function openOverlayTextEditor (options: OverlayTextEditorOptions): TextE
   }
   chartSessions.get(overlay.id)?.close('external')
 
+  // The listeners below close over a box — the session const only exists
+  // after createTextEditorSession returns, but handlers can fire any time
+  // after subscription.
+  const sessionBox: { current: TextEditorSession | null } = { current: null }
   const onChartChange = (event?: unknown): void => {
     const change = event as OverlayChangeEvent | undefined
     if (change?.type === 'remove' && change.overlay?.id === overlay.id) {
-      session.close('external')
+      sessionBox.current?.close('external')
     }
   }
-  chart.subscribeAction('onOverlayChange', onChartChange)
+  // Scroll/zoom/resize move the rendered text while the session is open —
+  // re-anchor the DOM editor or the textarea drifts off the glyphs.
+  const onViewChange = (): void => {
+    sessionBox.current?.relayout()
+  }
 
   const session = createTextEditorSession({
     chart,
@@ -158,19 +171,32 @@ export function openOverlayTextEditor (options: OverlayTextEditorOptions): TextE
       liveText.delete(overlay)
       chartSessions.delete(overlay.id)
       chart.unsubscribeAction('onOverlayChange', onChartChange)
+      chart.unsubscribeAction('onScroll', onViewChange)
+      chart.unsubscribeAction('onZoom', onViewChange)
+      chart.unsubscribeAction('onVisibleRangeChange', onViewChange)
       overlay.invalidateFigures()
       repaint(chart, paneId)
       if (finalValue.trim().length === 0) {
         if (options.onEmpty !== undefined) {
           options.onEmpty()
         } else {
-          chart.removeOverlay({ id: overlay.id, paneId })
+          // Live paneId — the overlay may have migrated panes mid-edit.
+          chart.removeOverlay({ id: overlay.id, paneId: overlay.paneId })
         }
       } else {
         options.onCommit(finalValue)
       }
     }
   })
+
+  sessionBox.current = session
+
+  // Subscribe AFTER the session exists — a throwing constructor must not
+  // leak listeners that re-throw on every subsequent event.
+  chart.subscribeAction('onOverlayChange', onChartChange)
+  chart.subscribeAction('onScroll', onViewChange)
+  chart.subscribeAction('onZoom', onViewChange)
+  chart.subscribeAction('onVisibleRangeChange', onViewChange)
 
   chartSessions.set(overlay.id, session)
   // Seed the live buffer so the first paint shows the editor's value.

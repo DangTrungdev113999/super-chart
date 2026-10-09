@@ -47,9 +47,9 @@ export interface Offset {
 	offsetBottom: number;
 }
 /**
- * line type
+ * line type — 'dotted' is a drawings-toolbar style rendered via dashedValue.
  */
-export type LineType = "dashed" | "solid";
+export type LineType = "dashed" | "dotted" | "solid";
 export interface LineStyle {
 	style: LineType;
 	size: number;
@@ -819,6 +819,13 @@ export interface Overlay<E = unknown> extends OverlayEventCollection<E> {
 	 */
 	syncRemoved?: boolean;
 	/**
+	 * One-shot marker stamped by the sync layer on `overrideOverlay` patches
+	 * that apply a REMOTE edit onto the canonical overlay. The drawings
+	 * manager reads it to persist the change without minting a local undo
+	 * entry, then clears it — never serialized, never persists on the instance.
+	 */
+	syncApplied?: boolean;
+	/**
 	 * Whether the overlay is visible
 	 */
 	visible: boolean;
@@ -913,11 +920,37 @@ export interface Overlay<E = unknown> extends OverlayEventCollection<E> {
 	 */
 	freehandMinDistance?: number;
 	/**
+	 * Template-level opt-out of the drawings figure cache. The drawing tools
+	 * registry wraps every rebuilt template's create*Figures callbacks with a
+	 * per-overlay/per-slot cache — set to `false` only when a callback depends
+	 * on state outside the cache signature AND cannot express it via
+	 * `figureCacheDataRev`/`extraKey`. Default: cached.
+	 */
+	figuresCacheable?: boolean;
+	/**
+	 * Include `chart.getDataList()` revision (length + last close) in this
+	 * template's figure-cache signature. REQUIRED when createPointFigures/
+	 * createXAxisFigures/createYAxisFigures read bar data or project onto
+	 * future bar indices (measure stats, regression, ghost feeds, cycles).
+	 */
+	figureCacheDataRev?: boolean;
+	/**
 	 * Figure-cache revision — bumped by override() whenever styles/extendData
 	 * change and by invalidateFigures(). The drawings subsystem's figure cache
 	 * keys on this; templates MUST NOT write it.
 	 */
 	readonly figuresRev: number;
+	/**
+	 * Whether the overlay's rendered geometry is bounded by its points.
+	 * The overlay view may skip figure creation entirely when every
+	 * converted point lies outside the (padded) widget bounds. Set `false`
+	 * for tools whose figures can reach the viewport while all anchors are
+	 * offscreen — extended/rays/infinite lines, channels, pitchforks, fib
+	 * time levels, cycle/vertical-full-height tools, edge-clamped labels,
+	 * anchored text (position derives from screen fractions, not points).
+	 * Default: true (cullable).
+	 */
+	cullable?: boolean;
 	/**
 	 * Invalidate the cached figure result — call after mutating extendData in
 	 * place (inside performEvent* callbacks) when using the drawings figure
@@ -926,7 +959,11 @@ export interface Overlay<E = unknown> extends OverlayEventCollection<E> {
 	invalidateFigures: () => void;
 }
 export type OverlayTemplate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, "id" | "groupId" | "paneId" | "points" | "currentStep" | "isDrawing" | "isStart" | "forceComplete" | "invalidateFigures" | "figuresRev">, "name">;
-export type OverlayCreate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, "currentStep" | "totalStep" | "createPointFigures" | "createXAxisFigures" | "createYAxisFigures" | "performEventPressedMove" | "performEventBodyMove" | "performEventMoveForDrawing" | "isDrawing" | "isStart" | "forceComplete" | "invalidateFigures" | "figuresRev">, "name">;
+export type OverlayCreate<E = unknown> = ExcludePickPartial<Omit<Overlay<E>, "currentStep" | "totalStep" | "createPointFigures" | "createXAxisFigures" | "createYAxisFigures" | "performEventPressedMove" | "performEventBodyMove" | "performEventMoveForDrawing" | "isDrawing" | "isStart" | "forceComplete" | "invalidateFigures" | "figuresRev">, "name"> & {
+	/** Restore-path flag: the overlay is already finished — skip the
+	 * drawing-progress slot regardless of point count vs totalStep. */
+	completed?: boolean;
+};
 export type OverlayOverride<E = unknown> = Partial<Omit<Overlay<E>, "currentStep" | "totalStep" | "createPointFigures" | "createXAxisFigures" | "createYAxisFigures" | "performEventPressedMove" | "performEventBodyMove" | "performEventMoveForDrawing" | "isDrawing" | "isStart" | "forceComplete" | "invalidateFigures" | "figuresRev">>;
 /**
  * Lifecycle stream emitted through the `onOverlayChange` action.
@@ -1770,7 +1807,7 @@ export interface PathAttrs {
  * between 2 control points, with optional upper/lower deviation bands.
  */
 export type RegressionSource = "close" | "open" | "high" | "low" | "hl2" | "hlc3" | "ohlc4";
-type LineStyle$1 = "solid" | "dashed" | "dotted";
+export type RegressionTrendLineStyle = "solid" | "dashed" | "dotted";
 interface VisibilityRange {
 	enabled: boolean;
 	min: number;
@@ -1788,13 +1825,13 @@ export interface RegressionTrendExtendData {
 	source?: RegressionSource;
 	baseVisible?: boolean;
 	baseColor?: string;
-	baseStyle?: LineStyle$1;
+	baseStyle?: RegressionTrendLineStyle;
 	upperVisible?: boolean;
 	upperColor?: string;
-	upperStyle?: LineStyle$1;
+	upperStyle?: RegressionTrendLineStyle;
 	lowerVisible?: boolean;
 	lowerColor?: string;
-	lowerStyle?: LineStyle$1;
+	lowerStyle?: RegressionTrendLineStyle;
 	extendLines?: boolean;
 	pearsonR?: boolean;
 	vis_ticks?: VisibilityRange;
@@ -2114,11 +2151,14 @@ export declare function snap45Coordinate(to: Coordinate, from: Coordinate): Coor
  */
 export interface DrawingKeyboardHandlers {
 	onEscape?: () => void;
-	onDelete?: () => void;
+	/** Return true when a drawing was actually removed — only then is the key swallowed. */
+	onDelete?: () => boolean;
 	onUndo?: () => void;
 	onRedo?: () => void;
-	onCopy?: () => void;
-	onPaste?: () => void;
+	/** Return true when a drawing was copied — only then is the key swallowed. */
+	onCopy?: () => boolean;
+	/** Return true when a drawing was pasted — only then is the key swallowed. */
+	onPaste?: () => boolean;
 	/**
 	 * Unmodified single-key press (letter/digit) — tool hotkeys. The handler
 	 * decides whether the key maps to a tool; returning nothing keeps the
@@ -2144,8 +2184,8 @@ export interface FigureCacheOptions<E> {
 	/**
 	 * Extra signature material — MANDATORY for anything the template reads
 	 * that is NOT covered by coordinates/figuresRev/selection/lock/bounding/
-	 * currentStep (e.g. textual values that change sub-pixel, time-derived
-	 * labels, external flags).
+	 * currentStep/isTouch (e.g. textual values that change sub-pixel,
+	 * time-derived labels, external flags).
 	 */
 	extraKey?: (params: OverlayCreateFiguresCallbackParams<E>) => string;
 	/**
@@ -2154,6 +2194,12 @@ export interface FigureCacheOptions<E> {
 	 * ('point', 'x', 'y'); defaults to a single shared slot.
 	 */
 	slot?: string;
+	/**
+	 * Include a data revision in the signature — REQUIRED for templates whose
+	 * figure callbacks read `chart.getDataList()` (measure stats, regression,
+	 * forward bar projections). Keys on list length + last close.
+	 */
+	includeDataRev?: boolean;
 }
 /**
  * CONTRACT: the returned array is SHARED — the view and every subsequent
@@ -2392,10 +2438,14 @@ export interface TextEditorSessionOptions {
 	maxLength?: number;
 	/** Single-line fields: Enter closes instead of inserting a break. */
 	forbidLineBreaks?: boolean;
+	/** Insert a tab character on Tab (TSV-style editors) instead of blurring. */
+	allowTab?: boolean;
 	/** Word-wrap enabled — drives the letter-spacing compensation table. */
 	wordWrapEnabled?: boolean;
 	/** Re-layout the text as the value changes (wrap may alter the box). */
 	layout: (value: string) => TextEditorLayout;
+	/** Live-value hook — called on every input before relayout. */
+	onInput?: (value: string) => void;
 	onClose: (reason: TextEditorCloseReason, finalValue: string) => void;
 	onSelectionChange?: (sel: {
 		start: number;
@@ -2409,6 +2459,11 @@ export interface TextEditorSessionOptions {
 export interface TextEditorSession {
 	readonly value: string;
 	readonly closed: boolean;
+	/**
+	 * Recompute the box layout + reposition — call when the anchor moved
+	 * (scroll/zoom/pane resize) while the session stays open.
+	 */
+	relayout: () => void;
 	/**
 	 * End the session — commits finalValue exactly once via onClose.
 	 */
@@ -2538,12 +2593,6 @@ export declare function computeTextBoxLayout(data: TextBoxData, anchor: Coordina
  * figure-cache invalidation. Mirrors TV's geometry-affecting field list.
  */
 export declare function textBoxDataEqual(a: TextBoxData, b: TextBoxData): boolean;
-/**
- * Bridge between an overlay's text payload and the in-place editor. The
- * editor's layout() re-runs computeTextBoxLayout for the live value with
- * the SAME data the figure paints from — the invisible textarea therefore
- * always lands exactly over the rendered text.
- */
 export interface OverlayTextEditorOptions {
 	chart: Chart;
 	overlay: Overlay;
@@ -2559,6 +2608,8 @@ export interface OverlayTextEditorOptions {
 	paneId?: string;
 	wordWrapEnabled?: boolean;
 	forbidLineBreaks?: boolean;
+	/** Insert '\t' on Tab — TSV-style editors (the table tool). */
+	allowTab?: boolean;
 	maxLength?: number;
 	selectionColor?: string;
 	caretColor?: string;
@@ -2681,7 +2732,6 @@ export declare const utils: {
 
 export {
 	CaretPosition$1 as CaretPosition,
-	LineStyle$1 as RegressionTrendLineStyle,
 	VisibilityRange as RegressionVisibilityRange,
 	textNote as textNoteTool,
 };

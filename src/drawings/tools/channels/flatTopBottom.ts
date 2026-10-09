@@ -101,7 +101,11 @@ const flatTopBottom: OverlayTemplate<FlatTopBottomExtendData> = {
     const levelY = hasLevel ? coordinates[2].y : 0
     const p: Coordinate = { x: d.x, y: levelY }
     const c: Coordinate = { x: h.x, y: levelY }
-    const [s2, e2] = getExtendedCoordinates(p, c, bounding.width, bounding.height, extendLeft, extendRight)
+    // Degenerate flat edge (d.x === h.x): extension would read the
+    // zero-width edge as vertical and paint a full-height phantom line.
+    const [s2, e2] = p.x === c.x
+      ? [p, c]
+      : getExtendedCoordinates(p, c, bounding.width, bounding.height, extendLeft, extendRight)
 
     // Fill — TradingView DisjointChannelRenderer quad [d, h, c, p].
     if (hasLevel && channelFillEnabled(ext)) {

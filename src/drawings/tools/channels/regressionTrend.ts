@@ -201,8 +201,11 @@ function computeRegression (
   if (i1 < 0 || i2 < 0 || Math.abs(i2 - i1) < 1) {
     return null
   }
-  const start = Math.max(0, Math.min(i1, i2))
-  const end = Math.min(dataList.length - 1, Math.max(i1, i2))
+  // Floor/ceil fractional legacy indices — a fractional start would index
+  // dataList[10.4] → undefined → getPriceFromSource returns 0 and the fit
+  // collapses onto the price-0 baseline.
+  const start = Math.max(0, Math.floor(Math.min(i1, i2)))
+  const end = Math.min(dataList.length - 1, Math.ceil(Math.max(i1, i2)))
   if (end - start < 1) {
     return null
   }
@@ -248,6 +251,33 @@ function toPixelPoints (
 ): Array<Partial<Coordinate>> {
   const converted = chart.convertToPixel(points, { paneId })
   return isArray(converted) ? converted : [converted]
+}
+
+/**
+ * TradingView `_updateAnchorsPrice` — after an anchor or body drag the
+ * stored prices snap back onto the fitted line so serialization and axis
+ * pills carry the regression values, not the raw pointer y.
+ */
+function snapAnchorsToFit (overlay: Overlay<RegressionTrendExtendData>, points: Array<Partial<Point>>): void {
+  const chart = lineChartOf(overlay)
+  if (chart === undefined) {
+    return
+  }
+  const ext: RegressionTrendExtendData = isValid(overlay.extendData) ? overlay.extendData : {}
+  const fit = computeRegression(chart, overlay, resolveConfig(ext))
+  if (fit === null) {
+    return
+  }
+  const p0 = isValid(points[0]) ? points[0] : undefined
+  const p1 = isValid(points[1]) ? points[1] : undefined
+  const anchorAtStart = fit.i1 <= fit.i2 ? p0 : p1
+  const anchorAtEnd = fit.i1 <= fit.i2 ? p1 : p0
+  if (isValid(anchorAtStart)) {
+    anchorAtStart.value = fit.regStartVal
+  }
+  if (isValid(anchorAtEnd)) {
+    anchorAtEnd.value = fit.regEndVal
+  }
 }
 
 const regressionTrend: OverlayTemplate<RegressionTrendExtendData> = {
@@ -546,28 +576,14 @@ const regressionTrend: OverlayTemplate<RegressionTrendExtendData> = {
   }),
 
   performEventPressedMove: function (this: Overlay<RegressionTrendExtendData>, params) {
-    // TradingView `_updateAnchorsPrice` — after each anchor drag the stored
-    // prices snap back onto the fitted line so serialization and axis
-    // pills carry the regression values, not the raw pointer y.
-    const chart = lineChartOf(this)
-    if (chart === undefined) {
-      return
-    }
-    const ext: RegressionTrendExtendData = isValid(this.extendData) ? this.extendData : {}
-    const fit = computeRegression(chart, this, resolveConfig(ext))
-    if (fit === null) {
-      return
-    }
-    const p0 = isValid(params.points[0]) ? params.points[0] : undefined
-    const p1 = isValid(params.points[1]) ? params.points[1] : undefined
-    const anchorAtStart = fit.i1 <= fit.i2 ? p0 : p1
-    const anchorAtEnd = fit.i1 <= fit.i2 ? p1 : p0
-    if (isValid(anchorAtStart)) {
-      anchorAtStart.value = fit.regStartVal
-    }
-    if (isValid(anchorAtEnd)) {
-      anchorAtEnd.value = fit.regEndVal
-    }
+    snapAnchorsToFit(this, params.points)
+  },
+
+  performEventBodyMove: function (this: Overlay<RegressionTrendExtendData>, params) {
+    // Body drags shift BOTH anchors by the pointer delta — the stored
+    // prices then sit off the fitted line at the new x-range. Re-snap
+    // exactly like an anchor drag or serialized values desync.
+    snapAnchorsToFit(this, params.points)
   }
 }
 

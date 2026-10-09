@@ -28,6 +28,7 @@ import { buildPositionFigures, buildPositionYAxisFigures } from './positionCommo
 const longPosition: OverlayTemplate<PositionToolExtendData> = {
   name: 'longPosition',
   totalStep: 2,
+  cullable: false,
   figureCacheDataRev: true,
   needDefaultPointFigure: false,
   needDefaultXAxisFigure: false,

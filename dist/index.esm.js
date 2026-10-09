@@ -27,13 +27,13 @@ function log(templateText, tagStyle, messageStyle, api, invalidParam, append) {
     }
 }
 function logWarn(api, invalidParam, append) {
-    log('%c😑 klinecharts warning%c %s%s%s', 'padding:3px 4px;border-radius:2px;color:#ffffff;background-color:#FF9600', 'color:#FF9600', api, invalidParam, append !== null && append !== void 0 ? append : '');
+    log('%c😑 super-chart warning%c %s%s%s', 'padding:3px 4px;border-radius:2px;color:#ffffff;background-color:#FF9600', 'color:#FF9600', api, invalidParam, append !== null && append !== void 0 ? append : '');
 }
 function logError(api, invalidParam, append) {
-    log('%c😟 klinecharts error%c %s%s%s', 'padding:3px 4px;border-radius:2px;color:#ffffff;background-color:#F92855;', 'color:#F92855;', api, invalidParam, append );
+    log('%c😟 super-chart error%c %s%s%s', 'padding:3px 4px;border-radius:2px;color:#ffffff;background-color:#F92855;', 'color:#F92855;', api, invalidParam, append );
 }
 function logTag() {
-    log('%c❤️ Welcome to klinecharts. Version is 10.0.0-beta1', 'border-radius:4px;border:dashed 1px #1677FF;line-height:70px;padding:0 20px;margin:16px 0;font-size:14px;color:#1677FF;', '', '', '', '');
+    log('%c❤️ Welcome to super-chart. Version is 10.0.0-beta1', 'border-radius:4px;border:dashed 1px #1677FF;line-height:70px;padding:0 20px;margin:16px 0;font-size:14px;color:#1677FF;', '', '', '', '');
 }
 
 /**
@@ -521,10 +521,18 @@ var OverlayImp = /** @class */ (function () {
         this.onDeselected = null;
         this.freehand = false;
         this.freehandMinDistance = 4;
+        // Bounded-by-points flag for viewport culling — templates set false for
+        // figures that can paint into the viewport while all anchors are
+        // offscreen (extended lines, channels, pitchforks, time-level fibs,
+        // anchored text). `undefined` behaves as cullable.
+        this.cullable = undefined;
         // Plain field (not a getter) — merge() assigns source props directly, so a
         // getter-only accessor would throw if a caller ever passes figuresRev in.
         this.figuresRev = 0;
-        this._prevZLevel = 0;
+        // null = no hover bump pending restore. 0 would be a valid zLevel but also
+        // the default — null distinguishes "never bumped" so the restore path can't
+        // demote an overlay that was never raised.
+        this._prevZLevel = null;
         this._prevPressedPoint = null;
         this._prevPressedPoints = [];
         this.override(overlay);
@@ -548,18 +556,25 @@ var OverlayImp = /** @class */ (function () {
             extendData: this.extendData,
             stylesJson: stylesJson
         };
-        var _b = overlay, id = _b.id, name = _b.name; _b.currentStep; var points = _b.points, styles = _b.styles, extendData = _b.extendData, skipDrawReplay = _b.skipDrawReplay; 
+        var _b = overlay, id = _b.id, name = _b.name; _b.currentStep; var points = _b.points, styles = _b.styles, extendData = _b.extendData, skipDrawReplay = _b.skipDrawReplay, _cm = _b.completed; 
         // Kernel-owned members must never be merge-clobbered by a spread of
         // an overlay snapshot (regressed figuresRev poisons the figure cache;
         // shadowed methods break the instance; restored _prev* snapshots make
         // shouldUpdate() compare against a foreign baseline and drop real
         // changes).
-        _b.figuresRev; _b.invalidateFigures; _b.isDrawing; _b.isStart; _b.forceComplete; _b._prevOverlay; _b._prevPressedPoint; _b._prevPressedPoints; _b._prevZLevel; var others = __rest(_b, ["id", "name", "currentStep", "points", "styles", "extendData", "skipDrawReplay", "figuresRev", "invalidateFigures", "isDrawing", "isStart", "forceComplete", "_prevOverlay", "_prevPressedPoint", "_prevPressedPoints", "_prevZLevel"]);
+        _b.figuresRev; _b.invalidateFigures; _b.isDrawing; _b.isStart; _b.forceComplete; _b._prevOverlay; _b._prevPressedPoint; _b._prevPressedPoints; _b._prevZLevel; 
+        // Template/immutables — a host JS patch naming these would silently
+        // corrupt step boundaries, gesture routing, and cull classification.
+        _b.totalStep; _b.freehand; _b.freehandMinDistance; _b.groupId; _b.cullable; var others = __rest(_b, ["id", "name", "currentStep", "points", "styles", "extendData", "skipDrawReplay", "completed", "figuresRev", "invalidateFigures", "isDrawing", "isStart", "forceComplete", "_prevOverlay", "_prevPressedPoint", "_prevPressedPoints", "_prevZLevel", "totalStep", "freehand", "freehandMinDistance", "groupId", "cullable"]);
         merge(this, others);
         // Handle extendData separately — always produce a mutable merged result
         // (frozen objects from Immer/store and their sub-objects cannot be mutated)
         if (isValid(extendData)) {
-            if (isValid(this.extendData)) {
+            // merge() assigns into target keys — when the existing payload is a
+            // primitive (legacy string extendData on simpleAnnotation/simpleTag)
+            // and the incoming patch is an object, merging would throw a
+            // strict-mode TypeError. Replace instead: the object patch is complete.
+            if (isValid(this.extendData) && isObject(this.extendData) && isObject(extendData)) {
                 // Clone existing first to ensure all sub-objects are mutable, then merge new values
                 this.extendData = clone(this.extendData);
                 merge(this.extendData, extendData);
@@ -584,12 +599,23 @@ var OverlayImp = /** @class */ (function () {
             }
             this.figuresRev++;
         }
-        if (isArray(points) && points.length > 0) {
+        if (isArray(points)) {
             var repeatTotalStep = 0;
             this.points = __spreadArray([], __read(points), false);
-            if (points.length >= this.totalStep - 1) {
+            if (points.length === 0) {
+                // Explicit empty write — reset to the start step so sync/undo can
+                // clear a drawing's points instead of the change being ignored.
+                this.currentStep = OVERLAY_DRAW_STEP_START;
+            }
+            else if (points.length >= this.totalStep - 1 || this.currentStep === OVERLAY_DRAW_STEP_FINISHED) {
+                // A finished overlay stays finished on point updates — otherwise a
+                // completed unlimited-step tool (totalStep = MAX_SAFE_INTEGER)
+                // receiving new points would re-enter isDrawing() forever as a
+                // zombie living outside the progress slot.
                 this.currentStep = OVERLAY_DRAW_STEP_FINISHED;
-                repeatTotalStep = this.totalStep - 1;
+                // Clamp the replay count — for unlimited tools totalStep - 1 is
+                // MAX_SAFE_INTEGER and the replay loop must not iterate it.
+                repeatTotalStep = Math.min(this.totalStep - 1, points.length);
             }
             else {
                 this.currentStep = points.length + 1;
@@ -622,6 +648,18 @@ var OverlayImp = /** @class */ (function () {
                     prevPoints: this._prevPressedPoints
                 });
             }
+            // Point writes invalidate the figure cache — stride-sampled
+            // signatures can't see a mid-array vertex edit on huge freehand
+            // paths, so the revision is the source of truth for mutations.
+            this.figuresRev++;
+        }
+        // Restore-path flag: a create carrying completed must never enter the
+        // drawing-progress slot — for unlimited-step tools (totalStep =
+        // MAX_SAFE_INTEGER) the point count can never satisfy the finish
+        // condition and the overlay would displace the previous in-progress
+        // drawing on every restore.
+        if (_cm === true) {
+            this.currentStep = OVERLAY_DRAW_STEP_FINISHED;
         }
     };
     OverlayImp.prototype.getPrevZLevel = function () { return this._prevZLevel; };
@@ -685,6 +723,7 @@ var OverlayImp = /** @class */ (function () {
             newPoint.value = point.value;
         }
         this.points[pointIndex] = newPoint;
+        this.figuresRev++;
         (_a = this.performEventMoveForDrawing) === null || _a === void 0 ? void 0 : _a.call(this, {
             currentStep: this.currentStep,
             mode: this.mode,
@@ -724,6 +763,9 @@ var OverlayImp = /** @class */ (function () {
         if (isNumber(point.value)) {
             this.points[pointIndex].value = point.value;
         }
+        // In-place vertex edits are invisible to the stride-sampled figure
+        // signature on >64-point paths — the revision is the mutation signal.
+        this.figuresRev++;
         (_a = this.performEventPressedMove) === null || _a === void 0 ? void 0 : _a.call(this, {
             currentStep: this.currentStep,
             points: this.points,
@@ -765,6 +807,7 @@ var OverlayImp = /** @class */ (function () {
                 }
                 return newPoint;
             });
+            this.figuresRev++;
             (_a = this.performEventBodyMove) === null || _a === void 0 ? void 0 : _a.call(this, {
                 currentStep: this.currentStep,
                 points: this.points,
@@ -1149,7 +1192,10 @@ function drawLine$1(ctx, attrs, styles) {
     var _a = styles.style, style = _a === void 0 ? 'solid' : _a, _b = styles.smooth, smooth = _b === void 0 ? false : _b, _c = styles.size, size = _c === void 0 ? 1 : _c, _d = styles.color, color = _d === void 0 ? 'currentColor' : _d, _e = styles.dashedValue, dashedValue = _e === void 0 ? [2, 2] : _e;
     ctx.lineWidth = size;
     ctx.strokeStyle = color;
-    if (style === 'dashed') {
+    if (style === 'dashed' || style === 'dotted') {
+        // 'dotted' arrives from the drawings toolbar/schema — no dedicated dot
+        // rendering exists, so reuse dashedValue (schema supplies a tighter
+        // [2,4]-ish dash that reads as dots at typical sizes).
         ctx.setLineDash(dashedValue);
     }
     else {
@@ -1301,7 +1347,10 @@ function getExtendedCoordinates(c1, c2, boundingWidth, boundingHeight, extendLef
  */
 function formatNum(val, precision) {
     var p = precision !== null && precision !== void 0 ? precision : 2;
-    return val.toFixed(p).replace(/\.?0+$/, '');
+    var s = val.toFixed(p);
+    // Only strip when a decimal point exists — '100' at precision 0 would
+    // otherwise collapse to '1'.
+    return s.includes('.') ? s.replace(/\.?0+$/, '') : s;
 }
 /**
  * Format a timestamp as YYYY-MM-DD, returns '' if undefined.
@@ -3951,7 +4000,7 @@ var verticalStraightLine$1 = {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var simpleAnnotation = {
+var simpleAnnotation$1 = {
     name: 'simpleAnnotation',
     totalStep: 2,
     styles: {
@@ -6987,7 +7036,7 @@ var CURVE_HITBOX_HALF_WIDTH$1 = 6;
 var CURVE_SAMPLES$1 = 30;
 // P2 arrow tip (small filled triangle at curve endpoint, matches TV)
 var ARROW_LENGTH$1 = 8;
-var ARROW_HALF_WIDTH$1 = 5;
+var ARROW_HALF_WIDTH$2 = 5;
 
 /**
  * Forecast overlay utility functions
@@ -7486,7 +7535,7 @@ var forecast$1 = {
         // Always drawn — matches TradingView where the arrow is visible in both
         // selected and unselected states (the hollow CP ring sits on top of it).
         var tanAtP2 = quadBezierTangent$1(c1, cp, c2, 1);
-        var arrowPoly = buildArrowPolygon$1(c2, tanAtP2, ARROW_LENGTH$1, ARROW_HALF_WIDTH$1);
+        var arrowPoly = buildArrowPolygon$1(c2, tanAtP2, ARROW_LENGTH$1, ARROW_HALF_WIDTH$2);
         figures.push({
             key: 'fc_arrow',
             type: 'polygon',
@@ -7847,7 +7896,7 @@ var RT_PEARSON_R = 'rt_pearson_r';
 var RT_CP_0 = 'rt_cp_0';
 var RT_CP_1 = 'rt_cp_1';
 // ═══════════════════════════════════════
-// Dash map (pixel pattern per LineStyle)
+// Dash map (pixel pattern per RegressionTrendLineStyle)
 // ═══════════════════════════════════════
 var DASH$1 = {
     solid: [],
@@ -8680,7 +8729,7 @@ function mergeExt(ext) {
 // ═══════════════════════════════════════
 // Overlay template
 // ═══════════════════════════════════════
-var ellipse$1 = {
+var ellipse$2 = {
     name: 'ellipse',
     totalStep: 3,
     needDefaultPointFigure: false,
@@ -8985,8 +9034,8 @@ var extensions$2 = [
     fibonacciLine, horizontalRayLine$1, horizontalSegment$1, horizontalStraightLine$1,
     parallelStraightLine$1, priceChannelLine$1, priceLine$1, rayLine$1, segment$1,
     straightLine$1, verticalRayLine$1, verticalSegment$1, verticalStraightLine$1,
-    simpleAnnotation, simpleTag$1, vpfr, rect$2, circle$2, longPosition$1, shortPosition$1,
-    forecast$1, regressionTrend$1, ellipse$1
+    simpleAnnotation$1, simpleTag$1, vpfr, rect$2, circle$2, longPosition$1, shortPosition$1,
+    forecast$1, regressionTrend$1, ellipse$2
 ];
 extensions$2.forEach(function (template) {
     overlays[template.name] = OverlayImp.extend(template);
@@ -9033,15 +9082,82 @@ function serializedToOverlayCreate(d) {
         name: d.name,
         paneId: d.paneId,
         groupId: (_a = d.groupId) !== null && _a !== void 0 ? _a : 'drawings',
-        points: d.points.map(function (p) { return ({ timestamp: p.timestamp, value: p.value, dataIndex: p.dataIndex }); }),
+        points: d.points.map(function (p) {
+            var point = { timestamp: p.timestamp, value: p.value, dataIndex: p.dataIndex };
+            if (p.interval !== undefined) {
+                point.interval = p.interval;
+            }
+            if (p.offset !== undefined) {
+                point.offset = p.offset;
+            }
+            return point;
+        }),
         styles: clone((_b = d.styles) !== null && _b !== void 0 ? _b : null),
         lock: (_c = d.lock) !== null && _c !== void 0 ? _c : false,
         visible: (_d = d.visible) !== null && _d !== void 0 ? _d : true,
         mode: d.mode,
         modeSensitivity: d.modeSensitivity,
         zLevel: d.zLevel,
-        extendData: clone((_e = d.extendData) !== null && _e !== void 0 ? _e : null)
+        extendData: clone((_e = d.extendData) !== null && _e !== void 0 ? _e : null),
+        // Restored drawings are finished — never let them occupy the
+        // drawing-progress slot (unlimited-step tools could never satisfy
+        // points >= totalStep - 1 and would displace siblings).
+        completed: d.completed,
+        // Restored points are already normalized — replaying the draw hooks
+        // would re-run templates' per-point transforms (e.g. flatTopBottom
+        // pins P2's dataIndex to P1's) and silently mutate stored geometry.
+        skipDrawReplay: true
     };
+}
+/**
+ * Clone extendData for persistence, dropping top-level transient keys —
+ * `_`-prefixed runtime fields (live edit buffers, hover markers) and
+ * `isEditing` (mid-edit flag: restoring it would hide a shape's label).
+ */
+function sanitizeExtendData(extendData) {
+    var e_1, _a;
+    var cloned = clone(extendData !== null && extendData !== void 0 ? extendData : undefined);
+    if (typeof cloned !== 'object' || cloned === null || Array.isArray(cloned)) {
+        return cloned;
+    }
+    var src = cloned;
+    var rec = {};
+    try {
+        for (var _b = __values(Object.keys(src)), _c = _b.next(); !_c.done; _c = _b.next()) {
+            var key = _c.value;
+            if (!key.startsWith('_') && key !== 'isEditing') {
+                rec[key] = src[key];
+            }
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    return rec;
+}
+/**
+ * Key-order-insensitive stringify — `JSON.stringify` makes the fingerprint
+ * lie for hosts that rebuild objects with reordered keys.
+ */
+function stableStringify(value) {
+    if (value === null || typeof value !== 'object') {
+        // JSON.stringify(undefined) returns undefined at runtime — guard the
+        // input instead of the result (the TS signature claims string).
+        if (value === undefined) {
+            return '';
+        }
+        return JSON.stringify(value);
+    }
+    if (Array.isArray(value)) {
+        return "[".concat(value.map(stableStringify).join(','), "]");
+    }
+    var rec = value;
+    var keys = Object.keys(rec).sort();
+    return "{".concat(keys.map(function (k) { return "".concat(JSON.stringify(k), ":").concat(stableStringify(rec[k])); }).join(','), "}");
 }
 /**
  * Snapshot a live overlay. Returns null for anything that must NOT be
@@ -9049,13 +9165,13 @@ function serializedToOverlayCreate(d) {
  * transient helpers.
  */
 function serializeOverlay$1(overlay, options) {
-    var _a, _b, _c, _d, _e, _f;
-    if (overlay.ghost || overlay.synced || overlay.isDrawing()) {
+    var _a, _b, _c, _d, _e;
+    if (overlay.ghost || overlay.synced || overlay.isDrawing() || overlay.transient === true) {
         return null;
     }
-    var now = (_a = void 0 ) !== null && _a !== void 0 ? _a : Date.now();
+    var now = (_a = options === null || options === void 0 ? void 0 : options.now) !== null && _a !== void 0 ? _a : Date.now();
     var extendData = overlay.extendData;
-    var positionPercents = (_b = void 0 ) !== null && _b !== void 0 ? _b : (Array.isArray(extendData === null || extendData === void 0 ? void 0 : extendData.positionPercents) ? extendData.positionPercents : undefined);
+    var positionPercents = (_b = options === null || options === void 0 ? void 0 : options.positionPercents) !== null && _b !== void 0 ? _b : (Array.isArray(extendData === null || extendData === void 0 ? void 0 : extendData.positionPercents) ? extendData.positionPercents : undefined);
     return {
         schemaVersion: 2,
         id: overlay.id,
@@ -9082,18 +9198,20 @@ function serializeOverlay$1(overlay, options) {
         mode: overlay.mode,
         modeSensitivity: overlay.modeSensitivity,
         zLevel: overlay.zLevel,
-        extendData: (_f = clone((_e = overlay.extendData) !== null && _e !== void 0 ? _e : undefined)) !== null && _f !== void 0 ? _f : undefined,
+        extendData: sanitizeExtendData(overlay.extendData),
         completed: true,
         positionPercents: positionPercents,
-        createdAt: now,
+        // createdAt sticks to the first serialization — re-stamping it on every
+        // edit would erase the real creation time from storage.
+        createdAt: (_e = options === null || options === void 0 ? void 0 : options.createdAt) !== null && _e !== void 0 ? _e : now,
         updatedAt: now
     };
 }
 /** Cheap structural fingerprint for change detection (persistence diff + undo before-images). */
 function serializedFingerprint(d) {
-    var _a, _b, _c, _d, _e;
-    var pts = d.points.map(function (p) { var _a, _b, _c; return "".concat((_a = p.timestamp) !== null && _a !== void 0 ? _a : '', ",").concat((_b = p.value) !== null && _b !== void 0 ? _b : '', ",").concat((_c = p.dataIndex) !== null && _c !== void 0 ? _c : ''); }).join(';');
-    return "".concat(d.name, "|").concat((_a = d.paneId) !== null && _a !== void 0 ? _a : '', "|").concat(pts, "|").concat(JSON.stringify((_b = d.styles) !== null && _b !== void 0 ? _b : null), "|").concat(JSON.stringify((_c = d.extendData) !== null && _c !== void 0 ? _c : null), "|").concat(d.lock === true ? 1 : 0).concat(d.visible === false ? 0 : 1, "|").concat((_d = d.mode) !== null && _d !== void 0 ? _d : '', "|").concat((_e = d.zLevel) !== null && _e !== void 0 ? _e : '');
+    var _a, _b, _c, _d, _e, _f, _g;
+    var pts = d.points.map(function (p) { var _a, _b, _c, _d, _e; return "".concat((_a = p.timestamp) !== null && _a !== void 0 ? _a : '', ",").concat((_b = p.value) !== null && _b !== void 0 ? _b : '', ",").concat((_c = p.dataIndex) !== null && _c !== void 0 ? _c : '', ",").concat((_d = p.interval) !== null && _d !== void 0 ? _d : '', ",").concat((_e = p.offset) !== null && _e !== void 0 ? _e : ''); }).join(';');
+    return "".concat(d.name, "|").concat((_a = d.paneId) !== null && _a !== void 0 ? _a : '', "|").concat((_b = d.groupId) !== null && _b !== void 0 ? _b : '', "|").concat(pts, "|").concat(stableStringify((_c = d.styles) !== null && _c !== void 0 ? _c : null), "|").concat(stableStringify((_d = d.extendData) !== null && _d !== void 0 ? _d : null), "|").concat(d.lock === true ? 1 : 0).concat(d.visible === false ? 0 : 1, "|").concat((_e = d.mode) !== null && _e !== void 0 ? _e : '', "|").concat((_f = d.modeSensitivity) !== null && _f !== void 0 ? _f : '', "|").concat((_g = d.zLevel) !== null && _g !== void 0 ? _g : '');
 }
 
 /**
@@ -9245,16 +9363,21 @@ function createDrawingManager(chart, options) {
     var applyDepth = 0; // beginApply/endApply nesting
     var applyingInternal = false; // manager-originated ops must not self-record
     var remoteApplying = false; // store events applied to chart — no re-persist
-    var scopeSwitching = false; // symbol-change wipe guard
     var destroyed = false;
-    var pendingUpsert = new Map();
-    var pendingRemove = new Set();
-    // Scope the pending ops were enqueued under — captured at enqueue so a
-    // symbol switch flushes old drawings to the OLD symbol's storage, never
-    // the new one (the consumer bug this replaces wrote into whichever
-    // symbol happened to be current at flush time).
-    var pendingScope = null;
+    var pendingByScope = new Map();
     var saveTimer = null;
+    // Applies must be serialized — whole-bucket read-modify-write adapters
+    // would silently lose the loser's changeset on concurrent flushes.
+    var applyChain = Promise.resolve();
+    // Epoch tagging beats timing flags: an overlay stamped with an older
+    // epoch removed at ANY later time is an old-scope wipe — drop it without
+    // touching persistence. Survives slow store.apply and async host wipes.
+    var scopeEpoch = 0;
+    var overlayEpoch = new WeakMap();
+    // Mutations are rejected while a scope switch is mid-flight (flush +
+    // wipe + load) — undo of a stale command would otherwise resurrect
+    // old-scope drawings into the new scope's storage.
+    var switchInFlight = false;
     var isTransient = (_b = options === null || options === void 0 ? void 0 : options.isTransient) !== null && _b !== void 0 ? _b : (function () { return false; });
     function scope() {
         var _a, _b;
@@ -9267,12 +9390,31 @@ function createDrawingManager(chart, options) {
         return !overlay.ghost && !overlay.synced && overlay.transient !== true && !isTransient(overlay.name);
     }
     function trackShadow(overlay) {
-        var serialized = serializeOverlay$1(overlay);
+        var _a;
+        var serialized = serializeOverlay$1(overlay, { createdAt: (_a = shadow.get(overlay.id)) === null || _a === void 0 ? void 0 : _a.createdAt });
         if (serialized === null) {
             return null;
         }
+        // Stamp the overlay with the scope epoch it belongs to — a remove of a
+        // stale-epoch overlay at ANY later time is an old-scope wipe.
+        overlayEpoch.set(overlay, scopeEpoch);
         shadow.set(overlay.id, serialized);
         return serialized;
+    }
+    function scopeKey(s) {
+        var _a;
+        // Separator prevents {chartId:'a',symbol:'bc'} colliding with
+        // {chartId:'ab',symbol:'c'} into the same bucket.
+        return "".concat((_a = s.chartId) !== null && _a !== void 0 ? _a : '', "|").concat(s.symbol);
+    }
+    function pendingBucket(s) {
+        var key = scopeKey(s);
+        var bucket = pendingByScope.get(key);
+        if (bucket === undefined) {
+            bucket = { scope: s, upsert: new Map(), remove: new Set() };
+            pendingByScope.set(key, bucket);
+        }
+        return bucket;
     }
     function scheduleSave() {
         var _a;
@@ -9286,54 +9428,104 @@ function createDrawingManager(chart, options) {
     }
     function flushStore() {
         return __awaiter(this, void 0, void 0, function () {
-            var upsert, remove, target;
-            return __generator(this, function (_b) {
-                switch (_b.label) {
+            var buckets, storeRef;
+            var _this = this;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
                     case 0:
-                        if (store === null || (pendingUpsert.size === 0 && pendingRemove.size === 0)) {
+                        if (store === null || pendingByScope.size === 0) {
                             return [2 /*return*/];
                         }
                         if (saveTimer !== null) {
                             clearTimeout(saveTimer);
                             saveTimer = null;
                         }
-                        upsert = __spreadArray([], __read(pendingUpsert.values()), false);
-                        remove = __spreadArray([], __read(pendingRemove), false);
-                        target = pendingScope !== null && pendingScope !== void 0 ? pendingScope : scope();
-                        pendingUpsert.clear();
-                        pendingRemove.clear();
-                        pendingScope = null;
-                        _b.label = 1;
+                        buckets = __spreadArray([], __read(pendingByScope.values()), false);
+                        pendingByScope.clear();
+                        storeRef = store;
+                        // Serialize applies — concurrent read-modify-write on the same bucket
+                        // would silently lose the loser's changeset.
+                        applyChain = applyChain.then(function () { return __awaiter(_this, void 0, void 0, function () {
+                            var _loop_1, buckets_1, buckets_1_1, bucket, e_1_1;
+                            var e_1, _a;
+                            return __generator(this, function (_b) {
+                                switch (_b.label) {
+                                    case 0:
+                                        _loop_1 = function (bucket) {
+                                            var upsert, remove, live_1;
+                                            return __generator(this, function (_d) {
+                                                switch (_d.label) {
+                                                    case 0:
+                                                        upsert = __spreadArray([], __read(bucket.upsert.values()), false);
+                                                        remove = __spreadArray([], __read(bucket.remove), false);
+                                                        _d.label = 1;
+                                                    case 1:
+                                                        _d.trys.push([1, 3, , 4]);
+                                                        return [4 /*yield*/, storeRef.apply(bucket.scope, { upsert: upsert, remove: remove })];
+                                                    case 2:
+                                                        _d.sent();
+                                                        return [3 /*break*/, 4];
+                                                    case 3:
+                                                        _d.sent();
+                                                        live_1 = pendingBucket(bucket.scope);
+                                                        upsert.forEach(function (d) { return live_1.upsert.set(d.id, d); });
+                                                        remove.forEach(function (id) { return live_1.remove.add(id); });
+                                                        // Don't leave the retry hostage to the next user commit —
+                                                        // reschedule the debounce so a transient failure self-heals.
+                                                        scheduleSave();
+                                                        return [3 /*break*/, 4];
+                                                    case 4: return [2 /*return*/];
+                                                }
+                                            });
+                                        };
+                                        _b.label = 1;
+                                    case 1:
+                                        _b.trys.push([1, 6, 7, 8]);
+                                        buckets_1 = __values(buckets), buckets_1_1 = buckets_1.next();
+                                        _b.label = 2;
+                                    case 2:
+                                        if (!!buckets_1_1.done) return [3 /*break*/, 5];
+                                        bucket = buckets_1_1.value;
+                                        return [5 /*yield**/, _loop_1(bucket)];
+                                    case 3:
+                                        _b.sent();
+                                        _b.label = 4;
+                                    case 4:
+                                        buckets_1_1 = buckets_1.next();
+                                        return [3 /*break*/, 2];
+                                    case 5: return [3 /*break*/, 8];
+                                    case 6:
+                                        e_1_1 = _b.sent();
+                                        e_1 = { error: e_1_1 };
+                                        return [3 /*break*/, 8];
+                                    case 7:
+                                        try {
+                                            if (buckets_1_1 && !buckets_1_1.done && (_a = buckets_1.return)) _a.call(buckets_1);
+                                        }
+                                        finally { if (e_1) throw e_1.error; }
+                                        return [7 /*endfinally*/];
+                                    case 8: return [2 /*return*/];
+                                }
+                            });
+                        }); });
+                        return [4 /*yield*/, applyChain];
                     case 1:
-                        _b.trys.push([1, 3, , 4]);
-                        return [4 /*yield*/, store.apply(target, { upsert: upsert, remove: remove })];
-                    case 2:
-                        _b.sent();
-                        return [3 /*break*/, 4];
-                    case 3:
-                        _b.sent();
-                        // Store failure: requeue so the next commit retries instead of
-                        // silently losing the write.
-                        upsert.forEach(function (d) { return pendingUpsert.set(d.id, d); });
-                        remove.forEach(function (id) { return pendingRemove.add(id); });
-                        pendingScope = target;
-                        scheduleSave();
-                        return [3 /*break*/, 4];
-                    case 4: return [2 /*return*/];
+                        _a.sent();
+                        return [2 /*return*/];
                 }
             });
         });
     }
     function persistUpsert(serialized) {
-        pendingRemove.delete(serialized.id);
-        pendingUpsert.set(serialized.id, serialized);
-        pendingScope !== null && pendingScope !== void 0 ? pendingScope : (pendingScope = scope());
+        var bucket = pendingBucket(scope());
+        bucket.remove.delete(serialized.id);
+        bucket.upsert.set(serialized.id, serialized);
         scheduleSave();
     }
     function persistRemove(id) {
-        pendingUpsert.delete(id);
-        pendingRemove.add(id);
-        pendingScope !== null && pendingScope !== void 0 ? pendingScope : (pendingScope = scope());
+        var bucket = pendingBucket(scope());
+        bucket.upsert.delete(id);
+        bucket.remove.add(id);
         scheduleSave();
     }
     /** Commit a finished overlay: shadow + create command + persistence. */
@@ -9398,8 +9590,14 @@ function createDrawingManager(chart, options) {
                     return;
                 }
                 if (before !== undefined && persistable(overlay)) {
-                    history.pushUpdate(overlay.id, before, after);
-                    persistUpsert(after);
+                    // Fingerprint gate — a plain click selects a drawing but emits
+                    // the same editStart/editEnd bracket; without the check every
+                    // selection pushed a no-op undo step + a debounced store write +
+                    // a broadcast upsert to peer tabs.
+                    if (serializedFingerprint(before) !== serializedFingerprint(after)) {
+                        history.pushUpdate(overlay.id, before, after);
+                        persistUpsert(after);
+                    }
                 }
                 else if (persistable(overlay)) {
                     persistUpsert(after);
@@ -9414,13 +9612,29 @@ function createDrawingManager(chart, options) {
                     trackShadow(overlay);
                     return;
                 }
+                // syncApplied: a peer's edit applied onto the canonical overlay —
+                // persist it (the owner is the only persister of peer edits) but
+                // never mint a local undo entry for someone else's gesture.
+                var fromSync = overlay.syncApplied === true;
+                if (fromSync) {
+                    overlay.syncApplied = false;
+                }
                 var before = shadow.get(overlay.id);
                 var after = trackShadow(overlay);
                 if (after === null || !persistable(overlay)) {
                     return;
                 }
+                if (pendingEdit.has(overlay.id)) {
+                    // Mid-gesture write (e.g. anchoredText's fraction capture inside
+                    // onPressedMoveEnd) — the coming editEnd owns the whole before→
+                    // after diff; committing here would mint a duplicate undo unit +
+                    // a second persistence write + broadcast echo.
+                    break;
+                }
                 if (before !== undefined && serializedFingerprint(before) !== serializedFingerprint(after)) {
-                    history.pushUpdate(overlay.id, before, after);
+                    if (!fromSync) {
+                        history.pushUpdate(overlay.id, before, after);
+                    }
                     persistUpsert(after);
                     emit('change', { overlay: overlay });
                 }
@@ -9431,17 +9645,46 @@ function createDrawingManager(chart, options) {
                 pendingEdit.delete(overlay.id);
                 var before = (_a = shadow.get(overlay.id)) !== null && _a !== void 0 ? _a : serializeOverlay$1(overlay);
                 shadow.delete(overlay.id);
-                if (applyingInternal || applyDepth > 0 || scopeSwitching) {
+                // Epoch-tagged drop: an overlay stamped before the current scope
+                // epoch is an old-scope wipe — never persist a delete into the new
+                // scope's bucket, no matter when the wipe actually runs.
+                var entryEpoch = overlayEpoch.get(overlay);
+                if (entryEpoch !== undefined && entryEpoch < scopeEpoch) {
+                    overlayEpoch.delete(overlay);
                     return;
                 }
-                // Remote removes and deletes of untracked helpers never push undo.
-                if (before !== null && !remoteApplying && overlay.syncRemoved !== true && persistable(overlay)) {
-                    history.push({ kind: 'remove', snapshot: before });
+                if (applyingInternal || applyDepth > 0) {
+                    return;
+                }
+                if (overlay.syncRemoved === true) {
+                    // Sync-applied remote remove — drop every undo command for this id
+                    // or Ctrl+Z resurrects a drawing the owner deleted AND
+                    // re-broadcasts it group-wide. The store delete already happened
+                    // on the owner chart; persisting again would echo it.
+                    history.invalidateOverlay(overlay.id);
+                    break;
+                }
+                if (overlay.synced && !remoteApplying) {
+                    // User deleted a synced MIRROR — the canonical record lives on the
+                    // owner chart. No local undo (undo would materialize a zombie the
+                    // owner still owns), but the remove MUST reach the shared store:
+                    // skipping it leaves the record alive and the drawing resurrects
+                    // on every chart after reload.
+                    history.invalidateOverlay(overlay.id);
                     persistRemove(overlay.id);
                     emit('change', { overlay: overlay });
+                    break;
                 }
-                else if (before !== null && persistable(overlay)) {
-                    persistRemove(overlay.id);
+                // Remote removes and deletes of untracked helpers never push undo:
+                // remoteApplying removes already came from the store — persisting
+                // them back would echo the delete to the peer that sent it, and a
+                // undo entry would let Ctrl+Z resurrect a drawing the owner deleted.
+                if (before !== null && persistable(overlay)) {
+                    if (!remoteApplying) {
+                        history.push({ kind: 'remove', snapshot: before });
+                        persistRemove(overlay.id);
+                    }
+                    emit('change', { overlay: overlay });
                 }
                 break;
             }
@@ -9456,24 +9699,40 @@ function createDrawingManager(chart, options) {
         }
     };
     var onSymbolChange = function () {
-        // Scope switch — wipe removes that follow must not persist deletes into
-        // the OLD scope nor push undo commands. The old scope's committed state
-        // is already in storage (debounced), so flush it first.
-        scopeSwitching = true;
-        void flushStore().finally(function () {
+        // Same-scope events (restyle, period-only change, duplicate dispatch)
+        // must not wipe + reload — the epoch/history clear below is destructive.
+        var key = scopeKey(scope());
+        if (key === lastScopeKey) {
+            return;
+        }
+        lastScopeKey = key;
+        // Scope switch — bump the epoch so wipe removes of old-scope overlays
+        // are recognized by their stamp (not by timing) and dropped without
+        // persistence, at any time they arrive. Flush old-scope pending ops
+        // first: they carry their captured scope and land in the right bucket.
+        scopeEpoch++;
+        switchInFlight = true;
+        var epoch = scopeEpoch;
+        // .then(cb, cb) not .finally — ES5 runtime target has no Promise.finally.
+        void flushStore().then(afterFlush, afterFlush);
+        function afterFlush() {
+            // A newer switch superseded this one — leave cleanup to it.
+            if (epoch !== scopeEpoch) {
+                return;
+            }
             shadow.clear();
             armed.clear();
             pendingEdit.clear();
             history.clear();
-            void loadScope();
-            // The consumer wipe runs synchronously after the action dispatch —
-            // the flag resets on the next task, covering all wipe removes.
-            setTimeout(function () {
-                scopeSwitching = false;
-            }, 0);
-        });
+            var afterLoad = function () {
+                if (epoch === scopeEpoch) {
+                    switchInFlight = false;
+                }
+            };
+            void loadScope(epoch).then(afterLoad, afterLoad);
+        }
     };
-    function loadScope() {
+    function loadScope(epoch) {
         return __awaiter(this, void 0, void 0, function () {
             var target, drawings;
             return __generator(this, function (_b) {
@@ -9486,17 +9745,41 @@ function createDrawingManager(chart, options) {
                     case 1:
                         _b.trys.push([1, 3, , 4]);
                         target = scope();
-                        return [4 /*yield*/, store.load(target)];
+                        return [4 /*yield*/, store.load(target)
+                            // Stale-load guard: a slower load for scope B resolving after a
+                            // switch to C must not materialize B's drawings on the C chart.
+                        ];
                     case 2:
                         drawings = (_b.sent()).drawings;
-                        if (destroyed) {
+                        // Stale-load guard: a slower load for scope B resolving after a
+                        // switch to C must not materialize B's drawings on the C chart.
+                        if (destroyed || (epoch !== undefined && epoch !== scopeEpoch)) {
                             return [2 /*return*/];
                         }
                         applyDepth++;
                         try {
                             drawings.forEach(function (d) {
-                                if (d.completed) {
-                                    chart.createOverlay(serializedToOverlayCreate(d));
+                                // Per-record isolation — one malformed record (missing points,
+                                // null entries) must not abort the rest of the load, and a throw
+                                // here would otherwise surface as a "half-restored" chart.
+                                try {
+                                    if (d.completed) {
+                                        // Same-id drawings already on the chart get overridden with the
+                                        // stored state — createOverlay would dedupe silently and leave
+                                        // the stale version diverged from storage.
+                                        if (chart.getOverlayById(d.id) !== null) {
+                                            chart.overrideOverlay(serializedToOverlayCreate(d));
+                                        }
+                                        else {
+                                            // Pre-seed the shadow with the STORED record so trackShadow
+                                            // keeps the original createdAt instead of restamping it.
+                                            shadow.set(d.id, d);
+                                            chart.createOverlay(serializedToOverlayCreate(d));
+                                        }
+                                    }
+                                }
+                                catch (_a) {
+                                    // Skip the malformed record; continue with the rest.
                                 }
                             });
                         }
@@ -9527,29 +9810,57 @@ function createDrawingManager(chart, options) {
             if (event.type === 'snapshot') {
                 // Full remote state — reconcile: remove ids not present remotely.
                 var remoteIds_1 = new Set(event.drawings.map(function (d) { return d.id; }));
+                // Ids flushed-but-pending or still being drawn must survive the
+                // reconcile — the peer can't know about them yet. Pending REMOVE
+                // tombstones win the other direction: a drawing the user deleted
+                // locally must not resurrect when the peer's snapshot still has it.
+                var pendingIds_1 = new Set();
+                var pendingRemoves_1 = new Set();
+                pendingByScope.forEach(function (bucket) {
+                    bucket.upsert.forEach(function (d) { return pendingIds_1.add(d.id); });
+                    bucket.remove.forEach(function (id) { return pendingRemoves_1.add(id); });
+                });
                 chart.getOverlays({ groupId: DRAWINGS_GROUP_ID }).forEach(function (o) {
-                    if (!remoteIds_1.has(o.id) && !o.ghost && !o.synced) {
+                    if (!remoteIds_1.has(o.id) && !o.ghost && !o.synced && !o.isDrawing() &&
+                        !pendingIds_1.has(o.id) && persistable(o)) {
+                        // Drop undo commands for remotely-deleted drawings — otherwise
+                        // undo would resurrect them AND re-persist into the peer's store.
+                        history.invalidateOverlay(o.id);
                         chart.removeOverlay({ id: o.id });
                     }
                 });
                 event.drawings.forEach(function (d) {
-                    var existing = chart.getOverlayById(d.id);
-                    if (existing !== null) {
-                        chart.overrideOverlay(serializedToOverlayCreate(d));
+                    try {
+                        var existing = chart.getOverlayById(d.id);
+                        // d.completed guards BOTH branches — a half-formed remote
+                        // record must not clobber a finished local overlay.
+                        if (existing !== null && !existing.isDrawing() && d.completed) {
+                            chart.overrideOverlay(serializedToOverlayCreate(d));
+                        }
+                        else if (d.completed && existing === null && !pendingRemoves_1.has(d.id)) {
+                            shadow.set(d.id, d);
+                            chart.createOverlay(serializedToOverlayCreate(d));
+                        }
                     }
-                    else if (d.completed) {
-                        chart.createOverlay(serializedToOverlayCreate(d));
+                    catch (_a) {
+                        // One malformed remote record must not starve the rest.
                     }
                 });
             }
             else {
                 event.drawings.forEach(function (d) {
-                    var existing = chart.getOverlayById(d.id);
-                    if (existing !== null) {
-                        chart.overrideOverlay(serializedToOverlayCreate(d));
+                    try {
+                        var existing = chart.getOverlayById(d.id);
+                        if (existing !== null && !existing.isDrawing() && d.completed) {
+                            chart.overrideOverlay(serializedToOverlayCreate(d));
+                        }
+                        else if (d.completed && existing === null) {
+                            shadow.set(d.id, d);
+                            chart.createOverlay(serializedToOverlayCreate(d));
+                        }
                     }
-                    else if (d.completed) {
-                        chart.createOverlay(serializedToOverlayCreate(d));
+                    catch (_a) {
+                        // One malformed remote record must not starve the rest.
                     }
                 });
                 (_a = event.removedIds) === null || _a === void 0 ? void 0 : _a.forEach(function (id) {
@@ -9572,11 +9883,16 @@ function createDrawingManager(chart, options) {
         });
     }
     var storeUnsub = null;
+    var lastScopeKey = '';
     function bindStore() {
         var _a, _b;
         storeUnsub === null || storeUnsub === void 0 ? void 0 : storeUnsub();
         storeUnsub = (_b = (_a = store === null || store === void 0 ? void 0 : store.subscribe) === null || _a === void 0 ? void 0 : _a.call(store, onStoreEvent)) !== null && _b !== void 0 ? _b : null;
-        void loadScope();
+        lastScopeKey = scopeKey(scope());
+        // Pass the epoch — without it the initial load has no staleness guard:
+        // a symbol switch during a slow first load would let scope A's records
+        // materialize inside scope B.
+        void loadScope(scopeEpoch);
     }
     chart.subscribeAction('onOverlayChange', onOverlayChange);
     chart.subscribeAction('onSymbolChange', onSymbolChange);
@@ -9584,6 +9900,12 @@ function createDrawingManager(chart, options) {
     bindStore();
     return {
         activate: function (name, opts) {
+            // Guard empty/unregistered tool names — activating '' emits a phantom
+            // toolChange and leaves activeTool() reporting an armed tool that
+            // createOverlay can never instantiate.
+            if (typeof name !== 'string' || name === '') {
+                return null;
+            }
             activeToolName = name;
             continuousTool = (opts === null || opts === void 0 ? void 0 : opts.continuous) === true ? name : null;
             emit('toolChange', { tool: name });
@@ -9601,14 +9923,28 @@ function createDrawingManager(chart, options) {
             }
             activeToolName = null;
             continuousTool = null;
+            // Disarm means disarm — an in-progress overlay still in the progress
+            // slot would keep collecting clicks while activeTool() reports null.
+            var inProgress = chart.getOverlays().find(function (o) { return o.isDrawing(); });
+            if (inProgress !== undefined) {
+                chart.removeOverlay({ id: inProgress.id });
+            }
             emit('toolChange', { tool: null });
         },
         activeTool: function () {
             return activeToolName;
         },
         create: function (spec) {
-            var _a;
-            var id = chart.createOverlay(__assign(__assign({}, spec), { groupId: (_a = spec.groupId) !== null && _a !== void 0 ? _a : DRAWINGS_GROUP_ID }));
+            var _a, _b;
+            // A programmatic create carrying points means "finished drawing" —
+            // for unlimited-step templates (path/polyline/brush) the kernel's
+            // points>=totalStep-1 check can never finish them, so mark completed
+            // explicitly or the overlay strands in the drawing-progress slot.
+            var template = getOverlayTemplate(spec.name);
+            var completed = spec.completed === true ||
+                (template !== null && ((_a = template.totalStep) !== null && _a !== void 0 ? _a : 0) >= Number.MAX_SAFE_INTEGER &&
+                    spec.points !== undefined && spec.points.length > 0);
+            var id = chart.createOverlay(__assign(__assign(__assign({}, spec), { groupId: (_b = spec.groupId) !== null && _b !== void 0 ? _b : DRAWINGS_GROUP_ID }), (completed ? { completed: true } : {})));
             return typeof id === 'string' ? id : null;
         },
         update: function (id, patch) {
@@ -9633,6 +9969,12 @@ function createDrawingManager(chart, options) {
             chart.selectOverlay(null);
         },
         undo: function () {
+            // Reject during a scope switch — the undo stack still holds old-scope
+            // commands and applying them mid-flight would resurrect old drawings
+            // into the NEW scope's chart AND storage.
+            if (switchInFlight) {
+                return false;
+            }
             var apply = history.undo();
             if (apply === null) {
                 return false;
@@ -9662,6 +10004,9 @@ function createDrawingManager(chart, options) {
             return true;
         },
         redo: function () {
+            if (switchInFlight) {
+                return false;
+            }
             var apply = history.redo();
             if (apply === null) {
                 return false;
@@ -9697,8 +10042,29 @@ function createDrawingManager(chart, options) {
             return history.canRedo();
         },
         attachStore: function (next) {
-            store = next;
-            bindStore();
+            if (destroyed) {
+                return;
+            }
+            // Drain pending ops bound to the OLD store before rebinding —
+            // otherwise the queued writes flush into the new backend.
+            var swap = function () {
+                if (destroyed) {
+                    return;
+                }
+                store = next;
+                bindStore();
+                // Ops requeued by a failed flush (or queued while store was null)
+                // survive the swap — reschedule so they reach the new backend.
+                if (pendingByScope.size > 0) {
+                    scheduleSave();
+                }
+            };
+            if (pendingByScope.size > 0) {
+                void flushStore().then(swap, swap);
+            }
+            else {
+                swap();
+            }
         },
         flush: function () {
             return __awaiter(this, void 0, void 0, function () {
@@ -9844,7 +10210,7 @@ function buildCatalog() {
                     id: 'channels',
                     items: [
                         item('parallelChannel', 'parallelStraightLine', 'Parallel Channel', 'parallelChannel', caps({ anchorCount: 3 }), LINE_RECIPE),
-                        item('priceChannel', 'priceChannelLine', 'Price Channel', 'priceChannel', caps({ anchorCount: 2 }), LINE_RECIPE),
+                        item('priceChannel', 'priceChannelLine', 'Price Channel', 'priceChannel', caps({ anchorCount: 3 }), LINE_RECIPE),
                         item('flatTopBottom', 'flatTopBottom', 'Flat Top/Bottom', 'flatTopBottom', caps({ anchorCount: 3 }), LINE_RECIPE),
                         item('disjointChannel', 'disjointChannel', 'Disjoint Channel', 'disjointChannel', caps({ anchorCount: 3 }), LINE_RECIPE),
                         item('regressionTrend', 'regressionTrend', 'Regression Trend', 'parallelChannel', caps({ anchorCount: 2 }), LINE_RECIPE)
@@ -10095,6 +10461,11 @@ function findCatalogItemByHotkey(key) {
 /** Find a catalog item by kernel overlay name — reverse lookup for `list()`. */
 function findCatalogItemByOverlay(overlayName) {
     var e_5, _a, e_6, _b;
+    // nonTool entries (cursor/eraser/zoom…) share overlayName '' — matching an
+    // empty name would return 'cursor' and activate a nonexistent overlay.
+    if (overlayName === '') {
+        return null;
+    }
     try {
         for (var _c = __values(getDrawingCatalog()), _d = _c.next(); !_d.done; _d = _c.next()) {
             var group = _d.value;
@@ -10345,9 +10716,12 @@ var ICONS = {
     settings: "".concat(SVG_OPEN, "<circle cx=\"14\" cy=\"14\" r=\"3\"/><path d=\"M14 4v3M14 21v3M4 14h3M21 14h3M6.9 6.9l2.1 2.1M19 19l2.1 2.1M21.1 6.9L19 9M9 19l-2.1 2.1\"/></svg>"),
     tool: "".concat(SVG_OPEN, "<path d=\"M17 4a5 5 0 0 0-6.6 6.6L5 16l6 6 5.4-5.4A5 5 0 0 0 24 11l-4 4-4-1-1-4 4-4a5 5 0 0 0-2-2z\"/></svg>")
 };
+// Own-key set — `in` walks the prototype chain, so ids like 'constructor'
+// would resolve to Object.prototype members without this guard.
+var ICON_ID_SET = new Set(Object.keys(ICONS));
 /** Inline SVG markup for an icon id — generic 'tool' glyph as fallback. */
 function getDrawingIcon(iconId) {
-    if (iconId !== undefined && iconId in ICONS) {
+    if (iconId !== undefined && ICON_ID_SET.has(iconId)) {
         return ICONS[iconId];
     }
     return ICONS.tool;
@@ -10434,21 +10808,20 @@ var PALETTE = [
     '#9c27b0', '#673ab7'
 ];
 var CSS = "\n.sc-drw-toolbar {\n  position: absolute;\n  top: 0;\n  left: 0;\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  padding: 2px 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  line-height: 1;\n  user-select: none;\n  white-space: nowrap;\n  will-change: transform;\n}\n.sc-drw-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 26px;\n  height: 26px;\n  padding: 0;\n  margin: 0;\n  border: none;\n  border-radius: 3px;\n  background: transparent;\n  color: #d1d4dc;\n  cursor: pointer;\n}\n.sc-drw-btn:hover { background: #2a2e39; color: #ffffff; }\n.sc-drw-btn:active { background: #363c4e; }\n.sc-drw-btn[data-on=\"true\"] { color: #2962ff; }\n.sc-drw-btn[data-on=\"true\"]:hover { color: #4c7dff; }\n.sc-drw-btn svg { display: block; width: 16px; height: 16px; }\n.sc-drw-btn--wide { width: auto; padding: 0 6px; font-size: 11px; }\n.sc-drw-grip {\n  cursor: grab;\n  color: #5d6372;\n  width: 14px;\n}\n.sc-drw-grip:active { cursor: grabbing; }\n.sc-drw-sep {\n  width: 1px;\n  height: 18px;\n  margin: 0 2px;\n  background: #2a2e39;\n}\n.sc-drw-swatch {\n  width: 14px;\n  height: 14px;\n  border-radius: 2px;\n  border: 1px solid rgba(255, 255, 255, 0.25);\n}\n.sc-drw-menu {\n  position: absolute;\n  top: 0;\n  left: 0;\n  min-width: 120px;\n  padding: 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  z-index: 10;\n}\n.sc-drw-menu-item {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  width: 100%;\n  padding: 5px 8px;\n  border: none;\n  border-radius: 3px;\n  background: transparent;\n  color: inherit;\n  font: inherit;\n  text-align: left;\n  cursor: pointer;\n}\n.sc-drw-menu-item:hover { background: #2a2e39; }\n.sc-drw-menu-item[data-on=\"true\"] { color: #4c7dff; }\n.sc-drw-menu-item svg { width: 14px; height: 14px; flex: none; }\n.sc-drw-menu-label {\n  padding: 4px 8px 2px;\n  color: #787b86;\n  font-size: 10px;\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n}\n.sc-drw-palette {\n  display: grid;\n  grid-template-columns: repeat(7, 18px);\n  gap: 4px;\n  padding: 4px;\n}\n.sc-drw-palette-cell {\n  width: 18px;\n  height: 18px;\n  padding: 0;\n  border: 1px solid rgba(255, 255, 255, 0.12);\n  border-radius: 2px;\n  cursor: pointer;\n}\n.sc-drw-palette-cell:hover { transform: scale(1.15); border-color: #ffffff; }\n.sc-drw-palette--inline {\n  display: none;\n  position: absolute;\n  top: 100%;\n  left: 0;\n  margin-top: 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);\n  z-index: 5;\n}\n.sc-drw-field:hover .sc-drw-palette--inline { display: grid; }\n.sc-drw-dialog {\n  position: absolute;\n  top: 0;\n  left: 0;\n  width: 240px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 6px;\n  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  user-select: none;\n  will-change: transform;\n  z-index: 20;\n}\n.sc-drw-dialog-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 6px 8px;\n  font-weight: 600;\n  cursor: grab;\n  border-bottom: 1px solid #2a2e39;\n}\n.sc-drw-dialog-header:active { cursor: grabbing; }\n.sc-drw-dialog-tabs {\n  display: flex;\n  gap: 2px;\n  padding: 4px 6px 0;\n  border-bottom: 1px solid #2a2e39;\n}\n.sc-drw-dialog-tab {\n  padding: 4px 8px;\n  border: none;\n  border-radius: 3px 3px 0 0;\n  background: transparent;\n  color: #787b86;\n  font: inherit;\n  cursor: pointer;\n}\n.sc-drw-dialog-tab:hover { color: #d1d4dc; }\n.sc-drw-dialog-tab[data-on=\"true\"] {\n  color: #ffffff;\n  background: #2a2e39;\n}\n.sc-drw-dialog-body {\n  max-height: 320px;\n  overflow-y: auto;\n  padding: 8px;\n}\n.sc-drw-section {\n  padding: 6px 2px 3px;\n  color: #787b86;\n  font-size: 10px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n}\n.sc-drw-field {\n  position: relative;\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  padding: 3px 2px;\n  min-height: 24px;\n}\n.sc-drw-field-label {\n  flex: 1;\n  color: #9aa0ae;\n}\n.sc-drw-field-control {\n  position: relative;\n  display: flex;\n  align-items: center;\n  gap: 6px;\n}\n.sc-drw-input {\n  width: 110px;\n  padding: 3px 6px;\n  border: 1px solid #2a2e39;\n  border-radius: 3px;\n  background: #131722;\n  color: #d1d4dc;\n  font: inherit;\n}\n.sc-drw-input:focus { outline: none; border-color: #2962ff; }\n.sc-drw-input--narrow { width: 64px; }\n.sc-drw-color {\n  width: 26px;\n  height: 22px;\n  padding: 0;\n  border: 1px solid #2a2e39;\n  border-radius: 3px;\n  background: transparent;\n  cursor: pointer;\n}\n.sc-drw-levels {\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n  width: 100%;\n}\n.sc-drw-level-row {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  padding: 2px 0;\n}\n";
-var injected = false;
 /** Inject the drawings UI stylesheet — idempotent, SSR-safe. */
 function injectDrawingStyles() {
-    if (injected || typeof document === 'undefined') {
+    if (typeof document === 'undefined') {
         return;
     }
+    // Dedupe by element id per document — a module-global flag would skip
+    // injection in second documents/iframes and never re-add a removed node.
     if (document.getElementById(STYLE_ID$1) !== null) {
-        injected = true;
         return;
     }
     var style = document.createElement('style');
     style.id = STYLE_ID$1;
     style.textContent = CSS;
     document.head.appendChild(style);
-    injected = true;
 }
 
 /**
@@ -10561,7 +10934,11 @@ function attachFloatingToolbar(chart, manager, hooks) {
             b.setAttribute('data-on', 'true');
         }
         if (iconId !== undefined) {
-            b.innerHTML = "".concat(getDrawingIcon(iconId), "<span>").concat(title, "</span>");
+            b.innerHTML = getDrawingIcon(iconId);
+            // title is host-supplied (custom toolbar actions) — never innerHTML it.
+            var span = createDom('span');
+            span.textContent = title;
+            b.appendChild(span);
         }
         else {
             b.textContent = title;
@@ -10881,6 +11258,10 @@ function attachFloatingToolbar(chart, manager, hooks) {
         if (element === null || current === null) {
             return;
         }
+        // A rebuild orphans any open menu element — the old node's listeners are
+        // gone but menuEl still references it, so the next openMenu swallows one
+        // click toggling the detached node. Close before wiping.
+        closeMenu();
         element.innerHTML = '';
         var grip = createDom('div');
         grip.className = 'sc-drw-btn sc-drw-grip';
@@ -10976,13 +11357,30 @@ function attachFloatingToolbar(chart, manager, hooks) {
         pos = { x: Math.round(x), y: Math.round(y) };
         element.style.transform = "translate3d(".concat(pos.x, "px, ").concat(pos.y, "px, 0)");
     }
+    function clampPos(x, y) {
+        if (element === null || layer === null) {
+            return { x: x, y: y };
+        }
+        var host = layer.getElement();
+        var tw = element.offsetWidth;
+        var th = element.offsetHeight;
+        return {
+            x: Math.max(4, Math.min(x, Math.max(4, host.clientWidth - tw - 4))),
+            y: Math.max(4, Math.min(y, Math.max(4, host.clientHeight - th - 4)))
+        };
+    }
     function onDragMove(e) {
         if (dragState === null || element === null) {
             return;
         }
+        // A missed mouseup (blur, iframe exit) must not drag buttonless.
+        if (e.buttons === 0) {
+            dragState = null;
+            return;
+        }
         var dx = e.clientX - dragState.startX;
         var dy = e.clientY - dragState.startY;
-        pos = { x: Math.round(dragState.baseX + dx), y: Math.round(dragState.baseY + dy) };
+        pos = clampPos(Math.round(dragState.baseX + dx), Math.round(dragState.baseY + dy));
         element.style.transform = "translate3d(".concat(pos.x, "px, ").concat(pos.y, "px, 0)");
         var bounds = overlayBounds();
         if (bounds !== null) {
@@ -11017,6 +11415,7 @@ function attachFloatingToolbar(chart, manager, hooks) {
     }
     function hide() {
         closeMenu();
+        dragState = null;
         unmount === null || unmount === void 0 ? void 0 : unmount();
         unmount = null;
         element = null;
@@ -11027,24 +11426,37 @@ function attachFloatingToolbar(chart, manager, hooks) {
         build();
         reposition();
     }
+    var selectedId = null;
     var onSelect = function (payload) {
         if (payload.overlay !== undefined) {
+            selectedId = payload.overlay.id;
             show(payload.overlay);
         }
     };
     var onDeselect = function () {
+        selectedId = null;
         hide();
     };
     var onEditStart = function () {
         hide();
     };
     var onEditEnd = function (payload) {
-        if (payload.overlay !== undefined) {
+        // A figure drag on a NON-selected overlay also fires editEnd — binding
+        // the toolbar to it would attach controls to an overlay the selection
+        // model doesn't own.
+        if (payload.overlay !== undefined && payload.overlay.id === selectedId) {
             show(payload.overlay);
         }
     };
     var onChange = function (payload) {
         var _a;
+        // If the tracked overlay vanished (remove/undo/scope wipe), drop the
+        // toolbar — the 'change' payload may carry no overlay at all.
+        if (selectedId !== null && chart.getOverlayById(selectedId) === null) {
+            selectedId = null;
+            hide();
+            return;
+        }
         if (current !== null && ((_a = payload.overlay) === null || _a === void 0 ? void 0 : _a.id) === current.id) {
             rerender();
         }
@@ -11066,8 +11478,14 @@ function attachFloatingToolbar(chart, manager, hooks) {
     chart.subscribeAction('onScroll', onPanOrZoom);
     chart.subscribeAction('onVisibleRangeChange', onPanOrZoom);
     if (typeof document !== 'undefined') {
-        document.addEventListener('mousemove', onDragMove);
-        document.addEventListener('mouseup', onDragEnd);
+        // Capture phase — the drag keeps the element under the cursor, so a
+        // release lands on it and the layer's stopPropagation would swallow a
+        // bubble-phase listener and strand dragState forever.
+        document.addEventListener('mousemove', onDragMove, true);
+        document.addEventListener('mouseup', onDragEnd, true);
+        // Releasing the button outside the window never delivers mouseup —
+        // window blur ends the drag or the next mousemove drags buttonless.
+        window.addEventListener('blur', onDragEnd);
     }
     return {
         show: show,
@@ -11082,11 +11500,1299 @@ function attachFloatingToolbar(chart, manager, hooks) {
             chart.unsubscribeAction('onScroll', onPanOrZoom);
             chart.unsubscribeAction('onVisibleRangeChange', onPanOrZoom);
             if (typeof document !== 'undefined') {
-                document.removeEventListener('mousemove', onDragMove);
-                document.removeEventListener('mouseup', onDragEnd);
+                document.removeEventListener('mousemove', onDragMove, true);
+                document.removeEventListener('mouseup', onDragEnd, true);
+                window.removeEventListener('blur', onDragEnd);
             }
         }
     };
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+
+ * http://www.apache.org/licenses/LICENSE-2.0
+
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+function isFF() {
+    if (typeof window === 'undefined') {
+        return false;
+    }
+    return window.navigator.userAgent.toLowerCase().includes('firefox');
+}
+function isIOS() {
+    if (typeof window === 'undefined') {
+        return false;
+    }
+    return /iPhone|iPad|iPod|iOS/.test(window.navigator.userAgent);
+}
+function isMac() {
+    if (typeof window === 'undefined') {
+        return false;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- navigator.platform is the most reliable macOS signal; userAgent can be spoofed/reduced.
+    var platform = window.navigator.platform;
+    return platform.includes('Mac') || window.navigator.userAgent.includes('Mac OS X');
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+function getMinTextMetrics(metrics) {
+    return {
+        width: metrics.width,
+        actualBoundingBoxAscent: metrics.actualBoundingBoxAscent,
+        actualBoundingBoxDescent: metrics.actualBoundingBoxDescent,
+        fontBoundingBoxAscent: metrics.fontBoundingBoxAscent,
+        fontBoundingBoxDescent: metrics.fontBoundingBoxDescent
+    };
+}
+/** Bounded FIFO text-metrics cache — TV uses capacity 150 per font. */
+var CircularMetricsCache = /** @class */ (function () {
+    function CircularMetricsCache(_capacity) {
+        this._capacity = _capacity;
+        this._map = new Map();
+    }
+    CircularMetricsCache.prototype.get = function (key) {
+        return this._map.get(key);
+    };
+    CircularMetricsCache.prototype.set = function (key, value) {
+        if (this._map.has(key)) {
+            this._map.delete(key);
+        }
+        else if (this._map.size >= this._capacity) {
+            var oldest = this._map.keys().next();
+            if (oldest.done !== true) {
+                this._map.delete(oldest.value);
+            }
+        }
+        this._map.set(key, value);
+    };
+    CircularMetricsCache.prototype.clear = function () {
+        this._map.clear();
+    };
+    return CircularMetricsCache;
+}());
+function createTextWidthCache(capacity) {
+    if (capacity === void 0) { capacity = 150; }
+    return new TextWidthCacheImp(capacity);
+}
+var TextWidthCacheImp = /** @class */ (function () {
+    function TextWidthCacheImp(_capacity) {
+        if (_capacity === void 0) { _capacity = 150; }
+        this._capacity = _capacity;
+        this._perFont = new Map();
+    }
+    TextWidthCacheImp.prototype.measureText = function (context, text, options) {
+        var cacheKey = text;
+        if ((options === null || options === void 0 ? void 0 : options.mono) === true) {
+            cacheKey = text.replace(/\d/g, '0');
+        }
+        return this.getMetrics(context, cacheKey).width;
+    };
+    TextWidthCacheImp.prototype.yMidCorrection = function (context, text) {
+        var metrics = this.getMetrics(context, text);
+        return metrics.actualBoundingBoxAscent !== undefined && metrics.actualBoundingBoxDescent !== undefined
+            ? (metrics.actualBoundingBoxAscent - metrics.actualBoundingBoxDescent) / 2
+            : 0;
+    };
+    TextWidthCacheImp.prototype.getMetrics = function (context, text) {
+        var font = context.font;
+        var cache = this._perFont.get(font);
+        if (cache === undefined) {
+            cache = new CircularMetricsCache(this._capacity);
+            this._perFont.set(font, cache);
+            // Bound the font map too — fonts are finite in practice.
+            if (this._perFont.size > 32) {
+                var oldest = this._perFont.keys().next();
+                if (oldest.done !== true) {
+                    this._perFont.delete(oldest.value);
+                }
+            }
+        }
+        var cached = cache.get(text);
+        if (cached !== undefined) {
+            return cached;
+        }
+        var previousBaseline = context.textBaseline;
+        context.textBaseline = 'middle';
+        var metrics = getMinTextMetrics(context.measureText(text));
+        context.textBaseline = previousBaseline;
+        // Do not cache zero-width nonempty text (font still loading).
+        if (!(metrics.width === 0 && text.length > 0)) {
+            cache.set(text, metrics);
+        }
+        return metrics;
+    };
+    TextWidthCacheImp.prototype.reset = function () {
+        this._perFont.clear();
+    };
+    return TextWidthCacheImp;
+}());
+var measurementContext = null;
+var measurementCanvas = null;
+function getMeasurementContext() {
+    if (measurementContext === null) {
+        measurementCanvas = document.createElement('canvas');
+        measurementCanvas.width = 0;
+        measurementCanvas.height = 0;
+        // Safari/macOS returns wrong metrics for detached canvases — TV attaches
+        // a display:none canvas to the document there.
+        if (isMac() && typeof document.body !== 'undefined') {
+            measurementCanvas.style.display = 'none';
+            document.body.append(measurementCanvas);
+        }
+        measurementContext = measurementCanvas.getContext('2d');
+        measurementContext.textBaseline = 'alphabetic';
+        measurementContext.textAlign = 'center';
+    }
+    return measurementContext;
+}
+/**
+ * Measure text against the shared measurement context.
+ * Pass a TextWidthCache to cache by (font, text).
+ */
+function measureText(text, font, widthCache) {
+    var context = getMeasurementContext();
+    if (context.font !== font) {
+        context.font = font;
+    }
+    return widthCache !== undefined
+        ? widthCache.getMetrics(context, text)
+        : getMinTextMetrics(context.measureText(text));
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+function splitWordsAndSpaces(text) {
+    var tokens = [];
+    do {
+        var match = /\s+/.exec(text);
+        if (match === null) {
+            tokens.push({ word: text, spaces: '' });
+            break;
+        }
+        tokens.push({ word: text.slice(0, match.index), spaces: match[0] });
+        text = text.slice(match.index + match[0].length);
+    } while (text.length > 0);
+    return tokens;
+}
+function upperbound(items, value, predicate, start, end) {
+    var left = start;
+    var right = end;
+    while (left < right) {
+        var mid = (left + right) >>> 1;
+        if (predicate(value, items[mid])) {
+            right = mid;
+        }
+        else {
+            left = mid + 1;
+        }
+    }
+    return left;
+}
+/**
+ * Find the longest fitting prefix by binary search. Keeps at least one code
+ * unit so the loop progresses even if a single character exceeds maxWidth.
+ */
+function splitIntoFittingChunks(text, font, metricsCache, maxWidth) {
+    var chunks = [];
+    var characterIndices = [];
+    for (var index = 0; index < text.length; ++index) {
+        characterIndices.push(index);
+    }
+    var _loop_1 = function () {
+        var sourceText = text;
+        var prefixLength = Math.max(1, upperbound(characterIndices, maxWidth, function (widthLimit, characterIndex) {
+            return measureText(sourceText.slice(0, characterIndex + 1), font, metricsCache).width > widthLimit;
+        }, 0, sourceText.length));
+        chunks.push(sourceText.slice(0, prefixLength));
+        text = sourceText.slice(prefixLength);
+    };
+    while (text.length > 0) {
+        _loop_1();
+    }
+    return chunks;
+}
+function wordWrap(text, font, metricsCache, skipHiddenLines, wrapWidth) {
+    var e_1, _a;
+    if (skipHiddenLines === void 0) { skipHiddenLines = true; }
+    if (typeof wrapWidth === 'string') {
+        wrapWidth = parseInt(wrapWidth);
+    }
+    // Preserve explicit line breaks.
+    var sourceLines = text.split(/\r\n|\r|\n|$/).map(function (lineText) { return ({
+        text: lineText,
+        hidden: false,
+        wrappedLinePart: false,
+        wrappedLineEnd: false
+    }); });
+    if (typeof wrapWidth !== 'number' || !isFinite(wrapWidth) || wrapWidth <= 0) {
+        return sourceLines;
+    }
+    if (measureText('x', font, metricsCache).width > wrapWidth) {
+        return sourceLines;
+    }
+    var wrappedLines = [];
+    try {
+        for (var sourceLines_1 = __values(sourceLines), sourceLines_1_1 = sourceLines_1.next(); !sourceLines_1_1.done; sourceLines_1_1 = sourceLines_1.next()) {
+            var sourceLine = sourceLines_1_1.value;
+            if (measureText(sourceLine.text, font, metricsCache).width <= wrapWidth) {
+                wrappedLines.push(sourceLine);
+                continue;
+            }
+            var tokens = splitWordsAndSpaces(sourceLine.text);
+            var isWrappedLine = true;
+            var pendingText = '';
+            var tokenIndex = 0;
+            while (tokenIndex < tokens.length) {
+                var token = tokens[tokenIndex];
+                var candidateText = "".concat(pendingText).concat(token.word);
+                var candidateWidth = measureText(candidateText, font, metricsCache).width;
+                if (candidateWidth > wrapWidth) {
+                    if (pendingText !== '') {
+                        wrappedLines.push({
+                            text: pendingText,
+                            hidden: false,
+                            wrappedLinePart: isWrappedLine,
+                            wrappedLineEnd: false
+                        });
+                        pendingText = '';
+                    }
+                    else if (candidateText.length === 1) {
+                        wrappedLines.push({
+                            text: candidateText,
+                            hidden: false,
+                            wrappedLinePart: isWrappedLine,
+                            wrappedLineEnd: true
+                        });
+                        token.word = '';
+                    }
+                    else {
+                        var wordChunks = splitIntoFittingChunks(candidateText, font, metricsCache, wrapWidth);
+                        for (var chunkIndex = 0; chunkIndex < wordChunks.length - 1; chunkIndex += 1) {
+                            wrappedLines.push({
+                                text: wordChunks[chunkIndex],
+                                hidden: false,
+                                wrappedLinePart: isWrappedLine,
+                                wrappedLineEnd: false
+                            });
+                        }
+                        token.word = wordChunks[wordChunks.length - 1];
+                    }
+                    continue; // Retry the same token with the remaining word/pending text.
+                }
+                candidateText = "".concat(pendingText).concat(token.word).concat(token.spaces);
+                candidateWidth = measureText(candidateText, font, metricsCache).width;
+                if (candidateWidth < wrapWidth) {
+                    pendingText = candidateText;
+                    tokenIndex += 1;
+                    continue;
+                }
+                var chunks = splitIntoFittingChunks(candidateText, font, metricsCache, wrapWidth);
+                for (var chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+                    var chunkText = chunks[chunkIndex];
+                    var line = {
+                        text: chunkText,
+                        hidden: chunkIndex > 0,
+                        wrappedLinePart: isWrappedLine,
+                        wrappedLineEnd: tokenIndex === tokens.length - 1 && chunkIndex === chunks.length - 1
+                    };
+                    if (!(line.hidden && skipHiddenLines)) {
+                        wrappedLines.push(line);
+                    }
+                }
+                pendingText = '';
+                tokenIndex += 1;
+            }
+            if (pendingText !== '') {
+                wrappedLines.push({
+                    text: pendingText,
+                    wrappedLinePart: isWrappedLine,
+                    hidden: false,
+                    wrappedLineEnd: true
+                });
+            }
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (sourceLines_1_1 && !sourceLines_1_1.done && (_a = sourceLines_1.return)) _a.call(sourceLines_1);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    return wrappedLines;
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * Text-box layout engine — ported from TradingView's TextRenderer
+ * (_getBox / _getBoxSize / _getInternalData / getLinesInfo), minus the
+ * decorator system (TV forbids decorators together with wordWrapWidth, and
+ * none of our tools use them).
+ *
+ * This is the SINGLE source of geometry for both the canvas figure and the
+ * DOM text editor — the editor's layout() callback consumes this output so
+ * caret, selection and the invisible textarea always agree with painted
+ * pixels (the #1 defect of ad hoc editors is re-measuring in the DOM).
+ */
+var CHART_FONT_FAMILY = "'Trebuchet MS', Roboto, Ubuntu, sans-serif";
+function fontSizeOf(data) {
+    var _a;
+    return Math.ceil((_a = data.fontSize) !== null && _a !== void 0 ? _a : 12);
+}
+function lineSpacingOf(data) {
+    var _a;
+    return (_a = data.lineSpacing) !== null && _a !== void 0 ? _a : 0;
+}
+function getVerticalPadding(data) {
+    var _a, _b;
+    return (_b = (_a = data.boxPaddingVert) !== null && _a !== void 0 ? _a : data.boxPadding) !== null && _b !== void 0 ? _b : fontSizeOf(data) / 3;
+}
+function getHorizontalPadding(data) {
+    var _a, _b;
+    return (_b = (_a = data.boxPaddingHorz) !== null && _a !== void 0 ? _a : data.boxPadding) !== null && _b !== void 0 ? _b : fontSizeOf(data) / 3;
+}
+function getLeftPadding(data) {
+    var _a;
+    return (_a = data.boxPaddingLeft) !== null && _a !== void 0 ? _a : getHorizontalPadding(data);
+}
+function getRightPadding(data) {
+    var _a;
+    return (_a = data.boxPaddingRight) !== null && _a !== void 0 ? _a : getHorizontalPadding(data);
+}
+function textBoxFont(data) {
+    var _a;
+    var size = fontSizeOf(data);
+    return "".concat(data.bold === true ? 'bold ' : '').concat(data.italic === true ? 'italic ' : '').concat(size, "px ").concat((_a = data.fontFamily) !== null && _a !== void 0 ? _a : CHART_FONT_FAMILY);
+}
+function computeLinesInfo(data, font, widthCache) {
+    var e_1, _a;
+    var wrapped = wordWrap(data.text, font, widthCache, false, data.wordWrapWidth);
+    var visible = wrapped.filter(function (line) { return !line.hidden; });
+    if (data.maxHeight !== undefined) {
+        var maxVisibleLines = Math.floor((data.maxHeight + lineSpacingOf(data)) / (fontSizeOf(data) + lineSpacingOf(data)));
+        if (visible.length > maxVisibleLines) {
+            visible = visible.slice(0, maxVisibleLines);
+        }
+    }
+    var linesMaxWidth = 0;
+    if (data.wordWrapWidth !== undefined) {
+        // TV: when wrapping is enabled the wrap width IS the max line width.
+        linesMaxWidth = data.wordWrapWidth;
+    }
+    else {
+        try {
+            for (var visible_1 = __values(visible), visible_1_1 = visible_1.next(); !visible_1_1.done; visible_1_1 = visible_1.next()) {
+                var line = visible_1_1.value;
+                linesMaxWidth = Math.max(linesMaxWidth, measureText(line.text, font, widthCache).width);
+            }
+        }
+        catch (e_1_1) { e_1 = { error: e_1_1 }; }
+        finally {
+            try {
+                if (visible_1_1 && !visible_1_1.done && (_a = visible_1.return)) _a.call(visible_1);
+            }
+            finally { if (e_1) throw e_1.error; }
+        }
+    }
+    return { linesIncludingHidden: wrapped, lines: visible, linesMaxWidth: linesMaxWidth };
+}
+function rotatePointAroundOrigin(point, origin, angle) {
+    if (angle === 0) {
+        return { x: point.x, y: point.y };
+    }
+    var cos = Math.cos(angle);
+    var sin = Math.sin(angle);
+    var dx = point.x - origin.x;
+    var dy = point.y - origin.y;
+    return {
+        x: dx * cos - dy * sin + origin.x,
+        y: dx * sin + dy * cos + origin.y
+    };
+}
+/**
+ * Compute the full text-box layout for `data` anchored at `anchor`
+ * (media/CSS-px coordinates). Deterministic and context-free: the same
+ * input always produces the same geometry for renderer, hit test, caret
+ * and selection.
+ */
+function computeTextBoxLayout(data, anchor, widthCache) {
+    var _a, _b, _c, _d, _e, _f, _g, _h;
+    var font = textBoxFont(data);
+    var fontSize = fontSizeOf(data);
+    var spacing = lineSpacingOf(data);
+    var linesInfo = computeLinesInfo(data, font, widthCache);
+    // ── _getBoxSize ──────────────────────────────────────────────────────────
+    var leftPadding = getLeftPadding(data);
+    var rightPadding = getRightPadding(data);
+    var verticalPadding = getVerticalPadding(data);
+    var textBoxWidth = Math.round(linesInfo.linesMaxWidth + leftPadding + rightPadding);
+    if (textBoxWidth % 2 !== 0) {
+        textBoxWidth += 1; // TV keeps the auto width even so anchors stay centered.
+    }
+    var textBoxHeight = fontSize * linesInfo.lines.length +
+        spacing * Math.max(0, linesInfo.lines.length - 1) +
+        2 * verticalPadding;
+    var boxWidth = (_a = data.boxWidth) !== null && _a !== void 0 ? _a : textBoxWidth;
+    var boxHeight = (_b = data.boxHeight) !== null && _b !== void 0 ? _b : textBoxHeight;
+    // ── _getBox ──────────────────────────────────────────────────────────────
+    var boxLeft = anchor.x;
+    var boxTop = anchor.y;
+    var vertAlign = (_c = data.vertAlign) !== null && _c !== void 0 ? _c : 'top';
+    var horzAlign = (_d = data.horzAlign) !== null && _d !== void 0 ? _d : 'left';
+    var offsetX = (_e = data.offsetX) !== null && _e !== void 0 ? _e : 0;
+    var offsetY = (_f = data.offsetY) !== null && _f !== void 0 ? _f : 0;
+    switch (vertAlign) {
+        case 'bottom':
+            boxTop -= boxHeight + offsetY;
+            break;
+        case 'middle':
+            boxTop -= boxHeight / 2;
+            break;
+        default:
+            boxTop += offsetY;
+    }
+    switch (horzAlign) {
+        case 'center':
+            boxLeft -= boxWidth / 2;
+            break;
+        case 'right':
+            boxLeft -= boxWidth + offsetX;
+            break;
+        default:
+            boxLeft += offsetX;
+    }
+    // ── _getInternalData ─────────────────────────────────────────────────────
+    var horzTextAlign = (_g = data.horzTextAlign) !== null && _g !== void 0 ? _g : horzAlign;
+    var rtl = data.rtl === true;
+    var textHorizStart = 0;
+    var textAlign = 'start';
+    switch (horzTextAlign) {
+        case 'center': {
+            textAlign = 'center';
+            var availableTextWidth = boxWidth - leftPadding - rightPadding;
+            textHorizStart = leftPadding + availableTextWidth / 2;
+            break;
+        }
+        case 'right': {
+            textAlign = 'end';
+            textHorizStart = boxWidth - rightPadding;
+            if (rtl) {
+                textHorizStart = leftPadding;
+                textAlign = 'start';
+            }
+            break;
+        }
+        default: {
+            textAlign = 'start';
+            textHorizStart = leftPadding;
+            if (rtl) {
+                textHorizStart = boxWidth - rightPadding;
+                textAlign = 'end';
+            }
+        }
+    }
+    // TV paints each line with textBaseline 'middle'; the anchor sits at
+    // textTop + fontSize/2 (+ 0.05*fontSize baseline adjustment at draw time).
+    var textVertStart = verticalPadding + fontSize / 2;
+    var textLeft = boxLeft + leftPadding;
+    var textRight = boxLeft + boxWidth - rightPadding;
+    var textTop = boxTop + verticalPadding;
+    var textBottom = boxTop + boxHeight - verticalPadding;
+    // ── rotation geometry ────────────────────────────────────────────────────
+    var rotationPoint = {
+        x: horzAlign === 'center' ? boxLeft + boxWidth / 2 : (horzAlign === 'right' ? boxLeft + boxWidth : boxLeft),
+        y: vertAlign === 'middle' ? boxTop + boxHeight / 2 : (vertAlign === 'bottom' ? boxTop + boxHeight : boxTop)
+    };
+    var angle = (_h = data.angle) !== null && _h !== void 0 ? _h : 0;
+    var textCenter = rotatePointAroundOrigin({ x: (textLeft + textRight) / 2, y: (textTop + textBottom) / 2 }, rotationPoint, angle);
+    var polygonPoints = [
+        { x: boxLeft, y: boxTop },
+        { x: boxLeft + boxWidth, y: boxTop },
+        { x: boxLeft + boxWidth, y: boxTop + boxHeight },
+        { x: boxLeft, y: boxTop + boxHeight }
+    ].map(function (p) { return rotatePointAroundOrigin(p, rotationPoint, angle); });
+    return {
+        font: font,
+        fontSize: fontSize,
+        lineSpacing: spacing,
+        boxLeft: boxLeft,
+        boxTop: boxTop,
+        boxWidth: boxWidth,
+        boxHeight: boxHeight,
+        textBoxWidth: textBoxWidth,
+        textBoxHeight: textBoxHeight,
+        textLeft: textLeft,
+        textTop: textTop,
+        textRight: textRight,
+        textBottom: textBottom,
+        textHorizStart: textHorizStart,
+        textVertStart: textVertStart,
+        textAlign: textAlign,
+        textBaseline: 'middle',
+        linesInfo: linesInfo,
+        rotationPoint: rotationPoint,
+        centerTextRotation: { x: textCenter.x, y: textCenter.y, angle: angle },
+        polygonPoints: polygonPoints
+    };
+}
+/**
+ * Whether the layout output (given the same anchor) can differ — used by
+ * figure-cache invalidation. Mirrors TV's geometry-affecting field list.
+ */
+function textBoxDataEqual(a, b) {
+    return a.text === b.text &&
+        a.fontSize === b.fontSize &&
+        a.bold === b.bold &&
+        a.italic === b.italic &&
+        a.fontFamily === b.fontFamily &&
+        a.wordWrapWidth === b.wordWrapWidth &&
+        a.maxHeight === b.maxHeight &&
+        a.horzAlign === b.horzAlign &&
+        a.vertAlign === b.vertAlign &&
+        a.horzTextAlign === b.horzTextAlign &&
+        a.offsetX === b.offsetX &&
+        a.offsetY === b.offsetY &&
+        a.angle === b.angle &&
+        a.boxPadding === b.boxPadding &&
+        a.boxPaddingVert === b.boxPaddingVert &&
+        a.boxPaddingHorz === b.boxPaddingHorz &&
+        a.boxPaddingLeft === b.boxPaddingLeft &&
+        a.boxPaddingRight === b.boxPaddingRight &&
+        a.boxWidth === b.boxWidth &&
+        a.boxHeight === b.boxHeight &&
+        a.lineSpacing === b.lineSpacing &&
+        a.rtl === b.rtl;
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+function caretOrigin(textAlign, textWidth, rtl) {
+    switch (textAlign) {
+        case 'center': return textWidth / 2;
+        case 'start': return rtl ? textWidth : 0;
+        case 'end': return rtl ? 0 : textWidth;
+        case 'right': return textWidth;
+        default: return 0;
+    }
+}
+/**
+ * Map a string position through wrapped and hidden line segments to caret
+ * coordinates. A caret at a wrap boundary advances to the next visible line.
+ */
+function getCaretPosition(options) {
+    var symbolPosition = options.symbolPosition, textWidth = options.textWidth, lines = options.lines, lineHeight = options.lineHeight, font = options.font, textAlign = options.textAlign, _a = options.lineSpacing, lineSpacing = _a === void 0 ? 0 : _a, _b = options.rtl, rtl = _b === void 0 ? false : _b, widthCache = options.widthCache;
+    var caretX = caretOrigin(textAlign, textWidth, rtl);
+    var caretY = 0;
+    var lineAdvance = lineHeight + lineSpacing;
+    var consumedSymbols = 0;
+    var lineNumber = 0;
+    var visibleText = '';
+    for (var index = 0; index < lines.length; index++) {
+        var positionInLine = symbolPosition - consumedSymbols;
+        var _c = lines[index], wrappedLinePart = _c.wrappedLinePart, wrappedLineEnd = _c.wrappedLineEnd, hidden = _c.hidden, text = _c.text;
+        var nextLine = index < lines.length - 1 ? lines[index + 1] : null;
+        if (!hidden) {
+            visibleText = text;
+        }
+        if (nextLine !== null && positionInLine > text.length) {
+            consumedSymbols += text.length + (wrappedLinePart && !wrappedLineEnd ? 0 : 1);
+            if (!hidden) {
+                caretY += lineAdvance;
+            }
+            continue;
+        }
+        if (hidden) {
+            caretY -= lineAdvance;
+        }
+        var caretMovesToNextLine = wrappedLinePart &&
+            !wrappedLineEnd &&
+            text.length === positionInLine &&
+            nextLine !== null &&
+            !nextLine.hidden;
+        if (hidden) {
+            visibleText += ' ';
+            positionInLine = visibleText.length;
+        }
+        if (textAlign === 'center') {
+            if (caretMovesToNextLine) {
+                caretX = textWidth / 2;
+            }
+            else {
+                var lineWidth = measureText(visibleText, font, widthCache).width;
+                var prefixWidth = measureText(visibleText.slice(0, positionInLine), font, widthCache).width;
+                var centerX = textWidth / 2;
+                caretX = rtl
+                    ? centerX + lineWidth / 2 - prefixWidth
+                    : centerX - lineWidth / 2 + prefixWidth;
+            }
+        }
+        else if ((textAlign === 'right' && !rtl) ||
+            (textAlign === 'left' && rtl) ||
+            textAlign === 'end') {
+            if (caretMovesToNextLine) {
+                caretX = textWidth;
+            }
+            else {
+                var measuredWidth = measureText(visibleText.slice(positionInLine), font, widthCache).width;
+                caretX = rtl ? measuredWidth : textWidth - measuredWidth;
+            }
+        }
+        else if (caretMovesToNextLine) {
+            caretX = 0;
+        }
+        else {
+            var measuredWidth = measureText(visibleText.slice(0, positionInLine), font, widthCache).width;
+            caretX = rtl ? textWidth - measuredWidth : measuredWidth;
+        }
+        if (caretMovesToNextLine) {
+            lineNumber = index + 1;
+            caretY += lineAdvance;
+        }
+        else {
+            lineNumber = index;
+        }
+        break;
+    }
+    return { x: caretX, y: caretY, lineNumber: lineNumber };
+}
+/**
+ * Selection rectangles per visible line — including the space width that an
+ * explicit newline contributes at a line end. Same math as drawSelection,
+ * returned as data so the editor can render DOM nodes.
+ */
+function getSelectionRects(options) {
+    var start = options.start, end = options.end, lines = options.lines, font = options.font, left = options.left, right = options.right, lineHeight = options.lineHeight, _a = options.lineSpacing, lineSpacing = _a === void 0 ? 0 : _a, textAlign = options.textAlign, _b = options.rtl, rtl = _b === void 0 ? false : _b, widthCache = options.widthCache;
+    var lineAdvance = lineHeight + lineSpacing;
+    var centerX = (left + right) / 2;
+    var rects = [];
+    if (start.lineNumber === end.lineNumber) {
+        rects.push({
+            x: Math.min(start.x, end.x),
+            y: start.y,
+            width: Math.abs(start.x - end.x),
+            height: lineAdvance
+        });
+        return rects;
+    }
+    var spaceWidth = measureText(' ', font, widthCache).width;
+    var visibleLineIndex = 0;
+    for (var lineIndex = start.lineNumber; lineIndex <= end.lineNumber; lineIndex++) {
+        var isFirstLine = lineIndex === start.lineNumber;
+        var isLastLine = lineIndex === end.lineNumber;
+        var line = lines[lineIndex];
+        if (lineIndex >= lines.length || line.hidden) {
+            continue;
+        }
+        var lineWidth = measureText(line.text, font, widthCache).width;
+        var selectionLeft = 0;
+        var selectionRight = 0;
+        var rightAligned = false;
+        if (textAlign === 'center') {
+            selectionLeft = isFirstLine ? start.x : (rtl ? centerX + lineWidth / 2 : centerX - lineWidth / 2);
+            selectionRight = isLastLine ? end.x : (rtl ? centerX - lineWidth / 2 : centerX + lineWidth / 2);
+        }
+        else if (textAlign === 'right' ||
+            (rtl && textAlign === 'start') ||
+            (!rtl && textAlign === 'end')) {
+            selectionLeft = isFirstLine ? start.x : right - lineWidth;
+            selectionRight = isLastLine ? end.x : right;
+            rightAligned = true;
+        }
+        else {
+            selectionLeft = isFirstLine ? start.x : left;
+            selectionRight = isLastLine ? end.x : left + lineWidth;
+        }
+        var rangeLeft = Math.min(selectionLeft, selectionRight);
+        var rangeRight = Math.max(selectionLeft, selectionRight);
+        if (!(isLastLine || (line.wrappedLinePart && !line.wrappedLineEnd))) {
+            if (rightAligned) {
+                rangeLeft -= spaceWidth;
+            }
+            else {
+                rangeRight += spaceWidth;
+            }
+        }
+        rects.push({
+            x: rangeLeft,
+            y: start.y + visibleLineIndex * lineAdvance,
+            width: rangeRight - rangeLeft,
+            height: lineAdvance
+        });
+        visibleLineIndex += 1;
+    }
+    return rects;
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * Empirical textarea↔canvas letter-spacing compensation (verbatim from
+ * TradingView module 488679). Key = `${fontSize}${b}${i}_${normalizedDpr}`.
+ * Matching the native textarea's wrapping to the canvas measurement is
+ * pixel-sensitive — keep the table exact and DO NOT add fallbacks.
+ */
+var LETTER_SPACING_BY_FONT_AND_DPR = new Map([
+    ['10b_2', 0.15], ['10bi_2', 0.15], ['12_3', 0.8],
+    ['12b_2', 0.5], ['12bi_2', 0.45], ['14b_2', 0.65],
+    ['14bi_2', 0.65], ['16_2.5', 0.8], ['16b_2', 0.8],
+    ['16bi_2', 0.75], ['16b_2.5', 0.8], ['16bi_2.5', 0.75],
+    ['16bi_3', 0.65], ['20_2', 1], ['20b_2', 0.8],
+    ['20bi_2', 0.75], ['20bi_3', 0.55], ['20_2.5', 0.25],
+    ['20_3', 0.8], ['24_2.5', 0.95], ['24_3', 0.95],
+    ['28_2', 1.4], ['28_2.5', 1.38], ['28_3', 1.38],
+    ['32_2', 1.6], ['32_2.5', 1.6], ['32_3', 1.6]
+]);
+function normalizedDevicePixelRatio(dpr) {
+    if (dpr <= 2 || dpr >= 3) {
+        return dpr;
+    }
+    return dpr < 2.5 ? 2 : 2.5;
+}
+/**
+ * Letter-spacing compensation for the invisible textarea — undefined means
+ * the font/dpr combo has no calibrated entry and 'normal' should be used
+ * (the original deliberately has no fallback).
+ */
+function getEditorLetterSpacing(font, fontSize, dpr) {
+    var boldSuffix = font.includes('bold') ? 'b' : '';
+    var italicSuffix = font.includes('italic') ? 'i' : '';
+    return LETTER_SPACING_BY_FONT_AND_DPR.get("".concat(fontSize).concat(boldSuffix).concat(italicSuffix, "_").concat(normalizedDevicePixelRatio(dpr)));
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var EDITOR_PADDING = 2;
+/** TradingView MouseEventHandlerDelay.ResetClick. */
+var OPENING_CLICK_GUARD_MS = 500;
+var STYLE_ID = 'sc-text-editor-styles';
+function ensureEditorStyles() {
+    // Id-marker dedupe (not a module-global flag) — a removed node or a
+    // second document/iframe still gets its styles.
+    if (typeof document === 'undefined' || document.getElementById(STYLE_ID) !== null) {
+        return;
+    }
+    var style = document.createElement('style');
+    style.id = STYLE_ID;
+    // Caret: TV blinks at 1s period (500 off / 500 on) starting 300ms after
+    // open — steps(1) holds each keyframe half the period.
+    style.textContent = "\n@keyframes sc-caret-blink { 0% { opacity: 0 } 50% { opacity: 1 } 100% { opacity: 0 } }\n.sc-text-caret { animation: sc-caret-blink 1s steps(1) 0.3s infinite; }\n.sc-text-sel { position: absolute; pointer-events: none; }\n".trim();
+    document.head.appendChild(style);
+}
+var sharedWidthCache = createTextWidthCache();
+function createTextEditorSession(options) {
+    return new TextEditorSessionImp(options);
+}
+var TextEditorSessionImp = /** @class */ (function () {
+    function TextEditorSessionImp(options) {
+        var _this = this;
+        var _a;
+        this._mountedAt = performance.now();
+        this._closed = false;
+        this._unmounts = [];
+        this._options = options;
+        this._layer = getPaneDomLayer(options.chart, options.paneId);
+        ensureEditorStyles();
+        this._wrapper = createDom('div', {
+            position: 'absolute',
+            margin: '0',
+            boxSizing: 'border-box',
+            pointerEvents: 'none'
+        });
+        this._wrapper.setAttribute('data-name', 'text-editor');
+        this._textarea = createDom('textarea', {
+            // Invisible input device — the chart renders the text.
+            opacity: '0',
+            position: 'absolute',
+            margin: '0',
+            border: '0',
+            outline: '0',
+            padding: "".concat(EDITOR_PADDING, "px"),
+            overflow: 'hidden',
+            resize: 'none',
+            boxSizing: 'border-box',
+            pointerEvents: 'all',
+            background: 'transparent'
+        });
+        this._textarea.value = options.value;
+        if (options.placeholder !== undefined) {
+            this._textarea.placeholder = options.placeholder;
+        }
+        if (options.maxLength !== undefined) {
+            this._textarea.maxLength = options.maxLength;
+        }
+        this._textarea.setAttribute('data-qa-id', 'inplace-text-editor');
+        this._wrapper.appendChild(this._textarea);
+        this._caret = createDom('div', {
+            position: 'absolute',
+            pointerEvents: 'none',
+            width: '2px'
+        });
+        this._caret.classList.add('sc-text-caret');
+        this._wrapper.appendChild(this._caret);
+        this._selHost = createDom('div', { position: 'absolute', pointerEvents: 'none', top: '0', left: '0' });
+        this._wrapper.insertBefore(this._selHost, this._textarea);
+        // 500ms opening-click guard: during the ResetClick window the click that
+        // opened the editor keeps flowing to the chart (TV parity); after that
+        // all gestures inside the editor are contained.
+        var unmountWrapper = (_a = this._layer) === null || _a === void 0 ? void 0 : _a.mount(this._wrapper, {
+            interactive: true,
+            isolate: function () { return performance.now() - _this._mountedAt > OPENING_CLICK_GUARD_MS; }
+        });
+        if (unmountWrapper !== undefined) {
+            this._unmounts.push(unmountWrapper);
+        }
+        this._bindEvents();
+        this._relayout();
+        // Focus after mount so the opening click can't steal it back.
+        this._textarea.focus();
+        this._textarea.setSelectionRange(options.value.length, options.value.length);
+        this._syncCaret();
+    }
+    Object.defineProperty(TextEditorSessionImp.prototype, "value", {
+        get: function () {
+            return this._textarea.value;
+        },
+        enumerable: false,
+        configurable: true
+    });
+    Object.defineProperty(TextEditorSessionImp.prototype, "closed", {
+        get: function () {
+            return this._closed;
+        },
+        enumerable: false,
+        configurable: true
+    });
+    TextEditorSessionImp.prototype._bindEvents = function () {
+        var _this = this;
+        var onChange = function () {
+            var _a, _b;
+            (_b = (_a = _this._options).onInput) === null || _b === void 0 ? void 0 : _b.call(_a, _this._textarea.value);
+            _this._emitSelection();
+            _this._relayout();
+            _this._syncCaret();
+        };
+        var onKeyDown = function (e) {
+            // Escape commits (approved TV behavior — never cancels).
+            if (e.key === 'Escape' || (_this._options.forbidLineBreaks === true && e.key === 'Enter')) {
+                e.preventDefault();
+                _this.close('hotkey');
+                return;
+            }
+            // TSV-style editors: Tab inserts the cell separator instead of
+            // moving focus (which would blur → close → commit prematurely).
+            if (e.key === 'Tab' && _this._options.allowTab === true) {
+                e.preventDefault();
+                var t = _this._textarea;
+                var start = t.selectionStart;
+                var end = t.selectionEnd;
+                t.setRangeText('\t', start, end, 'end');
+                onChange();
+            }
+        };
+        var onBlur = function () {
+            _this.close('blur');
+        };
+        var onSelect = function () {
+            _this._emitSelection();
+            _this._syncCaret();
+        };
+        var syncSelection = function () {
+            _this._emitSelection();
+            _this._syncCaret();
+        };
+        this._textarea.addEventListener('input', onChange);
+        this._textarea.addEventListener('keydown', onKeyDown);
+        this._textarea.addEventListener('blur', onBlur);
+        this._textarea.addEventListener('select', onSelect);
+        document.addEventListener('mousemove', syncSelection);
+        document.addEventListener('touchmove', syncSelection);
+        this._unmounts.push(function () {
+            document.removeEventListener('mousemove', syncSelection);
+            document.removeEventListener('touchmove', syncSelection);
+        });
+    };
+    TextEditorSessionImp.prototype._emitSelection = function () {
+        var _a, _b;
+        (_b = (_a = this._options).onSelectionChange) === null || _b === void 0 ? void 0 : _b.call(_a, {
+            start: this._textarea.selectionStart,
+            end: this._textarea.selectionEnd
+        });
+    };
+    /** Reposition the wrapper + textarea + caret + selection from layout(). */
+    TextEditorSessionImp.prototype._relayout = function () {
+        var info = this._options.layout(this._textarea.value).info;
+        var textWidth = Math.ceil(info.textRight - info.textLeft) + 1;
+        var textHeight = Math.ceil(info.textBottom - info.textTop);
+        var top = 0;
+        var left = 0;
+        var rotationAngle = 0;
+        if (info.centerRotation === undefined || info.centerRotation.angle === 0) {
+            top = Math.round(info.textTop);
+            left = Math.round(info.textLeft);
+        }
+        else {
+            left = info.centerRotation.x - textWidth / 2;
+            top = info.centerRotation.y - textHeight / 2;
+            rotationAngle = info.centerRotation.angle;
+        }
+        var w = this._wrapper.style;
+        w.left = "".concat(left - EDITOR_PADDING, "px");
+        w.top = "".concat(top - EDITOR_PADDING, "px");
+        w.width = "".concat(textWidth + 2 * EDITOR_PADDING, "px");
+        w.height = "".concat(textHeight + 2 * EDITOR_PADDING, "px");
+        w.transform = rotationAngle !== 0 ? "rotate(".concat(rotationAngle, "rad)") : '';
+        w.transformOrigin = rotationAngle !== 0 ? 'center' : '';
+        var t = this._textarea.style;
+        t.width = '100%';
+        t.height = '100%';
+        t.font = info.font;
+        t.lineHeight = "".concat(info.fontSize + info.lineSpacing, "px");
+        t.textAlign = info.textAlign;
+        t.direction = info.rtl === true ? 'rtl' : 'ltr';
+        var spacing = this._options.wordWrapEnabled === true
+            ? getEditorLetterSpacing(info.font, info.fontSize, window.devicePixelRatio)
+            : undefined;
+        t.letterSpacing = spacing !== undefined ? "".concat(spacing, "px") : 'normal';
+    };
+    /** Update the DOM caret + selection rects from the textarea selection. */
+    TextEditorSessionImp.prototype._syncCaret = function () {
+        var e_1, _a;
+        var _b, _c;
+        if (this._closed) {
+            return;
+        }
+        var value = this._textarea.value;
+        var _d = this._options.layout(value), info = _d.info, lines = _d.lines;
+        var textWidth = Math.ceil(info.textRight - info.textLeft) + 1;
+        var lineHeight = info.fontSize + info.lineSpacing;
+        var start = getCaretPosition({
+            symbolPosition: this._textarea.selectionStart,
+            textWidth: textWidth,
+            lines: lines,
+            font: info.font,
+            lineHeight: info.fontSize,
+            lineSpacing: info.lineSpacing,
+            textAlign: info.textAlign,
+            rtl: info.rtl,
+            widthCache: sharedWidthCache
+        });
+        var end = getCaretPosition({
+            symbolPosition: this._textarea.selectionEnd,
+            textWidth: textWidth,
+            lines: lines,
+            font: info.font,
+            lineHeight: info.fontSize,
+            lineSpacing: info.lineSpacing,
+            textAlign: info.textAlign,
+            rtl: info.rtl,
+            widthCache: sharedWidthCache
+        });
+        // Selection highlights — DOM rects, zero canvas cost.
+        this._selHost.innerHTML = '';
+        if (this._textarea.selectionStart !== this._textarea.selectionEnd) {
+            var rects = getSelectionRects({
+                start: start,
+                end: end,
+                lines: lines,
+                font: info.font,
+                left: 0,
+                right: textWidth,
+                lineHeight: info.fontSize,
+                lineSpacing: info.lineSpacing,
+                textAlign: info.textAlign,
+                rtl: info.rtl,
+                widthCache: sharedWidthCache
+            });
+            try {
+                for (var rects_1 = __values(rects), rects_1_1 = rects_1.next(); !rects_1_1.done; rects_1_1 = rects_1.next()) {
+                    var r = rects_1_1.value;
+                    var node = createDom('div', {
+                        position: 'absolute',
+                        left: "".concat(r.x + EDITOR_PADDING, "px"),
+                        top: "".concat(r.y + EDITOR_PADDING, "px"),
+                        width: "".concat(r.width, "px"),
+                        height: "".concat(r.height, "px"),
+                        background: (_b = this._options.selectionColor) !== null && _b !== void 0 ? _b : 'rgba(41, 98, 255, 0.4)'
+                    });
+                    node.classList.add('sc-text-sel');
+                    this._selHost.appendChild(node);
+                }
+            }
+            catch (e_1_1) { e_1 = { error: e_1_1 }; }
+            finally {
+                try {
+                    if (rects_1_1 && !rects_1_1.done && (_a = rects_1.return)) _a.call(rects_1);
+                }
+                finally { if (e_1) throw e_1.error; }
+            }
+            this._caret.style.display = 'none';
+        }
+        else {
+            // Caret position is relative to the text box inside the wrapper's padding.
+            this._caret.style.display = '';
+            this._caret.style.left = "".concat(start.x + EDITOR_PADDING, "px");
+            this._caret.style.top = "".concat(start.y + EDITOR_PADDING, "px");
+            this._caret.style.height = "".concat(lineHeight, "px");
+            var dpr = window.devicePixelRatio;
+            this._caret.style.width = "".concat(Math.max(2 * Math.floor(dpr), 2) / dpr, "px");
+            this._caret.style.background = (_c = this._options.caretColor) !== null && _c !== void 0 ? _c : '#1e222d';
+        }
+    };
+    /** Public relayout — scroll/zoom/pane-resize while open re-anchors the box. */
+    TextEditorSessionImp.prototype.relayout = function () {
+        if (!this._closed) {
+            this._relayout();
+            this._syncCaret();
+        }
+    };
+    /** End the session — commits finalValue exactly once. */
+    TextEditorSessionImp.prototype.close = function (reason) {
+        if (reason === void 0) { reason = 'external'; }
+        if (this._closed) {
+            return;
+        }
+        this._closed = true;
+        var finalValue = this._textarea.value;
+        this._unmounts.forEach(function (unmount) {
+            unmount();
+        });
+        this._unmounts = [];
+        this._options.onClose(reason, finalValue);
+    };
+    return TextEditorSessionImp;
+}());
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * Bridge between an overlay's text payload and the in-place editor. The
+ * editor's layout() re-runs computeTextBoxLayout for the live value with
+ * the SAME data the figure paints from — the invisible textarea therefore
+ * always lands exactly over the rendered text.
+ *
+ * Live buffer: while a session is open its current value is kept in
+ * `liveText` (keyed on the overlay instance) and the overlay is
+ * re-rendered on every keystroke, so the canvas shows the typed text —
+ * not the last committed value. Figure callbacks should read
+ * `liveTextOf(overlay) ?? extendData.text`.
+ *
+ * Session lifecycle: every session registers here; it closes itself when
+ * its overlay is removed (any path — delete, undo, remote sync, scope
+ * switch — all funnel through the onOverlayChange 'remove' action), and
+ * `closeTextEditorSessions(chart)` covers chart-level teardown.
+ */
+var liveText = new WeakMap();
+var sessions = new WeakMap();
+/** The in-flight edit value for an overlay, or undefined when not editing. */
+function liveTextOf(overlay) {
+    return liveText.get(overlay);
+}
+/** End every open editor on a chart — call on drawing-manager teardown. */
+function closeTextEditorSessions(chart) {
+    var chartSessions = sessions.get(chart);
+    chartSessions === null || chartSessions === void 0 ? void 0 : chartSessions.forEach(function (session) {
+        session.close('external');
+    });
+    sessions.delete(chart);
+}
+/** Whether any text-editor session is live on this chart. */
+function hasOpenTextEditorSession(chart) {
+    var _a, _b;
+    return ((_b = (_a = sessions.get(chart)) === null || _a === void 0 ? void 0 : _a.size) !== null && _b !== void 0 ? _b : 0) > 0;
+}
+function repaint(chart, paneId) {
+    var _a, _b;
+    (_b = (_a = chart).updatePane) === null || _b === void 0 ? void 0 : _b.call(_a, 1 /* UpdateLevel.Overlay */, paneId);
+}
+function openOverlayTextEditor(options) {
+    var _a, _b, _c;
+    var chart = options.chart, overlay = options.overlay;
+    var paneId = (_a = options.paneId) !== null && _a !== void 0 ? _a : overlay.paneId;
+    var anchor = (_b = options.anchor) !== null && _b !== void 0 ? _b : (function () {
+        var _a, _b, _c;
+        var coordinate = chart.convertToPixel((_a = overlay.points[0]) !== null && _a !== void 0 ? _a : {}, { paneId: paneId });
+        return { x: (_b = coordinate.x) !== null && _b !== void 0 ? _b : 0, y: (_c = coordinate.y) !== null && _c !== void 0 ? _c : 0 };
+    });
+    // One editor per overlay — a second open replaces (and closes) the first.
+    var chartSessions = sessions.get(chart);
+    if (chartSessions === undefined) {
+        chartSessions = new Map();
+        sessions.set(chart, chartSessions);
+    }
+    (_c = chartSessions.get(overlay.id)) === null || _c === void 0 ? void 0 : _c.close('external');
+    // The listeners below close over a box — the session const only exists
+    // after createTextEditorSession returns, but handlers can fire any time
+    // after subscription.
+    var sessionBox = { current: null };
+    var onChartChange = function (event) {
+        var _a, _b;
+        var change = event;
+        if ((change === null || change === void 0 ? void 0 : change.type) === 'remove' && ((_a = change.overlay) === null || _a === void 0 ? void 0 : _a.id) === overlay.id) {
+            (_b = sessionBox.current) === null || _b === void 0 ? void 0 : _b.close('external');
+        }
+    };
+    // Scroll/zoom/resize move the rendered text while the session is open —
+    // re-anchor the DOM editor or the textarea drifts off the glyphs.
+    var onViewChange = function () {
+        var _a;
+        (_a = sessionBox.current) === null || _a === void 0 ? void 0 : _a.relayout();
+    };
+    var session = createTextEditorSession({
+        chart: chart,
+        paneId: paneId,
+        value: options.data().text,
+        maxLength: options.maxLength,
+        forbidLineBreaks: options.forbidLineBreaks,
+        allowTab: options.allowTab,
+        wordWrapEnabled: options.wordWrapEnabled,
+        selectionColor: options.selectionColor,
+        caretColor: options.caretColor,
+        onInput: function (value) {
+            liveText.set(overlay, value);
+            overlay.invalidateFigures();
+            repaint(chart, paneId);
+        },
+        layout: function (value) {
+            var box = computeTextBoxLayout(__assign(__assign({}, options.data()), { text: value }), anchor());
+            return {
+                info: {
+                    font: box.font,
+                    fontSize: box.fontSize,
+                    textLeft: box.textLeft,
+                    textTop: box.textTop,
+                    textRight: box.textRight,
+                    textBottom: box.textBottom,
+                    textAlign: box.textAlign,
+                    lineSpacing: box.lineSpacing,
+                    centerRotation: box.centerTextRotation,
+                    rtl: options.data().rtl
+                },
+                lines: box.linesInfo.linesIncludingHidden
+            };
+        },
+        onClose: function (_reason, finalValue) {
+            liveText.delete(overlay);
+            chartSessions.delete(overlay.id);
+            chart.unsubscribeAction('onOverlayChange', onChartChange);
+            chart.unsubscribeAction('onScroll', onViewChange);
+            chart.unsubscribeAction('onZoom', onViewChange);
+            chart.unsubscribeAction('onVisibleRangeChange', onViewChange);
+            overlay.invalidateFigures();
+            repaint(chart, paneId);
+            if (finalValue.trim().length === 0) {
+                if (options.onEmpty !== undefined) {
+                    options.onEmpty();
+                }
+                else {
+                    // Live paneId — the overlay may have migrated panes mid-edit.
+                    chart.removeOverlay({ id: overlay.id, paneId: overlay.paneId });
+                }
+            }
+            else {
+                options.onCommit(finalValue);
+            }
+        }
+    });
+    sessionBox.current = session;
+    // Subscribe AFTER the session exists — a throwing constructor must not
+    // leak listeners that re-throw on every subsequent event.
+    chart.subscribeAction('onOverlayChange', onChartChange);
+    chart.subscribeAction('onScroll', onViewChange);
+    chart.subscribeAction('onZoom', onViewChange);
+    chart.subscribeAction('onVisibleRangeChange', onViewChange);
+    chartSessions.set(overlay.id, session);
+    // Seed the live buffer so the first paint shows the editor's value.
+    liveText.set(overlay, session.value);
+    overlay.invalidateFigures();
+    repaint(chart, paneId);
+    return session;
 }
 
 /**
@@ -11158,25 +12864,29 @@ function hasRecipeControl(item, kind, role) {
         return 'role' in control && control.role === role;
     });
 }
-/** Locate a levels array on extendData — `levels` or `data.levels`. */
+/** Locate a levels array on extendData — `fib.levels`, `levels`, or `data.levels` (fib-pack primary first). */
 function findLevelsPath(extendData) {
     var e_2, _a;
     if (extendData === null || typeof extendData !== 'object') {
         return null;
     }
     var ed = extendData;
-    var candidates = [{ owner: ed, key: 'levels' }];
+    var candidates = [];
+    if (ed.fib !== null && typeof ed.fib === 'object') {
+        candidates.push({ owner: ed.fib, path: ['fib', 'levels'] });
+    }
+    candidates.push({ owner: ed, path: ['levels'] });
     if (ed.data !== null && typeof ed.data === 'object') {
-        candidates.push({ owner: ed.data, key: 'levels' });
+        candidates.push({ owner: ed.data, path: ['data', 'levels'] });
     }
     try {
         for (var candidates_1 = __values(candidates), candidates_1_1 = candidates_1.next(); !candidates_1_1.done; candidates_1_1 = candidates_1.next()) {
-            var _b = candidates_1_1.value, owner = _b.owner, key = _b.key;
-            var value = owner[key];
+            var _b = candidates_1_1.value, owner = _b.owner, path = _b.path;
+            var value = owner[path[path.length - 1]];
             if (isArray(value) && value.length > 0) {
                 var first = value[0];
                 if (first !== null && typeof first === 'object') {
-                    return { owner: owner, key: key, levels: value };
+                    return { path: path, levels: value };
                 }
             }
         }
@@ -11193,6 +12903,7 @@ function findLevelsPath(extendData) {
 function styleFields(overlay, item, draft) {
     var _a;
     var styles = ((_a = overlay.styles) !== null && _a !== void 0 ? _a : {});
+    var liveStyles = function () { var _a; return ((_a = overlay.styles) !== null && _a !== void 0 ? _a : {}); };
     var fields = [];
     var hasLine = styles.line !== undefined || hasRecipeControl(item, 'color', 'line') || hasRecipeControl(item, 'style', 'line');
     var hasText = (item === null || item === void 0 ? void 0 : item.capabilities.hasText) === true || styles.text !== undefined;
@@ -11202,7 +12913,7 @@ function styleFields(overlay, item, draft) {
             id: 'lineColor',
             kind: 'color',
             label: 'Line color',
-            get: function () { return readPath(styles, ['line', 'color']); },
+            get: function () { return readPath(liveStyles(), ['line', 'color']); },
             set: function (v) { draft.style(['line', 'color'], v); }
         }, {
             id: 'lineWidth',
@@ -11211,14 +12922,14 @@ function styleFields(overlay, item, draft) {
             min: 1,
             max: 8,
             step: 1,
-            get: function () { return readPath(styles, ['line', 'size']); },
+            get: function () { return readPath(liveStyles(), ['line', 'size']); },
             set: function (v) { draft.style(['line', 'size'], v); }
         }, {
             id: 'lineStyle',
             kind: 'select',
             label: 'Style',
             options: LINE_STYLE_OPTIONS,
-            get: function () { var _a; return (_a = readPath(styles, ['line', 'style'])) !== null && _a !== void 0 ? _a : 'solid'; },
+            get: function () { var _a; return (_a = readPath(liveStyles(), ['line', 'style'])) !== null && _a !== void 0 ? _a : 'solid'; },
             set: function (v) {
                 draft.style(['line', 'style'], v);
                 if (typeof v === 'string' && v in DASHED_VALUE) {
@@ -11232,7 +12943,7 @@ function styleFields(overlay, item, draft) {
             id: 'fillColor',
             kind: 'color',
             label: 'Fill color',
-            get: function () { return readPath(styles, ['polygon', 'color']); },
+            get: function () { return readPath(liveStyles(), ['polygon', 'color']); },
             set: function (v) { draft.style(['polygon', 'color'], v); }
         });
     }
@@ -11241,7 +12952,7 @@ function styleFields(overlay, item, draft) {
             id: 'backgroundColor',
             kind: 'color',
             label: 'Background',
-            get: function () { return readPath(styles, ['rect', 'color']); },
+            get: function () { return readPath(liveStyles(), ['rect', 'color']); },
             set: function (v) { draft.style(['rect', 'color'], v); }
         });
     }
@@ -11250,7 +12961,7 @@ function styleFields(overlay, item, draft) {
             id: 'textColor',
             kind: 'color',
             label: 'Text color',
-            get: function () { return readPath(styles, ['text', 'color']); },
+            get: function () { return readPath(liveStyles(), ['text', 'color']); },
             set: function (v) { draft.style(['text', 'color'], v); }
         }, {
             id: 'textSize',
@@ -11259,26 +12970,26 @@ function styleFields(overlay, item, draft) {
             min: 8,
             max: 64,
             step: 1,
-            get: function () { return readPath(styles, ['text', 'size']); },
+            get: function () { return readPath(liveStyles(), ['text', 'size']); },
             set: function (v) { draft.style(['text', 'size'], v); }
         }, {
             id: 'textBold',
             kind: 'checkbox',
             label: 'Bold',
-            get: function () { return readPath(styles, ['text', 'weight']) === 'bold'; },
+            get: function () { return readPath(liveStyles(), ['text', 'weight']) === 'bold'; },
             set: function (v) { draft.style(['text', 'weight'], v === true ? 'bold' : 'normal'); }
         }, {
             id: 'textItalic',
             kind: 'checkbox',
             label: 'Italic',
-            get: function () { return readPath(styles, ['text', 'style']) === 'italic'; },
+            get: function () { return readPath(liveStyles(), ['text', 'style']) === 'italic'; },
             set: function (v) { draft.style(['text', 'style'], v === true ? 'italic' : 'normal'); }
         }, {
             id: 'textAlign',
             kind: 'select',
             label: 'Align',
             options: TEXT_ALIGN_OPTIONS,
-            get: function () { var _a; return (_a = readPath(styles, ['text', 'align'])) !== null && _a !== void 0 ? _a : 'center'; },
+            get: function () { var _a; return (_a = readPath(liveStyles(), ['text', 'align'])) !== null && _a !== void 0 ? _a : 'center'; },
             set: function (v) { draft.style(['text', 'align'], v); }
         });
     }
@@ -11303,21 +13014,24 @@ function optionFields(overlay, draft) {
     }); });
 }
 function levelsField(overlay, draft) {
-    var found = findLevelsPath(overlay.extendData);
-    if (found === null) {
+    if (findLevelsPath(overlay.extendData) === null) {
         return null;
     }
-    var owner = found.owner, key = found.key;
     return {
         id: 'levels',
         kind: 'levels',
         label: 'Levels',
-        get: function () { return owner[key]; },
+        // Resolve through overlay.extendData on EVERY access — override()
+        // replaces extendData with a fresh clone per commit, so a captured
+        // owner object goes stale and silently discards later edits.
+        get: function () { var _a; return (_a = findLevelsPath(overlay.extendData)) === null || _a === void 0 ? void 0 : _a.levels; },
         set: function (v) {
             // Levels arrays are committed whole — deep-merging rows per index
             // would leak stale entries on removal.
-            var parentPath = owner === overlay.extendData.data ? ['data', key] : [key];
-            draft.extendData(parentPath, v);
+            var live = findLevelsPath(overlay.extendData);
+            if (live !== null) {
+                draft.extendData(live.path, v);
+            }
         }
     };
 }
@@ -11478,9 +13192,13 @@ function attachSettingsDialog(chart, manager) {
                     manager.update(current.id, patch);
                 }
                 try {
+                    // DELETE the draft keys — assigning undefined keeps them enumerable,
+                    // so the next commit emits {key: undefined} and merge() writes
+                    // clone(undefined) over live styles/extendData — deleting them.
                     for (var _c = __values(Object.keys(styles)), _d = _c.next(); !_d.done; _d = _c.next()) {
                         var k = _d.value;
-                        styles[k] = undefined;
+                        // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- draft keys are dynamic style-group names; assigning undefined keeps them enumerable and the next commit would emit {key: undefined}
+                        delete styles[k];
                     }
                 }
                 catch (e_1_1) { e_1 = { error: e_1_1 }; }
@@ -11493,7 +13211,8 @@ function attachSettingsDialog(chart, manager) {
                 try {
                     for (var _e = __values(Object.keys(extendData)), _f = _e.next(); !_f.done; _f = _e.next()) {
                         var k = _f.value;
-                        extendData[k] = undefined;
+                        // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- same reason: dynamic extendData keys must be removed, not set to undefined
+                        delete extendData[k];
                     }
                 }
                 catch (e_2_1) { e_2 = { error: e_2_1 }; }
@@ -11646,13 +13365,19 @@ function attachSettingsDialog(chart, manager) {
             return wrap;
         }
         // Each row edits a clone of the whole array — removal/reorder can't
-        // leak through a per-index merge.
+        // leak through a per-index merge. Re-read via field.get() every write:
+        // after the first commit the overlay holds a NEW array and the captured
+        // `levels` is stale — mapping it would silently drop earlier edits.
         var writeRow = function (index, patch) {
-            var _a;
-            var next = levels.map(function (level, i) {
+            var _a, _b;
+            var live = (_a = field.get) === null || _a === void 0 ? void 0 : _a.call(field);
+            if (!isArray(live)) {
+                return;
+            }
+            var next = live.map(function (level, i) {
                 return i === index ? __assign(__assign({}, level), patch) : level;
             });
-            (_a = field.set) === null || _a === void 0 ? void 0 : _a.call(field, next);
+            (_b = field.set) === null || _b === void 0 ? void 0 : _b.call(field, next);
             draft.commit();
         };
         levels.forEach(function (level, index) {
@@ -11780,27 +13505,55 @@ function attachSettingsDialog(chart, manager) {
     }
     function onDocumentKeyDown(e) {
         if (e.key === 'Escape') {
+            // Swallow the key — otherwise the shared drawing keyboard layer also
+            // sees it and deselects the overlay / cancels the armed tool on top
+            // of the dialog closing. But a live text-editor session owns Escape
+            // first (commit-on-Escape) — let it pass through.
+            if (hasOpenTextEditorSession(chart)) {
+                return;
+            }
+            e.stopPropagation();
+            e.preventDefault();
             close();
         }
     }
+    function clampPos() {
+        var _a, _b;
+        if (layer === null) {
+            return;
+        }
+        var host = layer.getElement();
+        var w = (_a = element === null || element === void 0 ? void 0 : element.offsetWidth) !== null && _a !== void 0 ? _a : 240;
+        var h = (_b = element === null || element === void 0 ? void 0 : element.offsetHeight) !== null && _b !== void 0 ? _b : 200;
+        // Clamp inside the pane — an unclamped drag parks the dialog off-layer
+        // (overflow:hidden) where it can never be grabbed again.
+        pos.x = Math.max(0, Math.min(pos.x, Math.max(0, host.clientWidth - w)));
+        pos.y = Math.max(0, Math.min(pos.y, Math.max(0, host.clientHeight - h)));
+    }
     function onDragMove(e) {
         if (dragState === null || element === null) {
+            return;
+        }
+        // A missed mouseup (blur, iframe exit) must not drag buttonless.
+        if (e.buttons === 0) {
+            dragState = null;
             return;
         }
         pos = {
             x: dragState.baseX + (e.clientX - dragState.startX),
             y: dragState.baseY + (e.clientY - dragState.startY)
         };
+        clampPos();
         element.style.transform = "translate3d(".concat(pos.x, "px, ").concat(pos.y, "px, 0)");
     }
     function onDragEnd() {
         dragState = null;
     }
-    var onOverlayChange = function (payload) {
-        var _a;
-        // 'change' covers remove/update/create — close only when the open
-        // overlay is actually gone, not on the updates this dialog commits.
-        if (current !== null && ((_a = payload.overlay) === null || _a === void 0 ? void 0 : _a.id) === current.id && chart.getOverlayById(current.id) === null) {
+    var onOverlayChange = function () {
+        // 'change' covers remove/update/create/undo/redo/restore — close
+        // whenever the open overlay is gone, regardless of which path removed
+        // it (undo and scope wipes carry no overlay in the payload).
+        if (current !== null && chart.getOverlayById(current.id) === null) {
             close();
         }
     };
@@ -11813,8 +13566,13 @@ function attachSettingsDialog(chart, manager) {
         docListenersBound = true;
         document.addEventListener('mousedown', onDocumentMouseDown, true);
         document.addEventListener('keydown', onDocumentKeyDown, true);
-        document.addEventListener('mousemove', onDragMove);
-        document.addEventListener('mouseup', onDragEnd);
+        // Capture phase — a drag keeps the dialog under the cursor, so the
+        // release lands on it and the layer's stopPropagation would swallow a
+        // bubble-phase mouseup and strand dragState forever.
+        document.addEventListener('mousemove', onDragMove, true);
+        document.addEventListener('mouseup', onDragEnd, true);
+        // Mouseup outside the window never dispatches — blur ends the drag.
+        window.addEventListener('blur', onDragEnd);
         unsubRemove = manager.on('change', onOverlayChange);
     }
     function unbindDocListeners() {
@@ -11824,8 +13582,9 @@ function attachSettingsDialog(chart, manager) {
         docListenersBound = false;
         document.removeEventListener('mousedown', onDocumentMouseDown, true);
         document.removeEventListener('keydown', onDocumentKeyDown, true);
-        document.removeEventListener('mousemove', onDragMove);
-        document.removeEventListener('mouseup', onDragEnd);
+        document.removeEventListener('mousemove', onDragMove, true);
+        document.removeEventListener('mouseup', onDragEnd, true);
+        window.removeEventListener('blur', onDragEnd);
         unsubRemove === null || unsubRemove === void 0 ? void 0 : unsubRemove();
         unsubRemove = null;
     }
@@ -11878,9 +13637,16 @@ function attachSettingsDialog(chart, manager) {
         var body = createDom('div');
         body.className = 'sc-drw-dialog-body';
         element.appendChild(body);
-        unmount = layer.mount(element);
+        // interactive: without it the layer leaves pointerEvents:none on the
+        // container — every input is unreachable AND the document mousedown
+        // handler sees each click as "outside" → auto-close on first click.
+        unmount = layer.mount(element, { interactive: true });
         bindDocListeners();
         renderBody();
+        // pos persists across opens — a pane resize could leave it parked
+        // off-layer, so re-clamp now that the element has a real size.
+        clampPos();
+        element.style.transform = "translate3d(".concat(pos.x, "px, ").concat(pos.y, "px, 0)");
     }
     function close() {
         unmount === null || unmount === void 0 ? void 0 : unmount();
@@ -11939,7 +13705,7 @@ function bindDrawingKeyboard(handlers, options) {
         };
     }
     var onKeyDown = function (e) {
-        var _a, _b;
+        var _a, _b, _c, _d, _e;
         if (!(e instanceof KeyboardEvent)) {
             return;
         }
@@ -11968,13 +13734,12 @@ function bindDrawingKeyboard(handlers, options) {
                     handlers.onUndo();
                 }
             }
-            else if (key === 'c' && !e.shiftKey && handlers.onCopy !== undefined) {
+            else if (key === 'c' && !e.shiftKey && ((_c = handlers.onCopy) === null || _c === void 0 ? void 0 : _c.call(handlers)) === true) {
+                // Nothing selected → fall through to the browser's own copy.
                 e.preventDefault();
-                handlers.onCopy();
             }
-            else if (key === 'v' && !e.shiftKey && handlers.onPaste !== undefined) {
+            else if (key === 'v' && !e.shiftKey && ((_d = handlers.onPaste) === null || _d === void 0 ? void 0 : _d.call(handlers)) === true) {
                 e.preventDefault();
-                handlers.onPaste();
             }
             else if (key === 'y' && !e.shiftKey && handlers.onRedo !== undefined) {
                 // Windows redo convention alongside Cmd+Shift+Z.
@@ -11986,9 +13751,10 @@ function bindDrawingKeyboard(handlers, options) {
         if (e.key === 'Escape' && handlers.onEscape !== undefined) {
             handlers.onEscape();
         }
-        else if ((e.key === 'Delete' || e.key === 'Backspace') && handlers.onDelete !== undefined) {
+        else if ((e.key === 'Delete' || e.key === 'Backspace') && ((_e = handlers.onDelete) === null || _e === void 0 ? void 0 : _e.call(handlers)) === true) {
+            // Swallow only when something was deleted — otherwise Backspace must
+            // keep its browser meaning (e.g. host app shortcuts).
             e.preventDefault();
-            handlers.onDelete();
         }
         else if (e.key.length === 1 && handlers.onHotkey !== undefined) {
             // Tool hotkeys (T/H/V/F/X…) — TradingView activates tools on bare
@@ -12076,9 +13842,27 @@ function createDrawingsApi(chart, options) {
         return selectedId !== null ? chart.getOverlayById(selectedId) : null;
     }
     function cancelInProgress() {
+        var _a;
         var inProgress = chart.getOverlays().find(function (o) { return o.isDrawing(); });
         if (inProgress === undefined) {
             return false;
+        }
+        // Esc on an unlimited-step tool with enough points COMPLETES the drawing
+        // (same semantics as double-click finish) — removing it would discard
+        // an otherwise valid path/polyline stroke.
+        if (inProgress.totalStep >= Number.MAX_SAFE_INTEGER && inProgress.points.length >= 2) {
+            inProgress.forceComplete();
+            var chartStore = chart.getChartStore();
+            // onDrawEnd BEFORE complete — identical ordering to every kernel
+            // path: the hook's writes (extendData normalization) must land in the
+            // committed snapshot, and a hook that removes the overlay (degenerate
+            // polyline) must not produce a create+remove history pair.
+            (_a = inProgress.onDrawEnd) === null || _a === void 0 ? void 0 : _a.call(inProgress, { chart: chart, overlay: inProgress });
+            var progressInfo = chartStore.getProgressOverlayInfo();
+            if ((progressInfo === null || progressInfo === void 0 ? void 0 : progressInfo.overlay) === inProgress) {
+                chartStore.progressOverlayComplete();
+            }
+            return true;
         }
         return chart.removeOverlay({ id: inProgress.id });
     }
@@ -12095,7 +13879,9 @@ function createDrawingsApi(chart, options) {
                 var selected = selectedOverlay();
                 if (selected !== null && !selected.lock) {
                     manager.remove(selected.id);
+                    return true;
                 }
+                return false;
             },
             onUndo: function () {
                 manager.undo();
@@ -12105,16 +13891,20 @@ function createDrawingsApi(chart, options) {
             },
             onCopy: function () {
                 var selected = selectedOverlay();
-                if (selected !== null) {
-                    clipboard = serializeOverlay$1(selected);
+                if (selected === null) {
+                    return false;
                 }
+                clipboard = serializeOverlay$1(selected);
+                return true;
             },
             onPaste: function () {
-                if (clipboard !== null) {
-                    var create = serializedToOverlayCreate(clipboard);
-                    delete create.id;
-                    manager.create(create);
+                if (clipboard === null) {
+                    return false;
                 }
+                var create = serializedToOverlayCreate(clipboard);
+                delete create.id;
+                manager.create(create);
+                return true;
             },
             onHotkey: function (key) {
                 // TradingView bare-letter tool shortcuts — only activate tools the
@@ -12300,7 +14090,9 @@ function createDrawingsApi(chart, options) {
             return removed;
         }, openSettings: function (id) {
             var overlay = chart.getOverlayById(id);
-            if (overlay === null) {
+            // A mid-draw overlay rejects edits — a Coordinates commit would
+            // recompute currentStep from the patch and corrupt the armed tool.
+            if (overlay === null || overlay.isDrawing() || overlay.ghost) {
                 return false;
             }
             settingsDialog.open(overlay);
@@ -12315,6 +14107,7 @@ function createDrawingsApi(chart, options) {
             unbindSelection.forEach(function (unsub) {
                 unsub();
             });
+            closeTextEditorSessions(chart);
             toolbar === null || toolbar === void 0 ? void 0 : toolbar.destroy();
             settingsDialog.destroy();
             clipboard = null;
@@ -20977,6 +22770,13 @@ var StoreImp = /** @class */ (function () {
             figureIndex: -1,
             figure: null
         };
+        /**
+         * Monotonic revision for chart-level environment (theme, symbol,
+         * precision, period, formatters, locale, timezone, separators).
+         * Drawing figure caches key on this so a style/symbol switch can't
+         * leave stale cached figure specs behind.
+         */
+        this._envRev = 0;
         this._chart = chart;
         this._calcOptimalBarSpace();
         this._lastBarRightSideDiffBarCount = this._offsetRightDistance / this._barSpace;
@@ -21013,9 +22813,11 @@ var StoreImp = /** @class */ (function () {
             _this.setCrosshair(_this._crosshair, { notInvalidate: true, forceInvalidate: true });
         });
     }
+    StoreImp.prototype.getEnvRev = function () { return this._envRev; };
     StoreImp.prototype.setStyles = function (value) {
         var _this = this;
         var _a, _b, _c, _d, _e, _f;
+        this._envRev++;
         var styles = null;
         if (isString(value)) {
             styles = getStyles$1(value);
@@ -21045,13 +22847,14 @@ var StoreImp = /** @class */ (function () {
     };
     StoreImp.prototype.getStyles = function () { return this._styles; };
     StoreImp.prototype.setFormatter = function (formatter) {
+        this._envRev++;
         merge(this._formatter, formatter);
     };
     StoreImp.prototype.getFormatter = function () { return this._formatter; };
     StoreImp.prototype.getInnerFormatter = function () {
         return this._innerFormatter;
     };
-    StoreImp.prototype.setLocale = function (locale) { this._locale = locale; };
+    StoreImp.prototype.setLocale = function (locale) { this._envRev++; this._locale = locale; };
     StoreImp.prototype.getLocale = function () { return this._locale; };
     StoreImp.prototype.setTimezone = function (timezone) {
         if (!isValid(this._dateTimeFormat) ||
@@ -21077,6 +22880,7 @@ var StoreImp = /** @class */ (function () {
             }
             if (dateTimeFormat !== null) {
                 this._dateTimeFormat = dateTimeFormat;
+                this._envRev++;
             }
         }
     };
@@ -21085,13 +22889,15 @@ var StoreImp = /** @class */ (function () {
         return this._dateTimeFormat;
     };
     StoreImp.prototype.setThousandsSeparator = function (thousandsSeparator) {
+        this._envRev++;
         merge(this._thousandsSeparator, thousandsSeparator);
     };
     StoreImp.prototype.getThousandsSeparator = function () { return this._thousandsSeparator; };
-    StoreImp.prototype.setDecimalFold = function (decimalFold) { merge(this._decimalFold, decimalFold); };
+    StoreImp.prototype.setDecimalFold = function (decimalFold) { this._envRev++; merge(this._decimalFold, decimalFold); };
     StoreImp.prototype.getDecimalFold = function () { return this._decimalFold; };
     StoreImp.prototype.setSymbol = function (symbol) {
         var _this = this;
+        this._envRev++;
         this.resetData(function () {
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment -- ignore
             // @ts-expect-error
@@ -21105,6 +22911,7 @@ var StoreImp = /** @class */ (function () {
     };
     StoreImp.prototype.setPeriod = function (period) {
         var _this = this;
+        this._envRev++;
         this.resetData(function () {
             _this._period = period;
         });
@@ -21864,7 +23671,7 @@ var StoreImp = /** @class */ (function () {
         return false;
     };
     StoreImp.prototype.getOverlaysByFilter = function (filter) {
-        var _a;
+        var _a, _b;
         var id = filter.id, groupId = filter.groupId, paneId = filter.paneId, name = filter.name;
         // Fast path: an id lookup resolves through the map instead of scanning
         // every pane's overlay list (previously O(total overlays) per call).
@@ -21894,7 +23701,9 @@ var StoreImp = /** @class */ (function () {
             });
         }
         var progressOverlay = (_a = this._progressOverlayInfo) === null || _a === void 0 ? void 0 : _a.overlay;
-        if (isValid(progressOverlay) && match(progressOverlay)) {
+        if (isValid(progressOverlay) &&
+            (!isValid(paneId) || ((_b = this._progressOverlayInfo) === null || _b === void 0 ? void 0 : _b.paneId) === paneId) &&
+            match(progressOverlay)) {
             overlays.push(progressOverlay);
         }
         return overlays;
@@ -21963,6 +23772,10 @@ var StoreImp = /** @class */ (function () {
                     _this._progressOverlayInfo = { paneId: paneId, overlay: overlay, appointPaneFlag: appointPaneFlags[index] };
                     if (isValid(displaced)) {
                         _this._overlayById.delete(displaced.overlay.id);
+                        // The displaced overlay may still be armed in the pressed/hover/
+                        // click slots — drop them so the dead instance stops receiving
+                        // move events, hover leave, and phantom selections.
+                        _this._clearOverlayInteractionSlots(displaced.overlay);
                         try {
                             (_f = (_e = displaced.overlay).onRemoved) === null || _f === void 0 ? void 0 : _f.call(_e, { overlay: displaced.overlay, chart: _this._chart });
                         }
@@ -21999,6 +23812,50 @@ var StoreImp = /** @class */ (function () {
     StoreImp.prototype.getProgressOverlayInfo = function () {
         return this._progressOverlayInfo;
     };
+    StoreImp.prototype._clearOverlayInteractionSlots = function (overlay) {
+        var _a;
+        // Only null the progress slot when this overlay IS the local in-progress
+        // drawing — a mid-draw ghost mirror also reports isDrawing() but lives in
+        // _overlays, and a foreign remove must not kill our own drawing.
+        if (((_a = this._progressOverlayInfo) === null || _a === void 0 ? void 0 : _a.overlay) === overlay) {
+            this._progressOverlayInfo = null;
+        }
+        // A mid-drag removal must also drop the pressed state — otherwise the
+        // next mousemove keeps emitting progress events for a dead overlay and
+        // sync mirrors would materialize it back as a zombie.
+        if (this._pressedOverlayInfo.overlay === overlay) {
+            this._pressedOverlayInfo = {
+                paneId: '',
+                overlay: null,
+                figureType: 'none',
+                figureIndex: -1,
+                figure: null
+            };
+        }
+        // Hover/select slots must not keep pointing at a dead overlay — the
+        // next setHoverOverlayInfo would fire onMouseLeave + zLevel restore on
+        // a removed instance, and click-info would keep reporting a phantom
+        // selection. Deselect goes through selectOverlay so the deselect
+        // event + onDeselected hook still fire in order.
+        if (this._hoverOverlayInfo.overlay === overlay) {
+            this._hoverOverlayInfo = {
+                paneId: '',
+                overlay: null,
+                figureType: 'none',
+                figureIndex: -1,
+                figure: null
+            };
+        }
+        if (this._clickOverlayInfo.overlay === overlay) {
+            // A throwing onDeselected hook must not abort the removal loop —
+            // same isolation as onRemoved; otherwise this overlay stays in
+            // _overlays after its 'remove' bookkeeping and strands zombies.
+            try {
+                this.selectOverlay(null);
+            }
+            catch (_b) { }
+        }
+    };
     StoreImp.prototype.progressOverlayComplete = function () {
         var _a;
         if (this._progressOverlayInfo !== null) {
@@ -22019,6 +23876,12 @@ var StoreImp = /** @class */ (function () {
             if (isBoolean(appointPaneFlag) && appointPaneFlag) {
                 this._progressOverlayInfo.appointPaneFlag = appointPaneFlag;
             }
+            // Once appointed (host createOverlay({paneId}) or the first click),
+            // the pane is sticky — plain mousemoves crossing other panes must not
+            // re-assign the in-progress drawing or it visibly jumps panes.
+            if (this._progressOverlayInfo.appointPaneFlag && appointPaneFlag !== true) {
+                return;
+            }
             this._progressOverlayInfo.paneId = paneId;
             this._progressOverlayInfo.overlay.override({ paneId: paneId });
         }
@@ -22029,8 +23892,36 @@ var StoreImp = /** @class */ (function () {
         var updatePaneIds = [];
         var filterOverlays = this.getOverlaysByFilter(override);
         filterOverlays.forEach(function (overlay) {
+            var _a, _b;
+            // paneId is the map key — capture it before the override merge so a
+            // paneId change can migrate the entry between pane lists (otherwise
+            // the overlay keeps rendering on the old pane while paneId claims
+            // the new one).
+            var oldPaneId = overlay.paneId;
             overlay.override(override);
-            var _a = overlay.shouldUpdate(), sort = _a.sort, draw = _a.draw;
+            var newPaneId = overlay.paneId;
+            if (newPaneId !== oldPaneId && _this._overlays.has(oldPaneId)) {
+                var list = _this._overlays.get(oldPaneId);
+                var index = (_a = list === null || list === void 0 ? void 0 : list.indexOf(overlay)) !== null && _a !== void 0 ? _a : -1;
+                if (index > -1) {
+                    list === null || list === void 0 ? void 0 : list.splice(index, 1);
+                    if (list !== undefined && list.length === 0) {
+                        _this._overlays.delete(oldPaneId);
+                    }
+                    if (!_this._overlays.has(newPaneId)) {
+                        _this._overlays.set(newPaneId, []);
+                    }
+                    (_b = _this._overlays.get(newPaneId)) === null || _b === void 0 ? void 0 : _b.push(overlay);
+                    sortFlag = true;
+                    if (!updatePaneIds.includes(oldPaneId)) {
+                        updatePaneIds.push(oldPaneId);
+                    }
+                    if (!updatePaneIds.includes(newPaneId)) {
+                        updatePaneIds.push(newPaneId);
+                    }
+                }
+            }
+            var _c = overlay.shouldUpdate(), sort = _c.sort, draw = _c.draw;
             if (sort) {
                 sortFlag = true;
             }
@@ -22067,68 +23958,21 @@ var StoreImp = /** @class */ (function () {
         var filterOverlays = this.getOverlaysByFilter(filter);
         filterOverlays.forEach(function (overlay) {
             var e_1, _a;
-            var _b, _c;
+            var _b;
             var paneId = overlay.paneId;
             var paneOverlays = _this.getOverlaysByPaneId(overlay.paneId);
-            // A throwing host callback must not abort the removal loop — callers
-            // wipe overlays in bulk (symbol switch, destroy) and a partial wipe
-            // would strand zombie overlays and their peer mirrors.
-            try {
-                (_b = overlay.onRemoved) === null || _b === void 0 ? void 0 : _b.call(overlay, { overlay: overlay, chart: _this._chart });
-            }
-            catch (_d) { }
             if (!updatePaneIds.includes(paneId)) {
                 updatePaneIds.push(paneId);
             }
-            // Only null the progress slot when this overlay IS the local in-progress
-            // drawing — a mid-draw ghost mirror also reports isDrawing() but lives in
-            // _overlays, and a foreign remove must not kill our own drawing.
-            if (((_c = _this._progressOverlayInfo) === null || _c === void 0 ? void 0 : _c.overlay) === overlay) {
-                _this._progressOverlayInfo = null;
-            }
-            // A mid-drag removal must also drop the pressed state — otherwise the
-            // next mousemove keeps emitting progress events for a dead overlay and
-            // sync mirrors would materialize it back as a zombie.
-            if (_this._pressedOverlayInfo.overlay === overlay) {
-                _this._pressedOverlayInfo = {
-                    paneId: '',
-                    overlay: null,
-                    figureType: 'none',
-                    figureIndex: -1,
-                    figure: null
-                };
-            }
-            // Hover/select slots must not keep pointing at a dead overlay — the
-            // next setHoverOverlayInfo would fire onMouseLeave + zLevel restore on
-            // a removed instance, and click-info would keep reporting a phantom
-            // selection. Deselect goes through selectOverlay so the deselect
-            // event + onDeselected hook still fire in order.
-            if (_this._hoverOverlayInfo.overlay === overlay) {
-                _this._hoverOverlayInfo = {
-                    paneId: '',
-                    overlay: null,
-                    figureType: 'none',
-                    figureIndex: -1,
-                    figure: null
-                };
-            }
-            if (_this._clickOverlayInfo.overlay === overlay) {
-                // A throwing onDeselected hook must not abort the removal loop —
-                // same isolation as onRemoved above; otherwise this overlay stays
-                // in _overlays after its 'remove' bookkeeping and strands zombies.
-                try {
-                    _this.selectOverlay(null);
-                }
-                catch (_e) { }
-            }
+            _this._clearOverlayInteractionSlots(overlay);
             var index = paneOverlays.findIndex(function (o) { return o.id === overlay.id; });
             if (index === -1) {
                 try {
                     // overlay.paneId may have drifted from the map key (host-side field
                     // mutation) — fall back to an identity scan so the splice never misses
                     // while 'remove' still emits.
-                    for (var _f = __values(_this._overlays), _g = _f.next(); !_g.done; _g = _f.next()) {
-                        var item = _g.value;
+                    for (var _c = __values(_this._overlays), _d = _c.next(); !_d.done; _d = _c.next()) {
+                        var item = _d.value;
                         var list = item[1];
                         var i = list.indexOf(overlay);
                         if (i > -1) {
@@ -22147,7 +23991,7 @@ var StoreImp = /** @class */ (function () {
                 catch (e_1_1) { e_1 = { error: e_1_1 }; }
                 finally {
                     try {
-                        if (_g && !_g.done && (_a = _f.return)) _a.call(_f);
+                        if (_d && !_d.done && (_a = _c.return)) _a.call(_c);
                     }
                     finally { if (e_1) throw e_1.error; }
                 }
@@ -22159,6 +24003,16 @@ var StoreImp = /** @class */ (function () {
                 _this._overlays.delete(paneId);
             }
             _this._overlayById.delete(overlay.id);
+            // Emit onRemoved only AFTER the overlay is fully unregistered — a host
+            // hook that calls removeOverlay() again (cascade patterns like synced/
+            // syncRemoved) must not re-match this overlay and recurse.
+            // A throwing host callback must not abort the removal loop — callers
+            // wipe overlays in bulk (symbol switch, destroy) and a partial wipe
+            // would strand zombie overlays and their peer mirrors.
+            try {
+                (_b = overlay.onRemoved) === null || _b === void 0 ? void 0 : _b.call(overlay, { overlay: overlay, chart: _this._chart });
+            }
+            catch (_e) { }
             _this.executeAction('onOverlayChange', { type: 'remove', overlay: overlay });
         });
         if (updatePaneIds.length > 0) {
@@ -22187,8 +24041,15 @@ var StoreImp = /** @class */ (function () {
                 var ignoreUpdateFlag = false;
                 var sortFlag = false;
                 if (overlay !== null) {
-                    overlay.override({ zLevel: overlay.getPrevZLevel() });
-                    sortFlag = true;
+                    // Restore only when a bump actually happened — in-progress overlays
+                    // are hovered without being bumped (isDrawing guard below), so
+                    // getPrevZLevel() is null for them and must NOT reset zLevel to 0.
+                    var prevZLevel = overlay.getPrevZLevel();
+                    if (prevZLevel !== null) {
+                        overlay.override({ zLevel: prevZLevel });
+                        overlay.setPrevZLevel(null);
+                        sortFlag = true;
+                    }
                     if (processOnMouseLeaveEvent(overlay, figure)) {
                         ignoreUpdateFlag = true;
                     }
@@ -22647,6 +24508,7 @@ var DrawWidget = /** @class */ (function (_super) {
     DrawWidget.prototype.destroy = function () {
         this._mainCanvas.destroy();
         this._overlayCanvas.destroy();
+        _super.prototype.destroy.call(this);
     };
     DrawWidget.prototype.getImage = function (includeOverlay) {
         var _a = this.getBounding(), width = _a.width, height = _a.height;
@@ -22724,7 +24586,7 @@ function drawCircle(ctx, attrs, styles) {
     if ((style === 'stroke' || styles.style === 'stroke_fill') && borderSize > 0 && !isTransparent(borderColor)) {
         ctx.strokeStyle = borderColor;
         ctx.lineWidth = borderSize;
-        if (borderStyle === 'dashed') {
+        if (borderStyle === 'dashed' || borderStyle === 'dotted') {
             ctx.setLineDash(borderDashedValue);
         }
         else {
@@ -22812,7 +24674,7 @@ function drawPolygon(ctx, attrs, styles) {
     if ((style === 'stroke' || styles.style === 'stroke_fill') && borderSize > 0 && !isTransparent(borderColor)) {
         ctx.strokeStyle = borderColor;
         ctx.lineWidth = borderSize;
-        if (borderStyle === 'dashed') {
+        if (borderStyle === 'dashed' || borderStyle === 'dotted') {
             ctx.setLineDash(borderDashedValue);
         }
         else {
@@ -22909,7 +24771,7 @@ function drawRect(ctx, attrs, styles) {
         ctx.strokeStyle = borderColor;
         ctx.fillStyle = borderColor;
         ctx.lineWidth = borderSize;
-        if (borderStyle === 'dashed') {
+        if (borderStyle === 'dashed' || borderStyle === 'dotted') {
             ctx.setLineDash(borderDashedValue);
         }
         else {
@@ -23223,7 +25085,7 @@ function drawArc(ctx, attrs, styles) {
     var _a = styles.style, style = _a === void 0 ? 'solid' : _a, _b = styles.size, size = _b === void 0 ? 1 : _b, _c = styles.color, color = _c === void 0 ? 'currentColor' : _c, _d = styles.dashedValue, dashedValue = _d === void 0 ? [2, 2] : _d;
     ctx.lineWidth = size;
     ctx.strokeStyle = color;
-    if (style === 'dashed') {
+    if (style === 'dashed' || style === 'dotted') {
         ctx.setLineDash(dashedValue);
     }
     else {
@@ -23478,6 +25340,91 @@ var path$1 = {
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+function checkCoordinateOnEllipse(coordinate, attrs) {
+    var e_1, _a;
+    var ellipses = [];
+    ellipses = ellipses.concat(attrs);
+    try {
+        for (var ellipses_1 = __values(ellipses), ellipses_1_1 = ellipses_1.next(); !ellipses_1_1.done; ellipses_1_1 = ellipses_1.next()) {
+            var ellipse_1 = ellipses_1_1.value;
+            var x = ellipse_1.x, y = ellipse_1.y, rx = ellipse_1.rx, ry = ellipse_1.ry;
+            if (rx <= 0 || ry <= 0) {
+                continue;
+            }
+            var nx = (coordinate.x - x) / rx;
+            var ny = (coordinate.y - y) / ry;
+            if (nx * nx + ny * ny <= 1) {
+                return true;
+            }
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (ellipses_1_1 && !ellipses_1_1.done && (_a = ellipses_1.return)) _a.call(ellipses_1);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    return false;
+}
+function drawEllipse(ctx, attrs, styles) {
+    var ellipses = [];
+    ellipses = ellipses.concat(attrs);
+    var _a = styles.style, style = _a === void 0 ? 'fill' : _a, _b = styles.color, color = _b === void 0 ? 'currentColor' : _b, _c = styles.borderSize, borderSize = _c === void 0 ? 1 : _c, _d = styles.borderColor, borderColor = _d === void 0 ? 'currentColor' : _d, _e = styles.borderStyle, borderStyle = _e === void 0 ? 'solid' : _e, _f = styles.borderDashedValue, borderDashedValue = _f === void 0 ? [2, 2] : _f;
+    var solid = (style === 'fill' || styles.style === 'stroke_fill') && (!isString(color) || !isTransparent(color));
+    if (solid) {
+        ctx.fillStyle = color;
+        ellipses.forEach(function (_a) {
+            var x = _a.x, y = _a.y, rx = _a.rx, ry = _a.ry;
+            if (rx > 0 && ry > 0) {
+                ctx.beginPath();
+                ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+                ctx.closePath();
+                ctx.fill();
+            }
+        });
+    }
+    if ((style === 'stroke' || styles.style === 'stroke_fill') && borderSize > 0 && !isTransparent(borderColor)) {
+        ctx.strokeStyle = borderColor;
+        ctx.lineWidth = borderSize;
+        if (borderStyle === 'dashed' || borderStyle === 'dotted') {
+            ctx.setLineDash(borderDashedValue);
+        }
+        else {
+            ctx.setLineDash([]);
+        }
+        ellipses.forEach(function (_a) {
+            var x = _a.x, y = _a.y, rx = _a.rx, ry = _a.ry;
+            if (rx > 0 && ry > 0 && (!solid || Math.min(rx, ry) > borderSize)) {
+                ctx.beginPath();
+                ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+                ctx.closePath();
+                ctx.stroke();
+            }
+        });
+    }
+}
+var ellipse$1 = {
+    name: 'ellipse',
+    checkEventOn: checkCoordinateOnEllipse,
+    draw: function (ctx, attrs, styles) {
+        drawEllipse(ctx, attrs, styles);
+    }
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
 
  * http://www.apache.org/licenses/LICENSE-2.0
 
@@ -23488,7 +25435,7 @@ var path$1 = {
  * limitations under the License.
  */
 var figures = {};
-var extensions = [circle$1, line, polygon, rect$1, text, arc$1, path$1];
+var extensions = [circle$1, line, polygon, rect$1, text, arc$1, path$1, ellipse$1];
 extensions.forEach(function (figure) {
     figures[figure.name] = FigureImp.extend(figure);
 });
@@ -24555,6 +26502,40 @@ var IndicatorTooltipView = /** @class */ (function (_super) {
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+function getCommonState(overlay) {
+    var _a;
+    var ed = overlay.extendData;
+    return (_a = ed === null || ed === void 0 ? void 0 : ed.common) !== null && _a !== void 0 ? _a : {};
+}
+function isVisibleOnInterval(overlay, interval) {
+    var visibleIntervals = getCommonState(overlay).visibleIntervals;
+    return visibleIntervals === undefined || visibleIntervals.length === 0 || visibleIntervals.includes(interval);
+}
+var PERIOD_TYPE_SUFFIX = {
+    second: 's', minute: 'm', hour: 'h', day: 'D', week: 'W', month: 'M', year: 'Y'
+};
+/** Map a chart Period to the TV-style interval labels used by visibleIntervals. */
+function periodToIntervalLabel(period) {
+    var _a, _b;
+    if ((period === null || period === void 0 ? void 0 : period.type) === undefined) {
+        return '';
+    }
+    return "".concat((_a = period.span) !== null && _a !== void 0 ? _a : 1).concat((_b = PERIOD_TYPE_SUFFIX[period.type]) !== null && _b !== void 0 ? _b : period.type);
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
 
  * http://www.apache.org/licenses/LICENSE-2.0
 
@@ -24635,9 +26616,18 @@ var OverlayView = /** @class */ (function (_super) {
                     overlay.nextStep();
                     chartStore.executeAction('onOverlayChange', { type: 'progress', overlay: overlay });
                     if (!overlay.isDrawing()) {
-                        chartStore.progressOverlayComplete();
+                        // onDrawEnd BEFORE complete — the hook's writes (measure/
+                        // barsPattern extendData) must land in the committed snapshot,
+                        // and a hook that removes the overlay must not complete it.
                         (_b = overlay.onDrawEnd) === null || _b === void 0 ? void 0 : _b.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
+                        chartStore.progressOverlayComplete();
                     }
+                }
+                // onDrawEnd may have removed the overlay (measure, degenerate
+                // polyline) — dispatching the figure click on a dead overlay would
+                // select it and arm _clickOverlayInfo with a zombie.
+                if (chartStore.getOverlayById(overlay.id) === null) {
+                    return true;
                 }
                 return _this._figureMouseClickEvent(overlay, 'point', index, {
                     key: "".concat(OVERLAY_FIGURE_KEY_PREFIX, "point_").concat(index),
@@ -24675,9 +26665,14 @@ var OverlayView = /** @class */ (function (_super) {
                         return true;
                     }
                     if (!overlay.isDrawing()) {
-                        chartStore.progressOverlayComplete();
                         (_a = overlay.onDrawEnd) === null || _a === void 0 ? void 0 : _a.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
+                        chartStore.progressOverlayComplete();
                     }
+                }
+                // Same dead-overlay guard as the click path — onDrawEnd may have
+                // removed the overlay before this dispatch.
+                if (chartStore.getOverlayById(overlay.id) === null) {
+                    return true;
                 }
                 var index = overlay.points.length - 1;
                 return _this._figureMouseClickEvent(overlay, 'point', index, {
@@ -24728,8 +26723,8 @@ var OverlayView = /** @class */ (function (_super) {
             chartStore.executeAction('onOverlayChange', { type: 'progress', overlay: overlay });
             if (!overlay.isDrawing()) {
                 // A finite-step freehand finished on the first point.
-                chartStore.progressOverlayComplete();
                 (_c = overlay.onDrawEnd) === null || _c === void 0 ? void 0 : _c.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
+                chartStore.progressOverlayComplete();
                 return true;
             }
             chartStore.setPressedOverlayInfo({
@@ -24762,8 +26757,8 @@ var OverlayView = /** @class */ (function (_super) {
                             chartStore.removeOverlay({ id: overlay.id });
                         }
                         else {
-                            chartStore.progressOverlayComplete();
                             (_c = overlay.onDrawEnd) === null || _c === void 0 ? void 0 : _c.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
+                            chartStore.progressOverlayComplete();
                         }
                     }
                     // A stroke that finished mid-gesture only needs the gesture to
@@ -24810,8 +26805,8 @@ var OverlayView = /** @class */ (function (_super) {
                                 // rest of this drag fall through to chart scrolling (the
                                 // scroll would then compute from the original mousedown
                                 // coordinate). Mouseup ends the gesture instead.
-                                chartStore.progressOverlayComplete();
                                 (_d = overlay.onDrawEnd) === null || _d === void 0 ? void 0 : _d.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
+                                chartStore.progressOverlayComplete();
                                 freehandLastCoord = null;
                             }
                         }
@@ -25149,11 +27144,31 @@ var OverlayView = /** @class */ (function (_super) {
             this._drawOverlay(ctx, progressOverlay);
         }
     };
+    /**
+     * Whether this view can render anything for the overlay — the main view
+     * needs createPointFigures or the default point figure; axis views
+     * override with their own callback/default flags. Skipping here avoids
+     * converting every point (O(N) per frame) for overlays that can never
+     * produce output on this widget.
+     */
+    OverlayView.prototype.canDrawOverlay = function (overlay) {
+        return overlay.createPointFigures != null || overlay.needDefaultPointFigure;
+    };
     OverlayView.prototype._drawOverlay = function (ctx, overlay) {
+        var e_1, _a;
+        if (!this.canDrawOverlay(overlay)) {
+            return;
+        }
         var points = overlay.points;
         var pane = this.getWidget().getPane();
         var chart = pane.getChart();
         var chartStore = chart.getChartStore();
+        // Interval-visibility gate — the Visibility settings tab writes
+        // extendData.common.visibleIntervals; honoring it here hides the
+        // drawing on non-matching periods (main view AND axis figures).
+        if (!isVisibleOnInterval(overlay, periodToIntervalLabel(chartStore.getPeriod()))) {
+            return;
+        }
         var yAxis = pane.getAxisComponent();
         var xAxis = chart.getXAxisPane().getAxisComponent();
         var coordinates = points.map(function (point) {
@@ -25175,6 +27190,49 @@ var OverlayView = /** @class */ (function (_super) {
             return coordinate;
         });
         if (coordinates.length > 0) {
+            // Viewport cull — bounded tools only (`cullable !== false`), main
+            // pane view only (`_canDrawPoints()` is false on axis widgets, whose
+            // converted coordinates live in a different space). The predicate is
+            // COMMON-DIRECTION: cull when every anchor lies beyond the same edge
+            // — hull-bounded figures can't cross a convex region without an
+            // anchor inside. "All anchors outside the box" is wrong: a segment
+            // between an above-viewport and a below-viewport anchor paints right
+            // through the middle. In-progress overlays are never culled — tools
+            // settle restore state inside createPointFigures.
+            if (overlay.cullable !== false && !overlay.isDrawing() && this._canDrawPoints()) {
+                var _b = this.getWidget().getBounding(), width = _b.width, height = _b.height;
+                var pad = Math.max(width, height);
+                var allLeft = true;
+                var allRight = true;
+                var allAbove = true;
+                var allBelow = true;
+                try {
+                    for (var coordinates_1 = __values(coordinates), coordinates_1_1 = coordinates_1.next(); !coordinates_1_1.done; coordinates_1_1 = coordinates_1.next()) {
+                        var c = coordinates_1_1.value;
+                        if (c.x >= -pad)
+                            allLeft = false;
+                        if (c.x <= width + pad)
+                            allRight = false;
+                        if (c.y >= -pad)
+                            allAbove = false;
+                        if (c.y <= height + pad)
+                            allBelow = false;
+                        if (!allLeft && !allRight && !allAbove && !allBelow) {
+                            break;
+                        }
+                    }
+                }
+                catch (e_1_1) { e_1 = { error: e_1_1 }; }
+                finally {
+                    try {
+                        if (coordinates_1_1 && !coordinates_1_1.done && (_a = coordinates_1.return)) _a.call(coordinates_1);
+                    }
+                    finally { if (e_1) throw e_1.error; }
+                }
+                if (allLeft || allRight || allAbove || allBelow) {
+                    return;
+                }
+            }
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment -- ignore
             // @ts-expect-error
             var figures = [].concat(this.getFigures(overlay, coordinates));
@@ -26977,6 +29035,11 @@ var OverlayYAxisView = /** @class */ (function (_super) {
     OverlayYAxisView.prototype.coordinateToPointTimestampDataIndexFlag = function () {
         return false;
     };
+    // This view only renders createYAxisFigures output + the default
+    // y-axis figure — skip overlays that provide neither.
+    OverlayYAxisView.prototype.canDrawOverlay = function (overlay) {
+        return overlay.createYAxisFigures != null || overlay.needDefaultYAxisFigure;
+    };
     OverlayYAxisView.prototype.drawDefaultFigures = function (ctx, overlay, coordinates) {
         this.drawFigures(ctx, overlay, this.getDefaultFigures(overlay, coordinates));
     };
@@ -27024,14 +29087,30 @@ var OverlayYAxisView = /** @class */ (function (_super) {
         return figures;
     };
     OverlayYAxisView.prototype.getFigures = function (overlay, coordinates) {
-        var _a, _b;
+        var _a, _b, _c, _d, _e, _f;
         var widget = this.getWidget();
         var pane = widget.getPane();
         var chart = pane.getChart();
         var yAxis = pane.getAxisComponent();
         var xAxis = chart.getXAxisPane().getAxisComponent();
         var bounding = widget.getBounding();
-        return (_b = (_a = overlay.createYAxisFigures) === null || _a === void 0 ? void 0 : _a.call(overlay, { chart: chart, overlay: overlay, coordinates: coordinates, bounding: bounding, xAxis: xAxis, yAxis: yAxis, isTouch: this._lastIsTouch })) !== null && _b !== void 0 ? _b : [];
+        var chartStore = pane.getChart().getChartStore();
+        var clickInfo = chartStore.getClickOverlayInfo();
+        var hoverInfo = chartStore.getHoverOverlayInfo();
+        return (_f = (_a = overlay.createYAxisFigures) === null || _a === void 0 ? void 0 : _a.call(overlay, {
+            chart: chart,
+            overlay: overlay,
+            coordinates: coordinates,
+            bounding: bounding,
+            xAxis: xAxis,
+            yAxis: yAxis,
+            isSelected: ((_b = clickInfo.overlay) === null || _b === void 0 ? void 0 : _b.id) === overlay.id && clickInfo.figureType !== 'none',
+            isHovered: ((_c = hoverInfo.overlay) === null || _c === void 0 ? void 0 : _c.id) === overlay.id && hoverInfo.figureType !== 'none',
+            hoveredFigureKey: ((_d = hoverInfo.overlay) === null || _d === void 0 ? void 0 : _d.id) === overlay.id && hoverInfo.figureType !== 'none'
+                ? (_e = hoverInfo.figure) === null || _e === void 0 ? void 0 : _e.key
+                : undefined,
+            isTouch: this._lastIsTouch
+        })) !== null && _f !== void 0 ? _f : [];
     };
     return OverlayYAxisView;
 }(OverlayView));
@@ -28245,6 +30324,11 @@ var OverlayXAxisView = /** @class */ (function (_super) {
     OverlayXAxisView.prototype.coordinateToPointValueFlag = function () {
         return false;
     };
+    // This view only renders createXAxisFigures output + the default
+    // x-axis figure — skip overlays that provide neither.
+    OverlayXAxisView.prototype.canDrawOverlay = function (overlay) {
+        return overlay.createXAxisFigures != null || overlay.needDefaultXAxisFigure;
+    };
     OverlayXAxisView.prototype.getCompleteOverlays = function () {
         return this.getWidget().getPane().getChart().getChartStore().getOverlaysByPaneId();
     };
@@ -28278,14 +30362,30 @@ var OverlayXAxisView = /** @class */ (function (_super) {
         return figures;
     };
     OverlayXAxisView.prototype.getFigures = function (o, coordinates) {
-        var _a, _b;
+        var _a, _b, _c, _d, _e, _f;
         var widget = this.getWidget();
         var pane = widget.getPane();
         var chart = pane.getChart();
         var yAxis = pane.getAxisComponent();
         var xAxis = chart.getXAxisPane().getAxisComponent();
         var bounding = widget.getBounding();
-        return (_b = (_a = o.createXAxisFigures) === null || _a === void 0 ? void 0 : _a.call(o, { chart: chart, overlay: o, coordinates: coordinates, bounding: bounding, xAxis: xAxis, yAxis: yAxis, isTouch: this._lastIsTouch })) !== null && _b !== void 0 ? _b : [];
+        var chartStore = pane.getChart().getChartStore();
+        var clickInfo = chartStore.getClickOverlayInfo();
+        var hoverInfo = chartStore.getHoverOverlayInfo();
+        return (_f = (_a = o.createXAxisFigures) === null || _a === void 0 ? void 0 : _a.call(o, {
+            chart: chart,
+            overlay: o,
+            coordinates: coordinates,
+            bounding: bounding,
+            xAxis: xAxis,
+            yAxis: yAxis,
+            isSelected: ((_b = clickInfo.overlay) === null || _b === void 0 ? void 0 : _b.id) === o.id && clickInfo.figureType !== 'none',
+            isHovered: ((_c = hoverInfo.overlay) === null || _c === void 0 ? void 0 : _c.id) === o.id && hoverInfo.figureType !== 'none',
+            hoveredFigureKey: ((_d = hoverInfo.overlay) === null || _d === void 0 ? void 0 : _d.id) === o.id && hoverInfo.figureType !== 'none'
+                ? (_e = hoverInfo.figure) === null || _e === void 0 ? void 0 : _e.key
+                : undefined,
+            isTouch: this._lastIsTouch
+        })) !== null && _f !== void 0 ? _f : [];
     };
     return OverlayXAxisView;
 }(OverlayYAxisView));
@@ -28881,40 +30981,6 @@ var SeparatorPane = /** @class */ (function (_super) {
     return SeparatorPane;
 }(Pane));
 
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
-
- * http://www.apache.org/licenses/LICENSE-2.0
-
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-function isFF() {
-    if (typeof window === 'undefined') {
-        return false;
-    }
-    return window.navigator.userAgent.toLowerCase().includes('firefox');
-}
-function isIOS() {
-    if (typeof window === 'undefined') {
-        return false;
-    }
-    return /iPhone|iPad|iPod|iOS/.test(window.navigator.userAgent);
-}
-function isMac() {
-    if (typeof window === 'undefined') {
-        return false;
-    }
-    // eslint-disable-next-line @typescript-eslint/no-deprecated -- navigator.platform is the most reliable macOS signal; userAgent can be spoofed/reduced.
-    var platform = window.navigator.platform;
-    return platform.includes('Mac') || window.navigator.userAgent.includes('Mac OS X');
-}
-
 /* eslint-disable eslint-comments/require-description -- ignore */
 // we can use `const name = 500;` but with `const enum` this values will be inlined into code
 // so we do not need to have it as variables
@@ -29049,6 +31115,7 @@ var EventHandlerImp = /** @class */ (function () {
         }
         this._clearLongTapTimeout();
         this._resetClickTimeout();
+        this._resetTapTimeout();
     };
     EventHandlerImp.prototype._mouseEnterHandler = function (enterEvent) {
         var _this = this;
@@ -29337,6 +31404,11 @@ var EventHandlerImp = /** @class */ (function () {
         this._clearLongTapTimeout();
         this._touchMoveStartCoordinate = null;
         this._cancelTap = true;
+        // A cancelled pinch leaves the middle coordinate armed — the next
+        // touchstart's _checkPinchState would run _stopPinch on a dead pinch
+        // and poison the fresh scroll anchor via pinchEndEvent.
+        this._startPinchMiddleCoordinate = null;
+        this._startPinchDistance = 0;
         if (this._unsubscribeRootTouchEvents !== null) {
             this._unsubscribeRootTouchEvents();
             this._unsubscribeRootTouchEvents = null;
@@ -29527,7 +31599,7 @@ var EventHandlerImp = /** @class */ (function () {
             this._pinchPrevented = false;
         }
         if (touches.length !== 2 || this._pinchPrevented || this._longTapActive) {
-            this._stopPinch();
+            this._stopPinch(touches);
         }
         else {
             this._startPinch(touches);
@@ -29540,18 +31612,53 @@ var EventHandlerImp = /** @class */ (function () {
             y: ((touches[0].clientY - box.top) + (touches[1].clientY - box.top)) / 2
         };
         this._startPinchDistance = this._getTouchDistance(touches[0], touches[1]);
+        // A pinch must never end as a tap — the finger lifts would otherwise
+        // dispatch mouseClickEvent/doubleTapEvent that commit drawing points
+        // or force-complete an in-progress overlay at the release position.
+        this._cancelTap = true;
+        // A pinch also retires the tap window — without this a quick
+        // pinch-flick + immediate tap reaches _tapCount 2 inside 500ms and
+        // fires a phantom doubleTapEvent (chart reset / force-complete).
+        this._tapCount = 0;
+        this._resetTapTimeout();
         if (isValid(this._handler.pinchStartEvent)) {
             this._handler.pinchStartEvent({ x: 0, y: 0, pageX: 0, pageY: 0 });
         }
         this._clearLongTapTimeout();
     };
-    EventHandlerImp.prototype._stopPinch = function () {
+    EventHandlerImp.prototype._stopPinch = function (touches) {
         if (this._startPinchMiddleCoordinate === null) {
             return;
         }
         this._startPinchMiddleCoordinate = null;
+        // When one finger lifts and the other keeps moving, drag detection and
+        // the chart's scroll baseline must re-anchor to the remaining finger —
+        // otherwise the accumulated pinch displacement applies at once as a
+        // scroll jump on the next touchmove.
+        var remaining = touches !== undefined && touches.length === 1
+            ? this._getCoordinate(touches[0])
+            : null;
+        if (remaining !== null) {
+            this._touchMoveStartCoordinate = remaining;
+        }
         if (isValid(this._handler.pinchEndEvent)) {
-            this._handler.pinchEndEvent({ x: 0, y: 0, pageX: 0, pageY: 0 });
+            if (remaining !== null && touches !== undefined && touches.length === 1) {
+                // Container-space payload (clientX - box.left) — the scroll anchor
+                // it re-seats is widget-local and resolved handler-side; passing
+                // page coords here would offset the anchor by the container's
+                // absolute page position and teleport the scroll on the next move.
+                this._handler.pinchEndEvent({
+                    x: touches[0].clientX - this._target.getBoundingClientRect().left,
+                    y: touches[0].clientY - this._target.getBoundingClientRect().top,
+                    pageX: touches[0].pageX,
+                    pageY: touches[0].pageY
+                }, 1);
+            }
+            else {
+                // No finger remains — the handler must DISARM the scroll anchor,
+                // not re-seat it at a manufactured origin.
+                this._handler.pinchEndEvent({ x: 0, y: 0, pageX: 0, pageY: 0 }, 0);
+            }
         }
     };
     EventHandlerImp.prototype._mouseLeaveHandler = function (event) {
@@ -29723,6 +31830,19 @@ var Event = /** @class */ (function () {
         this._yAxisStartScaleDistance = 0;
         this._mouseMoveTriggerWidgetInfo = { pane: null, widget: null };
         this._boundKeyBoardDownEvent = function (event) {
+            // Never steal keys from editable targets — the drawing text editor's
+            // textarea bubbles keydown to the chart container, and Shift+Arrow /
+            // Shift+= / Shift+- would scroll/zoom while the user selects text.
+            var target = event.target;
+            if (target instanceof Element) {
+                if (target instanceof HTMLInputElement ||
+                    target instanceof HTMLTextAreaElement ||
+                    target instanceof HTMLSelectElement ||
+                    (target instanceof HTMLElement && target.isContentEditable) ||
+                    target.closest('input, textarea, select, [contenteditable]') !== null) {
+                    return;
+                }
+            }
             if (event.shiftKey) {
                 switch (event.code) {
                     case 'Equal': {
@@ -29904,8 +32024,32 @@ var Event = /** @class */ (function () {
         this._hoveredIndicatorId = null;
     };
     Event.prototype.pinchStartEvent = function () {
+        var _a;
         this._touchZoomed = true;
         this._pinchScale = 1;
+        // A pinch mid-freehand must END the stroke: touchMove is suppressed while
+        // two fingers are down, and resuming afterwards would append points from
+        // the stale last coordinate — a visible tail jump across the pinch (and
+        // the zoom changes pixel geometry mid-stroke). Mirror the mouseup rule:
+        // fewer than 2 points is a degenerate stroke → drop it.
+        var chartStore = this._chart.getChartStore();
+        var pressed = chartStore.getPressedOverlayInfo().overlay;
+        if (pressed !== null && pressed.isDrawing() && pressed.freehand) {
+            pressed.forceComplete();
+            if (pressed.points.length < 2) {
+                chartStore.removeOverlay({ id: pressed.id });
+            }
+            else {
+                // onDrawEnd BEFORE complete — measure-style tools delete themselves
+                // in the hook; skipping it strands the ruler on the chart forever.
+                (_a = pressed.onDrawEnd) === null || _a === void 0 ? void 0 : _a.call(pressed, { chart: this._chart, overlay: pressed });
+                if (chartStore.getOverlayById(pressed.id) !== null) {
+                    chartStore.progressOverlayComplete();
+                }
+            }
+            chartStore.setPressedOverlayInfo({ paneId: '', overlay: null, figureType: 'none', figureIndex: -1, figure: null });
+            this._chart.updatePane(1 /* UpdateLevel.Overlay */);
+        }
         return true;
     };
     Event.prototype.pinchEvent = function (e, scale) {
@@ -29916,6 +32060,30 @@ var Event = /** @class */ (function () {
             this._pinchScale = scale;
             this._chart.getChartStore().zoom(zoomScale, { x: event_1.x, y: event_1.y }, 'main');
             return true;
+        }
+        return false;
+    };
+    Event.prototype.pinchEndEvent = function (e, hasRemaining) {
+        // One finger may remain after pinch — re-anchor the scroll baseline to
+        // its current WIDGET-LOCAL position, or the accumulated pinch
+        // displacement applies at once as a scroll jump on the next touchmove.
+        // When no finger remains the anchor is disarmed — keeping it would let
+        // the release compute a fling from a stale/fake origin (teleport).
+        if (this._startScrollCoordinate === null) {
+            return false;
+        }
+        if (hasRemaining === 0) {
+            this._startScrollCoordinate = null;
+            return false;
+        }
+        var widget = this._findWidgetByEvent(e).widget;
+        if ((widget === null || widget === void 0 ? void 0 : widget.getName()) === WidgetNameConstants.MAIN) {
+            var event_2 = this._makeWidgetEvent(e, widget);
+            this._startScrollCoordinate = { x: event_2.x, y: event_2.y };
+            this._flingStartTime = new Date().getTime();
+        }
+        else {
+            this._startScrollCoordinate = null;
         }
         return false;
     };
@@ -29941,28 +32109,41 @@ var Event = /** @class */ (function () {
     Event.prototype.mouseDownEvent = function (e) {
         var _a = this._findWidgetByEvent(e), pane = _a.pane, widget = _a.widget;
         this._mouseDownWidget = widget;
+        // A mouse grab on a hybrid touchscreen can land mid-fling — stop the
+        // inertial raf or scroll() and the drag fight over the scroll anchor.
+        if (this._flingScrollRequestId !== null) {
+            cancelAnimationFrame(this._flingScrollRequestId);
+            this._flingScrollRequestId = null;
+        }
         if (widget !== null) {
-            var event_2 = this._makeWidgetEvent(e, widget);
+            var event_3 = this._makeWidgetEvent(e, widget);
             var name_1 = widget.getName();
             switch (name_1) {
                 case WidgetNameConstants.SEPARATOR: {
-                    return widget.dispatchEvent('mouseDownEvent', event_2);
+                    return widget.dispatchEvent('mouseDownEvent', event_3);
                 }
                 case WidgetNameConstants.MAIN: {
-                    var yAxis = pane.getAxisComponent();
-                    if (!yAxis.getAutoCalcTickFlag()) {
-                        var range = yAxis.getRange();
-                        this._prevYAxisRange = __assign({}, range);
+                    var consumed = widget.dispatchEvent('mouseDownEvent', event_3);
+                    // Arm scroll only when the press wasn't consumed by an overlay —
+                    // a consumed anchor press that loses its pressed slot mid-gesture
+                    // (Esc cancel, sync remove) would otherwise scroll the chart by
+                    // the total press-to-now displacement (touch path mirrors this).
+                    if (!consumed) {
+                        var yAxis = pane.getAxisComponent();
+                        if (!yAxis.getAutoCalcTickFlag()) {
+                            var range = yAxis.getRange();
+                            this._prevYAxisRange = __assign({}, range);
+                        }
+                        this._startScrollCoordinate = { x: event_3.x, y: event_3.y };
+                        this._chart.getChartStore().startScroll();
                     }
-                    this._startScrollCoordinate = { x: event_2.x, y: event_2.y };
-                    this._chart.getChartStore().startScroll();
-                    return widget.dispatchEvent('mouseDownEvent', event_2);
+                    return consumed;
                 }
                 case WidgetNameConstants.X_AXIS: {
-                    return this._processXAxisScrollStartEvent(widget, event_2);
+                    return this._processXAxisScrollStartEvent(widget, event_3);
                 }
                 case WidgetNameConstants.Y_AXIS: {
-                    return this._processYAxisScaleStartEvent(widget, event_2);
+                    return this._processYAxisScaleStartEvent(widget, event_3);
                 }
             }
         }
@@ -30024,27 +32205,27 @@ var Event = /** @class */ (function () {
         if (widget !== null &&
             ((_a = this._mouseDownWidget) === null || _a === void 0 ? void 0 : _a.getPane().getId()) === (pane === null || pane === void 0 ? void 0 : pane.getId()) &&
             ((_b = this._mouseDownWidget) === null || _b === void 0 ? void 0 : _b.getName()) === widget.getName()) {
-            var event_3 = this._makeWidgetEvent(e, widget);
+            var event_4 = this._makeWidgetEvent(e, widget);
             var name_3 = widget.getName();
             switch (name_3) {
                 case WidgetNameConstants.MAIN: {
                     // eslint-disable-next-line @typescript-eslint/init-declarations -- ignore
                     var crosshair = void 0;
-                    var consumed = widget.dispatchEvent('pressedMouseMoveEvent', event_3);
+                    var consumed = widget.dispatchEvent('pressedMouseMoveEvent', event_4);
                     if (!consumed) {
-                        this._processMainScrollingEvent(widget, event_3);
+                        this._processMainScrollingEvent(widget, event_4);
                     }
                     if (!consumed || widget.getForceCursor() === 'pointer') {
-                        crosshair = { x: event_3.x, y: event_3.y, paneId: pane === null || pane === void 0 ? void 0 : pane.getId() };
+                        crosshair = { x: event_4.x, y: event_4.y, paneId: pane === null || pane === void 0 ? void 0 : pane.getId() };
                     }
                     this._chart.getChartStore().setCrosshair(crosshair, { forceInvalidate: true });
                     return consumed;
                 }
                 case WidgetNameConstants.X_AXIS: {
-                    return this._processXAxisScrollingEvent(widget, event_3);
+                    return this._processXAxisScrollingEvent(widget, event_4);
                 }
                 case WidgetNameConstants.Y_AXIS: {
-                    return this._processYAxisScalingEvent(widget, event_3);
+                    return this._processYAxisScalingEvent(widget, event_4);
                 }
             }
         }
@@ -30055,14 +32236,14 @@ var Event = /** @class */ (function () {
         var target = this._releaseTarget(widget);
         var consumed = false;
         if (target !== null) {
-            var event_4 = this._makeWidgetEvent(e, target);
+            var event_5 = this._makeWidgetEvent(e, target);
             var name_4 = target.getName();
             switch (name_4) {
                 case WidgetNameConstants.MAIN:
                 case WidgetNameConstants.SEPARATOR:
                 case WidgetNameConstants.X_AXIS:
                 case WidgetNameConstants.Y_AXIS: {
-                    consumed = target.dispatchEvent('mouseUpEvent', event_4);
+                    consumed = target.dispatchEvent('mouseUpEvent', event_5);
                     break;
                 }
             }
@@ -30082,10 +32263,10 @@ var Event = /** @class */ (function () {
     Event.prototype.mouseClickEvent = function (e) {
         var _a = this._findWidgetByEvent(e), pane = _a.pane, widget = _a.widget;
         if (widget !== null) {
-            var event_5 = this._makeWidgetEvent(e, widget);
-            var consumed = widget.dispatchEvent('mouseClickEvent', event_5);
+            var event_6 = this._makeWidgetEvent(e, widget);
+            var consumed = widget.dispatchEvent('mouseClickEvent', event_6);
             if (!consumed && widget.getName() === WidgetNameConstants.MAIN) {
-                var indicatorInfo = this._findIndicatorAtPoint(pane, event_5.x, event_5.y);
+                var indicatorInfo = this._findIndicatorAtPoint(pane, event_6.x, event_6.y);
                 // Update selected state (set on clicked, clear on all others)
                 this._updateIndicatorSelected(pane, indicatorInfo);
                 if (indicatorInfo !== null) {
@@ -30101,13 +32282,13 @@ var Event = /** @class */ (function () {
         var widget = this._findWidgetByEvent(e).widget;
         var consumed = false;
         if (widget !== null) {
-            var event_6 = this._makeWidgetEvent(e, widget);
+            var event_7 = this._makeWidgetEvent(e, widget);
             var name_5 = widget.getName();
             switch (name_5) {
                 case WidgetNameConstants.MAIN:
                 case WidgetNameConstants.X_AXIS:
                 case WidgetNameConstants.Y_AXIS: {
-                    consumed = widget.dispatchEvent('mouseRightClickEvent', event_6);
+                    consumed = widget.dispatchEvent('mouseRightClickEvent', event_7);
                     break;
                 }
             }
@@ -30123,11 +32304,11 @@ var Event = /** @class */ (function () {
             var name_6 = widget.getName();
             switch (name_6) {
                 case WidgetNameConstants.MAIN: {
-                    var event_7 = this._makeWidgetEvent(e, widget);
-                    var consumed = widget.dispatchEvent('mouseDoubleClickEvent', event_7);
+                    var event_8 = this._makeWidgetEvent(e, widget);
+                    var consumed = widget.dispatchEvent('mouseDoubleClickEvent', event_8);
                     if (!consumed) {
                         // Check if double-click is on an indicator shape (e.g., VPVR histogram)
-                        var indicatorInfo = this._findIndicatorAtPoint(pane, event_7.x, event_7.y);
+                        var indicatorInfo = this._findIndicatorAtPoint(pane, event_8.x, event_8.y);
                         if (indicatorInfo !== null) {
                             this._chart.getChartStore().executeAction('onIndicatorShapeDoubleClick', indicatorInfo);
                             return true;
@@ -30152,31 +32333,60 @@ var Event = /** @class */ (function () {
         }
         return false;
     };
-    Event.prototype.mouseLeaveEvent = function () {
-        this._chart.getChartStore().setCrosshair();
+    Event.prototype.mouseLeaveEvent = function (e) {
+        var _this = this;
+        var _a;
+        var chartStore = this._chart.getChartStore();
+        chartStore.setCrosshair();
+        // Leaving the surface must end hover too — otherwise the last-hovered
+        // overlay keeps its MAX_SAFE_INTEGER zLevel bump and onMouseLeave never
+        // fires until the pointer re-enters and hovers something else.
+        chartStore.setHoverOverlayInfo({ paneId: '', overlay: null, figureType: 'none', figureIndex: -1, figure: null }, function () { return false; }, function (o, f) {
+            if (isFunction(o.onMouseLeave) && checkOverlayFigureEvent('onMouseLeave', f)) {
+                o.onMouseLeave(__assign({ chart: _this._chart, overlay: o, figure: f !== null && f !== void 0 ? f : undefined }, e));
+                return true;
+            }
+            return false;
+        });
+        // Indicator hover also ends on surface exit — _clearIndicatorHover is
+        // otherwise only reachable from a move inside the surface.
+        this._clearIndicatorHover();
+        // Notify the last-hovered widget itself (separator strips track leave to
+        // reset their active drag styling).
+        (_a = this._mouseMoveTriggerWidgetInfo.widget) === null || _a === void 0 ? void 0 : _a.dispatchEvent('mouseLeaveEvent', e);
+        // Reset so re-entering fires widget mouseEnter again.
+        this._mouseMoveTriggerWidgetInfo = { pane: null, widget: null };
         return true;
     };
     Event.prototype.touchStartEvent = function (e) {
         var _a;
+        // Crosshair suppression is per-gesture — a drag/pinch/cancel path that
+        // skips tapEvent would otherwise leave the flag armed and eat the NEXT
+        // tap's crosshair. Clearing here (before this gesture can re-arm it)
+        // bounds the flag to the gesture that set it.
+        this._touchCancelCrosshair = false;
         var _b = this._findWidgetByEvent(e), pane = _b.pane, widget = _b.widget;
         this._mouseDownWidget = widget;
+        // Cancel an in-flight fling for ANY touch — a touch on an axis or
+        // separator during inertial scroll must still stop the raf or it keeps
+        // scrolling underneath the new gesture.
+        if (this._flingScrollRequestId !== null) {
+            cancelAnimationFrame(this._flingScrollRequestId);
+            this._flingScrollRequestId = null;
+        }
         if (widget !== null) {
-            var event_8 = this._makeWidgetEvent(e, widget);
-            (_a = event_8.preventDefault) === null || _a === void 0 ? void 0 : _a.call(event_8);
+            var event_9 = this._makeWidgetEvent(e, widget);
+            (_a = event_9.preventDefault) === null || _a === void 0 ? void 0 : _a.call(event_9);
             var name_7 = widget.getName();
             switch (name_7) {
                 case WidgetNameConstants.MAIN: {
                     var chartStore = this._chart.getChartStore();
-                    if (widget.dispatchEvent('mouseDownEvent', event_8)) {
+                    if (widget.dispatchEvent('mouseDownEvent', event_9)) {
                         this._touchCancelCrosshair = true;
                         this._touchCoordinate = null;
                         chartStore.setCrosshair(undefined, { notInvalidate: true });
                         this._chart.updatePane(1 /* UpdateLevel.Overlay */);
                         return true;
-                    }
-                    if (this._flingScrollRequestId !== null) {
-                        cancelAnimationFrame(this._flingScrollRequestId);
-                        this._flingScrollRequestId = null;
                     }
                     this._flingStartTime = new Date().getTime();
                     var yAxis = pane.getAxisComponent();
@@ -30184,16 +32394,16 @@ var Event = /** @class */ (function () {
                         var range = yAxis.getRange();
                         this._prevYAxisRange = __assign({}, range);
                     }
-                    this._startScrollCoordinate = { x: event_8.x, y: event_8.y };
+                    this._startScrollCoordinate = { x: event_9.x, y: event_9.y };
                     chartStore.startScroll();
                     this._touchZoomed = false;
                     if (this._touchCoordinate !== null) {
-                        var xDif = event_8.x - this._touchCoordinate.x;
-                        var yDif = event_8.y - this._touchCoordinate.y;
+                        var xDif = event_9.x - this._touchCoordinate.x;
+                        var yDif = event_9.y - this._touchCoordinate.y;
                         var radius = Math.sqrt(xDif * xDif + yDif * yDif);
                         if (radius < TOUCH_MIN_RADIUS) {
-                            this._touchCoordinate = { x: event_8.x, y: event_8.y };
-                            chartStore.setCrosshair({ x: event_8.x, y: event_8.y, paneId: pane === null || pane === void 0 ? void 0 : pane.getId() });
+                            this._touchCoordinate = { x: event_9.x, y: event_9.y };
+                            chartStore.setCrosshair({ x: event_9.x, y: event_9.y, paneId: pane === null || pane === void 0 ? void 0 : pane.getId() });
                         }
                         else {
                             this._touchCoordinate = null;
@@ -30204,10 +32414,10 @@ var Event = /** @class */ (function () {
                     return true;
                 }
                 case WidgetNameConstants.X_AXIS: {
-                    return this._processXAxisScrollStartEvent(widget, event_8);
+                    return this._processXAxisScrollStartEvent(widget, event_9);
                 }
                 case WidgetNameConstants.Y_AXIS: {
-                    return this._processYAxisScaleStartEvent(widget, event_8);
+                    return this._processYAxisScaleStartEvent(widget, event_9);
                 }
             }
         }
@@ -30225,32 +32435,32 @@ var Event = /** @class */ (function () {
         if (widget !== null &&
             ((_a = this._mouseDownWidget) === null || _a === void 0 ? void 0 : _a.getPane().getId()) === (pane === null || pane === void 0 ? void 0 : pane.getId()) &&
             ((_b = this._mouseDownWidget) === null || _b === void 0 ? void 0 : _b.getName()) === widget.getName()) {
-            var event_9 = this._makeWidgetEvent(e, widget);
+            var event_10 = this._makeWidgetEvent(e, widget);
             var name_8 = widget.getName();
             var chartStore = this._chart.getChartStore();
             switch (name_8) {
                 case WidgetNameConstants.MAIN: {
-                    if (widget.dispatchEvent('pressedMouseMoveEvent', event_9)) {
-                        (_c = event_9.preventDefault) === null || _c === void 0 ? void 0 : _c.call(event_9);
+                    if (widget.dispatchEvent('pressedMouseMoveEvent', event_10)) {
+                        (_c = event_10.preventDefault) === null || _c === void 0 ? void 0 : _c.call(event_10);
                         chartStore.setCrosshair(undefined, { notInvalidate: true });
                         this._chart.updatePane(1 /* UpdateLevel.Overlay */);
                         return true;
                     }
                     if (this._touchCoordinate !== null) {
-                        (_d = event_9.preventDefault) === null || _d === void 0 ? void 0 : _d.call(event_9);
-                        chartStore.setCrosshair({ x: event_9.x, y: event_9.y, paneId: pane === null || pane === void 0 ? void 0 : pane.getId() });
+                        (_d = event_10.preventDefault) === null || _d === void 0 ? void 0 : _d.call(event_10);
+                        chartStore.setCrosshair({ x: event_10.x, y: event_10.y, paneId: pane === null || pane === void 0 ? void 0 : pane.getId() });
                     }
                     else {
-                        this._processMainScrollingEvent(widget, event_9);
+                        this._processMainScrollingEvent(widget, event_10);
                     }
                     return true;
                 }
                 case WidgetNameConstants.X_AXIS: {
-                    (_e = event_9.preventDefault) === null || _e === void 0 ? void 0 : _e.call(event_9);
-                    return this._processXAxisScrollingEvent(widget, event_9);
+                    (_e = event_10.preventDefault) === null || _e === void 0 ? void 0 : _e.call(event_10);
+                    return this._processXAxisScrollingEvent(widget, event_10);
                 }
                 case WidgetNameConstants.Y_AXIS: {
-                    return this._processYAxisScalingEvent(widget, event_9);
+                    return this._processYAxisScalingEvent(widget, event_10);
                 }
             }
         }
@@ -30264,18 +32474,18 @@ var Event = /** @class */ (function () {
         var target = this._releaseTarget(widget);
         var consumed = false;
         if (target !== null) {
-            var event_10 = this._makeWidgetEvent(e, target);
+            var event_11 = this._makeWidgetEvent(e, target);
             var name_9 = target.getName();
             switch (name_9) {
                 case WidgetNameConstants.MAIN: {
                     // Repaint when the release is consumed — the freehand tail point /
                     // gesture commit written here must invalidate like the mouse path.
-                    if (target.dispatchEvent('mouseUpEvent', event_10)) {
+                    if (target.dispatchEvent('mouseUpEvent', event_11)) {
                         this._chart.updatePane(1 /* UpdateLevel.Overlay */);
                     }
                     if (this._startScrollCoordinate !== null) {
                         var time = new Date().getTime() - this._flingStartTime;
-                        var distance = event_10.x - this._startScrollCoordinate.x;
+                        var distance = event_11.x - this._startScrollCoordinate.x;
                         var v_1 = distance / (time > 0 ? time : 1) * 20;
                         if (time < 200 && Math.abs(v_1) > 0) {
                             var store_1 = this._chart.getChartStore();
@@ -30304,7 +32514,7 @@ var Event = /** @class */ (function () {
                 case WidgetNameConstants.SEPARATOR:
                 case WidgetNameConstants.X_AXIS:
                 case WidgetNameConstants.Y_AXIS: {
-                    consumed = target.dispatchEvent('mouseUpEvent', event_10);
+                    consumed = target.dispatchEvent('mouseUpEvent', event_11);
                     if (consumed) {
                         this._chart.updatePane(1 /* UpdateLevel.Overlay */);
                     }
@@ -30328,10 +32538,10 @@ var Event = /** @class */ (function () {
         var _a = this._findWidgetByEvent(e), pane = _a.pane, widget = _a.widget;
         var consumed = false;
         if (widget !== null) {
-            var event_11 = this._makeWidgetEvent(e, widget);
-            var result = widget.dispatchEvent('mouseClickEvent', event_11);
+            var event_12 = this._makeWidgetEvent(e, widget);
+            var result = widget.dispatchEvent('mouseClickEvent', event_12);
             if (widget.getName() === WidgetNameConstants.MAIN) {
-                var event_12 = this._makeWidgetEvent(e, widget);
+                var event_13 = this._makeWidgetEvent(e, widget);
                 var chartStore = this._chart.getChartStore();
                 if (result) {
                     this._touchCancelCrosshair = true;
@@ -30341,12 +32551,15 @@ var Event = /** @class */ (function () {
                 }
                 else {
                     if (!this._touchCancelCrosshair && !this._touchZoomed) {
-                        this._touchCoordinate = { x: event_12.x, y: event_12.y };
-                        chartStore.setCrosshair({ x: event_12.x, y: event_12.y, paneId: pane === null || pane === void 0 ? void 0 : pane.getId() }, { notInvalidate: true });
+                        this._touchCoordinate = { x: event_13.x, y: event_13.y };
+                        chartStore.setCrosshair({ x: event_13.x, y: event_13.y, paneId: pane === null || pane === void 0 ? void 0 : pane.getId() }, { notInvalidate: true });
                         consumed = true;
                     }
-                    this._touchCancelCrosshair = false;
                 }
+                // The suppression flag only lives for THIS gesture — it is armed in
+                // touchStart/overlay-tap and consulted here. Leaving it set after an
+                // overlay tap would swallow the crosshair on the NEXT empty tap.
+                this._touchCancelCrosshair = false;
             }
             if (consumed || result) {
                 this._chart.updatePane(1 /* UpdateLevel.Overlay */);
@@ -30360,9 +32573,9 @@ var Event = /** @class */ (function () {
     Event.prototype.longTapEvent = function (e) {
         var _a = this._findWidgetByEvent(e), pane = _a.pane, widget = _a.widget;
         if (widget !== null && widget.getName() === WidgetNameConstants.MAIN) {
-            var event_13 = this._makeWidgetEvent(e, widget);
-            this._touchCoordinate = { x: event_13.x, y: event_13.y };
-            this._chart.getChartStore().setCrosshair({ x: event_13.x, y: event_13.y, paneId: pane === null || pane === void 0 ? void 0 : pane.getId() });
+            var event_14 = this._makeWidgetEvent(e, widget);
+            this._touchCoordinate = { x: event_14.x, y: event_14.y };
+            this._chart.getChartStore().setCrosshair({ x: event_14.x, y: event_14.y, paneId: pane === null || pane === void 0 ? void 0 : pane.getId() });
             return true;
         }
         return false;
@@ -30487,6 +32700,11 @@ var Event = /** @class */ (function () {
                 (_a = event.preventDefault) === null || _a === void 0 ? void 0 : _a.call(event);
                 var _b = this._prevYAxisRange, from = _b.from, to = _b.to, range = _b.range;
                 var scale = event.pageY / this._yAxisStartScaleDistance;
+                // pageY can hit 0 or go negative when the drag leaves the viewport —
+                // a non-positive/NaN scale collapses or flips the axis range.
+                if (!isNumber(scale) || scale <= 0) {
+                    return consumed;
+                }
                 var newRange = range * scale;
                 var difRange = (newRange - range) / 2;
                 var newFrom = from - difRange;
@@ -30527,7 +32745,7 @@ var Event = /** @class */ (function () {
      * to where the gesture started so off-chart releases still close gestures.
      */
     Event.prototype._releaseTarget = function (widget) {
-        var _a, _b, _c;
+        var _a, _b, _c, _d;
         var pressedInfo = this._chart.getChartStore().getPressedOverlayInfo();
         if (pressedInfo.overlay !== null) {
             if (this._mouseDownWidget !== null &&
@@ -30535,6 +32753,12 @@ var Event = /** @class */ (function () {
                 return this._mouseDownWidget;
             }
             return (_c = (_b = (_a = this._chart.getDrawPaneById(pressedInfo.paneId)) === null || _a === void 0 ? void 0 : _a.getMainWidget()) !== null && _b !== void 0 ? _b : this._mouseDownWidget) !== null && _c !== void 0 ? _c : widget;
+        }
+        // A separator drag keeps its own lifecycle — releasing over a draw pane
+        // must still reach SeparatorWidget.mouseUpEvent or _dragFlag stays armed
+        // and the separator leaks its active styling forever.
+        if (((_d = this._mouseDownWidget) === null || _d === void 0 ? void 0 : _d.getName()) === WidgetNameConstants.SEPARATOR) {
+            return this._mouseDownWidget;
         }
         return widget !== null && widget !== void 0 ? widget : this._mouseDownWidget;
     };
@@ -30612,6 +32836,12 @@ var Event = /** @class */ (function () {
     };
     Event.prototype.destroy = function () {
         this._container.removeEventListener('keydown', this._boundKeyBoardDownEvent);
+        // A fling raf outliving destroy would scroll/update a torn-down chart.
+        if (this._flingScrollRequestId !== null) {
+            cancelAnimationFrame(this._flingScrollRequestId);
+            this._flingScrollRequestId = null;
+        }
+        this._mouseDownWidget = null;
         this._event.destroy();
     };
     return Event;
@@ -31662,6 +33892,10 @@ var ChartImp = /** @class */ (function () {
         var _a;
         (_a = this._drawingsApi) === null || _a === void 0 ? void 0 : _a.destroy();
         this._drawingsApi = null;
+        // Sessions opened via raw createOverlay paths (no drawings API ever
+        // touched) outlive _drawingsApi — close them or their document
+        // listeners + layout work leak past dispose.
+        closeTextEditorSessions(this);
         this._chartEvent.destroy();
         this._drawPanes.forEach(function (pane) {
             pane.destroy();
@@ -32139,11 +34373,14 @@ function createChartSync(options) {
                             var updated = false;
                             if (event.type === 'progress') {
                                 // Hot path — narrow payload, no structural changes.
+                                // syncApplied tells the peer's drawings manager: persist
+                                // this remote edit, but do NOT mint a local undo entry.
                                 updated = chart.overrideOverlay({
                                     id: overlay.id,
                                     points: overlay.points.map(function (p) { return (__assign({}, p)); }),
                                     visible: overlay.visible,
-                                    skipDrawReplay: true
+                                    skipDrawReplay: true,
+                                    syncApplied: true
                                 });
                             }
                             else {
@@ -32151,7 +34388,7 @@ function createChartSync(options) {
                                 // zLevel...) — but never paneId/name/groupId: paneId isn't
                                 // re-keyed by overrideOverlay and identity fields can't change.
                                 var _b = serializeOverlay(overlay), _p = _b.paneId, _n = _b.name, _g = _b.groupId, _gh = _b.ghost, _s = _b.suppressSync, rest = __rest(_b, ["paneId", "name", "groupId", "ghost", "suppressSync"]);
-                                updated = chart.overrideOverlay(__assign(__assign({}, rest), { skipDrawReplay: true }));
+                                updated = chart.overrideOverlay(__assign(__assign({}, rest), { skipDrawReplay: true, syncApplied: true }));
                             }
                             if (!updated && !suppressMaterialize) {
                                 // Follower may have attached after the overlay was created —
@@ -32746,571 +34983,6 @@ function createChartSync(options) {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-function getMinTextMetrics(metrics) {
-    return {
-        width: metrics.width,
-        actualBoundingBoxAscent: metrics.actualBoundingBoxAscent,
-        actualBoundingBoxDescent: metrics.actualBoundingBoxDescent,
-        fontBoundingBoxAscent: metrics.fontBoundingBoxAscent,
-        fontBoundingBoxDescent: metrics.fontBoundingBoxDescent
-    };
-}
-/** Bounded FIFO text-metrics cache — TV uses capacity 150 per font. */
-var CircularMetricsCache = /** @class */ (function () {
-    function CircularMetricsCache(_capacity) {
-        this._capacity = _capacity;
-        this._map = new Map();
-    }
-    CircularMetricsCache.prototype.get = function (key) {
-        return this._map.get(key);
-    };
-    CircularMetricsCache.prototype.set = function (key, value) {
-        if (this._map.has(key)) {
-            this._map.delete(key);
-        }
-        else if (this._map.size >= this._capacity) {
-            var oldest = this._map.keys().next();
-            if (oldest.done !== true) {
-                this._map.delete(oldest.value);
-            }
-        }
-        this._map.set(key, value);
-    };
-    CircularMetricsCache.prototype.clear = function () {
-        this._map.clear();
-    };
-    return CircularMetricsCache;
-}());
-function createTextWidthCache(capacity) {
-    if (capacity === void 0) { capacity = 150; }
-    return new TextWidthCacheImp(capacity);
-}
-var TextWidthCacheImp = /** @class */ (function () {
-    function TextWidthCacheImp(_capacity) {
-        if (_capacity === void 0) { _capacity = 150; }
-        this._capacity = _capacity;
-        this._perFont = new Map();
-    }
-    TextWidthCacheImp.prototype.measureText = function (context, text, options) {
-        var cacheKey = text;
-        if ((options === null || options === void 0 ? void 0 : options.mono) === true) {
-            cacheKey = text.replace(/\d/g, '0');
-        }
-        return this.getMetrics(context, cacheKey).width;
-    };
-    TextWidthCacheImp.prototype.yMidCorrection = function (context, text) {
-        var metrics = this.getMetrics(context, text);
-        return metrics.actualBoundingBoxAscent !== undefined && metrics.actualBoundingBoxDescent !== undefined
-            ? (metrics.actualBoundingBoxAscent - metrics.actualBoundingBoxDescent) / 2
-            : 0;
-    };
-    TextWidthCacheImp.prototype.getMetrics = function (context, text) {
-        var font = context.font;
-        var cache = this._perFont.get(font);
-        if (cache === undefined) {
-            cache = new CircularMetricsCache(this._capacity);
-            this._perFont.set(font, cache);
-            // Bound the font map too — fonts are finite in practice.
-            if (this._perFont.size > 32) {
-                var oldest = this._perFont.keys().next();
-                if (oldest.done !== true) {
-                    this._perFont.delete(oldest.value);
-                }
-            }
-        }
-        var cached = cache.get(text);
-        if (cached !== undefined) {
-            return cached;
-        }
-        var previousBaseline = context.textBaseline;
-        context.textBaseline = 'middle';
-        var metrics = getMinTextMetrics(context.measureText(text));
-        context.textBaseline = previousBaseline;
-        // Do not cache zero-width nonempty text (font still loading).
-        if (!(metrics.width === 0 && text.length > 0)) {
-            cache.set(text, metrics);
-        }
-        return metrics;
-    };
-    TextWidthCacheImp.prototype.reset = function () {
-        this._perFont.clear();
-    };
-    return TextWidthCacheImp;
-}());
-var measurementContext = null;
-var measurementCanvas = null;
-function getMeasurementContext() {
-    if (measurementContext === null) {
-        measurementCanvas = document.createElement('canvas');
-        measurementCanvas.width = 0;
-        measurementCanvas.height = 0;
-        // Safari/macOS returns wrong metrics for detached canvases — TV attaches
-        // a display:none canvas to the document there.
-        if (isMac() && typeof document.body !== 'undefined') {
-            measurementCanvas.style.display = 'none';
-            document.body.append(measurementCanvas);
-        }
-        measurementContext = measurementCanvas.getContext('2d');
-        measurementContext.textBaseline = 'alphabetic';
-        measurementContext.textAlign = 'center';
-    }
-    return measurementContext;
-}
-/**
- * Measure text against the shared measurement context.
- * Pass a TextWidthCache to cache by (font, text).
- */
-function measureText(text, font, widthCache) {
-    var context = getMeasurementContext();
-    if (context.font !== font) {
-        context.font = font;
-    }
-    return widthCache !== undefined
-        ? widthCache.getMetrics(context, text)
-        : getMinTextMetrics(context.measureText(text));
-}
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-function splitWordsAndSpaces(text) {
-    var tokens = [];
-    do {
-        var match = /\s+/.exec(text);
-        if (match === null) {
-            tokens.push({ word: text, spaces: '' });
-            break;
-        }
-        tokens.push({ word: text.slice(0, match.index), spaces: match[0] });
-        text = text.slice(match.index + match[0].length);
-    } while (text.length > 0);
-    return tokens;
-}
-function upperbound(items, value, predicate, start, end) {
-    var left = start;
-    var right = end;
-    while (left < right) {
-        var mid = (left + right) >>> 1;
-        if (predicate(value, items[mid])) {
-            right = mid;
-        }
-        else {
-            left = mid + 1;
-        }
-    }
-    return left;
-}
-/**
- * Find the longest fitting prefix by binary search. Keeps at least one code
- * unit so the loop progresses even if a single character exceeds maxWidth.
- */
-function splitIntoFittingChunks(text, font, metricsCache, maxWidth) {
-    var chunks = [];
-    var characterIndices = [];
-    for (var index = 0; index < text.length; ++index) {
-        characterIndices.push(index);
-    }
-    var _loop_1 = function () {
-        var sourceText = text;
-        var prefixLength = Math.max(1, upperbound(characterIndices, maxWidth, function (widthLimit, characterIndex) {
-            return measureText(sourceText.slice(0, characterIndex + 1), font, metricsCache).width > widthLimit;
-        }, 0, sourceText.length));
-        chunks.push(sourceText.slice(0, prefixLength));
-        text = sourceText.slice(prefixLength);
-    };
-    while (text.length > 0) {
-        _loop_1();
-    }
-    return chunks;
-}
-function wordWrap(text, font, metricsCache, skipHiddenLines, wrapWidth) {
-    var e_1, _a;
-    if (skipHiddenLines === void 0) { skipHiddenLines = true; }
-    if (typeof wrapWidth === 'string') {
-        wrapWidth = parseInt(wrapWidth);
-    }
-    // Preserve explicit line breaks.
-    var sourceLines = text.split(/\r\n|\r|\n|$/).map(function (lineText) { return ({
-        text: lineText,
-        hidden: false,
-        wrappedLinePart: false,
-        wrappedLineEnd: false
-    }); });
-    if (typeof wrapWidth !== 'number' || !isFinite(wrapWidth) || wrapWidth <= 0) {
-        return sourceLines;
-    }
-    if (measureText('x', font, metricsCache).width > wrapWidth) {
-        return sourceLines;
-    }
-    var wrappedLines = [];
-    try {
-        for (var sourceLines_1 = __values(sourceLines), sourceLines_1_1 = sourceLines_1.next(); !sourceLines_1_1.done; sourceLines_1_1 = sourceLines_1.next()) {
-            var sourceLine = sourceLines_1_1.value;
-            if (measureText(sourceLine.text, font, metricsCache).width <= wrapWidth) {
-                wrappedLines.push(sourceLine);
-                continue;
-            }
-            var tokens = splitWordsAndSpaces(sourceLine.text);
-            var isWrappedLine = true;
-            var pendingText = '';
-            var tokenIndex = 0;
-            while (tokenIndex < tokens.length) {
-                var token = tokens[tokenIndex];
-                var candidateText = "".concat(pendingText).concat(token.word);
-                var candidateWidth = measureText(candidateText, font, metricsCache).width;
-                if (candidateWidth > wrapWidth) {
-                    if (pendingText !== '') {
-                        wrappedLines.push({
-                            text: pendingText,
-                            hidden: false,
-                            wrappedLinePart: isWrappedLine,
-                            wrappedLineEnd: false
-                        });
-                        pendingText = '';
-                    }
-                    else if (candidateText.length === 1) {
-                        wrappedLines.push({
-                            text: candidateText,
-                            hidden: false,
-                            wrappedLinePart: isWrappedLine,
-                            wrappedLineEnd: true
-                        });
-                        token.word = '';
-                    }
-                    else {
-                        var wordChunks = splitIntoFittingChunks(candidateText, font, metricsCache, wrapWidth);
-                        for (var chunkIndex = 0; chunkIndex < wordChunks.length - 1; chunkIndex += 1) {
-                            wrappedLines.push({
-                                text: wordChunks[chunkIndex],
-                                hidden: false,
-                                wrappedLinePart: isWrappedLine,
-                                wrappedLineEnd: false
-                            });
-                        }
-                        token.word = wordChunks[wordChunks.length - 1];
-                    }
-                    continue; // Retry the same token with the remaining word/pending text.
-                }
-                candidateText = "".concat(pendingText).concat(token.word).concat(token.spaces);
-                candidateWidth = measureText(candidateText, font, metricsCache).width;
-                if (candidateWidth < wrapWidth) {
-                    pendingText = candidateText;
-                    tokenIndex += 1;
-                    continue;
-                }
-                var chunks = splitIntoFittingChunks(candidateText, font, metricsCache, wrapWidth);
-                for (var chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
-                    var chunkText = chunks[chunkIndex];
-                    var line = {
-                        text: chunkText,
-                        hidden: chunkIndex > 0,
-                        wrappedLinePart: isWrappedLine,
-                        wrappedLineEnd: tokenIndex === tokens.length - 1 && chunkIndex === chunks.length - 1
-                    };
-                    if (!(line.hidden && skipHiddenLines)) {
-                        wrappedLines.push(line);
-                    }
-                }
-                pendingText = '';
-                tokenIndex += 1;
-            }
-            if (pendingText !== '') {
-                wrappedLines.push({
-                    text: pendingText,
-                    wrappedLinePart: isWrappedLine,
-                    hidden: false,
-                    wrappedLineEnd: true
-                });
-            }
-        }
-    }
-    catch (e_1_1) { e_1 = { error: e_1_1 }; }
-    finally {
-        try {
-            if (sourceLines_1_1 && !sourceLines_1_1.done && (_a = sourceLines_1.return)) _a.call(sourceLines_1);
-        }
-        finally { if (e_1) throw e_1.error; }
-    }
-    return wrappedLines;
-}
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-/**
- * Text-box layout engine — ported from TradingView's TextRenderer
- * (_getBox / _getBoxSize / _getInternalData / getLinesInfo), minus the
- * decorator system (TV forbids decorators together with wordWrapWidth, and
- * none of our tools use them).
- *
- * This is the SINGLE source of geometry for both the canvas figure and the
- * DOM text editor — the editor's layout() callback consumes this output so
- * caret, selection and the invisible textarea always agree with painted
- * pixels (the #1 defect of ad hoc editors is re-measuring in the DOM).
- */
-var CHART_FONT_FAMILY = "'Trebuchet MS', Roboto, Ubuntu, sans-serif";
-function fontSizeOf(data) {
-    var _a;
-    return Math.ceil((_a = data.fontSize) !== null && _a !== void 0 ? _a : 12);
-}
-function lineSpacingOf(data) {
-    var _a;
-    return (_a = data.lineSpacing) !== null && _a !== void 0 ? _a : 0;
-}
-function getVerticalPadding(data) {
-    var _a, _b;
-    return (_b = (_a = data.boxPaddingVert) !== null && _a !== void 0 ? _a : data.boxPadding) !== null && _b !== void 0 ? _b : fontSizeOf(data) / 3;
-}
-function getHorizontalPadding(data) {
-    var _a, _b;
-    return (_b = (_a = data.boxPaddingHorz) !== null && _a !== void 0 ? _a : data.boxPadding) !== null && _b !== void 0 ? _b : fontSizeOf(data) / 3;
-}
-function getLeftPadding(data) {
-    var _a;
-    return (_a = data.boxPaddingLeft) !== null && _a !== void 0 ? _a : getHorizontalPadding(data);
-}
-function getRightPadding(data) {
-    var _a;
-    return (_a = data.boxPaddingRight) !== null && _a !== void 0 ? _a : getHorizontalPadding(data);
-}
-function textBoxFont(data) {
-    var _a;
-    var size = fontSizeOf(data);
-    return "".concat(data.bold === true ? 'bold ' : '').concat(data.italic === true ? 'italic ' : '').concat(size, "px ").concat((_a = data.fontFamily) !== null && _a !== void 0 ? _a : CHART_FONT_FAMILY);
-}
-function computeLinesInfo(data, font, widthCache) {
-    var e_1, _a;
-    var wrapped = wordWrap(data.text, font, widthCache, false, data.wordWrapWidth);
-    var visible = wrapped.filter(function (line) { return !line.hidden; });
-    if (data.maxHeight !== undefined) {
-        var maxVisibleLines = Math.floor((data.maxHeight + lineSpacingOf(data)) / (fontSizeOf(data) + lineSpacingOf(data)));
-        if (visible.length > maxVisibleLines) {
-            visible = visible.slice(0, maxVisibleLines);
-        }
-    }
-    var linesMaxWidth = 0;
-    if (data.wordWrapWidth !== undefined) {
-        // TV: when wrapping is enabled the wrap width IS the max line width.
-        linesMaxWidth = data.wordWrapWidth;
-    }
-    else {
-        try {
-            for (var visible_1 = __values(visible), visible_1_1 = visible_1.next(); !visible_1_1.done; visible_1_1 = visible_1.next()) {
-                var line = visible_1_1.value;
-                linesMaxWidth = Math.max(linesMaxWidth, measureText(line.text, font, widthCache).width);
-            }
-        }
-        catch (e_1_1) { e_1 = { error: e_1_1 }; }
-        finally {
-            try {
-                if (visible_1_1 && !visible_1_1.done && (_a = visible_1.return)) _a.call(visible_1);
-            }
-            finally { if (e_1) throw e_1.error; }
-        }
-    }
-    return { linesIncludingHidden: wrapped, lines: visible, linesMaxWidth: linesMaxWidth };
-}
-function rotatePointAroundOrigin(point, origin, angle) {
-    if (angle === 0) {
-        return { x: point.x, y: point.y };
-    }
-    var cos = Math.cos(angle);
-    var sin = Math.sin(angle);
-    var dx = point.x - origin.x;
-    var dy = point.y - origin.y;
-    return {
-        x: dx * cos - dy * sin + origin.x,
-        y: dx * sin + dy * cos + origin.y
-    };
-}
-/**
- * Compute the full text-box layout for `data` anchored at `anchor`
- * (media/CSS-px coordinates). Deterministic and context-free: the same
- * input always produces the same geometry for renderer, hit test, caret
- * and selection.
- */
-function computeTextBoxLayout(data, anchor, widthCache) {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
-    var font = textBoxFont(data);
-    var fontSize = fontSizeOf(data);
-    var spacing = lineSpacingOf(data);
-    var linesInfo = computeLinesInfo(data, font, widthCache);
-    // ── _getBoxSize ──────────────────────────────────────────────────────────
-    var leftPadding = getLeftPadding(data);
-    var rightPadding = getRightPadding(data);
-    var verticalPadding = getVerticalPadding(data);
-    var textBoxWidth = Math.round(linesInfo.linesMaxWidth + leftPadding + rightPadding);
-    if (textBoxWidth % 2 !== 0) {
-        textBoxWidth += 1; // TV keeps the auto width even so anchors stay centered.
-    }
-    var textBoxHeight = fontSize * linesInfo.lines.length +
-        spacing * Math.max(0, linesInfo.lines.length - 1) +
-        2 * verticalPadding;
-    var boxWidth = (_a = data.boxWidth) !== null && _a !== void 0 ? _a : textBoxWidth;
-    var boxHeight = (_b = data.boxHeight) !== null && _b !== void 0 ? _b : textBoxHeight;
-    // ── _getBox ──────────────────────────────────────────────────────────────
-    var boxLeft = anchor.x;
-    var boxTop = anchor.y;
-    var vertAlign = (_c = data.vertAlign) !== null && _c !== void 0 ? _c : 'top';
-    var horzAlign = (_d = data.horzAlign) !== null && _d !== void 0 ? _d : 'left';
-    var offsetX = (_e = data.offsetX) !== null && _e !== void 0 ? _e : 0;
-    var offsetY = (_f = data.offsetY) !== null && _f !== void 0 ? _f : 0;
-    switch (vertAlign) {
-        case 'bottom':
-            boxTop -= boxHeight + offsetY;
-            break;
-        case 'middle':
-            boxTop -= boxHeight / 2;
-            break;
-        default:
-            boxTop += offsetY;
-    }
-    switch (horzAlign) {
-        case 'center':
-            boxLeft -= boxWidth / 2;
-            break;
-        case 'right':
-            boxLeft -= boxWidth + offsetX;
-            break;
-        default:
-            boxLeft += offsetX;
-    }
-    // ── _getInternalData ─────────────────────────────────────────────────────
-    var horzTextAlign = (_g = data.horzTextAlign) !== null && _g !== void 0 ? _g : horzAlign;
-    var rtl = data.rtl === true;
-    var textHorizStart = 0;
-    var textAlign = 'start';
-    switch (horzTextAlign) {
-        case 'center': {
-            textAlign = 'center';
-            var availableTextWidth = boxWidth - leftPadding - rightPadding;
-            textHorizStart = leftPadding + availableTextWidth / 2;
-            break;
-        }
-        case 'right': {
-            textAlign = 'end';
-            textHorizStart = boxWidth - rightPadding;
-            if (rtl) {
-                textHorizStart = leftPadding;
-                textAlign = 'start';
-            }
-            break;
-        }
-        default: {
-            textAlign = 'start';
-            textHorizStart = leftPadding;
-            if (rtl) {
-                textHorizStart = boxWidth - rightPadding;
-                textAlign = 'end';
-            }
-        }
-    }
-    // TV paints each line with textBaseline 'middle'; the anchor sits at
-    // textTop + fontSize/2 (+ 0.05*fontSize baseline adjustment at draw time).
-    var textVertStart = verticalPadding + fontSize / 2;
-    var textLeft = boxLeft + leftPadding;
-    var textRight = boxLeft + boxWidth - rightPadding;
-    var textTop = boxTop + verticalPadding;
-    var textBottom = boxTop + boxHeight - verticalPadding;
-    // ── rotation geometry ────────────────────────────────────────────────────
-    var rotationPoint = {
-        x: horzAlign === 'center' ? boxLeft + boxWidth / 2 : (horzAlign === 'right' ? boxLeft + boxWidth : boxLeft),
-        y: vertAlign === 'middle' ? boxTop + boxHeight / 2 : (vertAlign === 'bottom' ? boxTop + boxHeight : boxTop)
-    };
-    var angle = (_h = data.angle) !== null && _h !== void 0 ? _h : 0;
-    var textCenter = rotatePointAroundOrigin({ x: (textLeft + textRight) / 2, y: (textTop + textBottom) / 2 }, rotationPoint, angle);
-    var polygonPoints = [
-        { x: boxLeft, y: boxTop },
-        { x: boxLeft + boxWidth, y: boxTop },
-        { x: boxLeft + boxWidth, y: boxTop + boxHeight },
-        { x: boxLeft, y: boxTop + boxHeight }
-    ].map(function (p) { return rotatePointAroundOrigin(p, rotationPoint, angle); });
-    return {
-        font: font,
-        fontSize: fontSize,
-        lineSpacing: spacing,
-        boxLeft: boxLeft,
-        boxTop: boxTop,
-        boxWidth: boxWidth,
-        boxHeight: boxHeight,
-        textBoxWidth: textBoxWidth,
-        textBoxHeight: textBoxHeight,
-        textLeft: textLeft,
-        textTop: textTop,
-        textRight: textRight,
-        textBottom: textBottom,
-        textHorizStart: textHorizStart,
-        textVertStart: textVertStart,
-        textAlign: textAlign,
-        textBaseline: 'middle',
-        linesInfo: linesInfo,
-        rotationPoint: rotationPoint,
-        centerTextRotation: { x: textCenter.x, y: textCenter.y, angle: angle },
-        polygonPoints: polygonPoints
-    };
-}
-/**
- * Whether the layout output (given the same anchor) can differ — used by
- * figure-cache invalidation. Mirrors TV's geometry-affecting field list.
- */
-function textBoxDataEqual(a, b) {
-    return a.text === b.text &&
-        a.fontSize === b.fontSize &&
-        a.bold === b.bold &&
-        a.italic === b.italic &&
-        a.fontFamily === b.fontFamily &&
-        a.wordWrapWidth === b.wordWrapWidth &&
-        a.maxHeight === b.maxHeight &&
-        a.horzAlign === b.horzAlign &&
-        a.vertAlign === b.vertAlign &&
-        a.horzTextAlign === b.horzTextAlign &&
-        a.offsetX === b.offsetX &&
-        a.offsetY === b.offsetY &&
-        a.angle === b.angle &&
-        a.boxPadding === b.boxPadding &&
-        a.boxPaddingVert === b.boxPaddingVert &&
-        a.boxPaddingHorz === b.boxPaddingHorz &&
-        a.boxPaddingLeft === b.boxPaddingLeft &&
-        a.boxPaddingRight === b.boxPaddingRight &&
-        a.boxWidth === b.boxWidth &&
-        a.boxHeight === b.boxHeight &&
-        a.lineSpacing === b.lineSpacing &&
-        a.rtl === b.rtl;
-}
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 var widthCache = createTextWidthCache();
 /** Layout is pure — memoize per attrs object (figure instances persist). */
 var layoutCache = new WeakMap();
@@ -33444,6 +35116,175 @@ var richText = {
         drawRichText(ctx, attrs, styles);
     }
 };
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+// Per-overlay, per-slot — an overlay wrapping more than one figure callback
+// (createPointFigures + createXAxisFigures + createYAxisFigures) gets an
+// independent entry per slot so the callbacks don't fight over one cache key.
+var cache = new WeakMap();
+/**
+ * Above this count the signature switches to stride sampling — freehand
+ * tools carry thousands of points and an O(N) signature per frame costs
+ * more than the cache saves. The signature keeps length + first + last +
+ * every STRIDE-th point. Mid-stroke vertex edits that fall between
+ * sampled indices are caught by figuresRev instead — every point
+ * mutation path (eventPressedPointMove / eventPressedOtherMove /
+ * eventMoveForDrawing / override({points})) bumps the revision.
+ */
+var COORD_SIG_FULL = 64;
+var COORD_SIG_STRIDE = 32;
+function coordsSignature(coordinates) {
+    var e_1, _a;
+    // Quarter-pixel rounding absorbs sub-pixel jitter from axis math without
+    // masking real moves.
+    var len = coordinates.length;
+    if (len <= COORD_SIG_FULL) {
+        var sig_1 = '';
+        try {
+            for (var coordinates_1 = __values(coordinates), coordinates_1_1 = coordinates_1.next(); !coordinates_1_1.done; coordinates_1_1 = coordinates_1.next()) {
+                var c = coordinates_1_1.value;
+                sig_1 += "".concat(Math.round(c.x * 4), ",").concat(Math.round(c.y * 4), ";");
+            }
+        }
+        catch (e_1_1) { e_1 = { error: e_1_1 }; }
+        finally {
+            try {
+                if (coordinates_1_1 && !coordinates_1_1.done && (_a = coordinates_1.return)) _a.call(coordinates_1);
+            }
+            finally { if (e_1) throw e_1.error; }
+        }
+        return sig_1;
+    }
+    var sig = "".concat(len, "|");
+    for (var i = 0; i < len; i += COORD_SIG_STRIDE) {
+        var c = coordinates[i];
+        sig += "".concat(Math.round(c.x * 4), ",").concat(Math.round(c.y * 4), ";");
+    }
+    var tail = coordinates[len - 1];
+    sig += ">".concat(Math.round(tail.x * 4), ",").concat(Math.round(tail.y * 4));
+    return sig;
+}
+var WRAP_META = new WeakMap();
+/**
+ * CONTRACT: the returned array is SHARED — the view and every subsequent
+ * createFigures call see the same instance until the signature changes.
+ * Templates must treat it as read-only (never push/splice/mutate figure
+ * attrs on the result).
+ */
+function withFigureCache(fn, options) {
+    var wrapped = function (params) {
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r;
+        var dataRev = '';
+        if ((options === null || options === void 0 ? void 0 : options.includeDataRev) === true) {
+            var list = params.chart.getDataList();
+            var first = list[0];
+            var last = list[list.length - 1];
+            // length + window identity + last-bar OHLCV — same-length rewrites
+            // and last-bar updates that don't touch close still invalidate.
+            dataRev = "|d".concat(list.length, ":").concat((_a = first === null || first === void 0 ? void 0 : first.timestamp) !== null && _a !== void 0 ? _a : '', "-").concat((_b = last === null || last === void 0 ? void 0 : last.timestamp) !== null && _b !== void 0 ? _b : '', ":") +
+                "".concat((_c = last === null || last === void 0 ? void 0 : last.open) !== null && _c !== void 0 ? _c : '', ",").concat((_d = last === null || last === void 0 ? void 0 : last.high) !== null && _d !== void 0 ? _d : '', ",").concat((_e = last === null || last === void 0 ? void 0 : last.low) !== null && _e !== void 0 ? _e : '', ",").concat((_f = last === null || last === void 0 ? void 0 : last.close) !== null && _f !== void 0 ? _f : '', ",").concat((_g = last === null || last === void 0 ? void 0 : last.volume) !== null && _g !== void 0 ? _g : '');
+        }
+        // envRev — Store's monotonic environment counter (theme, symbol,
+        // precision, period, formatters, locale, timezone). It lives on the
+        // ChartStore, reached through Chart.getChartStore(); absent on older
+        // kernels → 0, which simply keeps the previous behavior.
+        var envRev = (_m = (_l = (_k = (_j = (_h = params.chart).getChartStore) === null || _j === void 0 ? void 0 : _j.call(_h)) === null || _k === void 0 ? void 0 : _k.getEnvRev) === null || _l === void 0 ? void 0 : _l.call(_k)) !== null && _m !== void 0 ? _m : 0;
+        var signature = coordsSignature(params.coordinates) +
+            "|r".concat(params.overlay.figuresRev) +
+            "|e".concat(envRev) +
+            "|s".concat(params.isSelected === true ? 1 : 0, "h").concat(params.isHovered === true ? 1 : 0) +
+            "|l".concat(params.overlay.lock ? 1 : 0) +
+            "|b".concat(params.bounding.width, "x").concat(params.bounding.height) +
+            "|c".concat(params.overlay.currentStep) +
+            "|t".concat(params.isTouch === true ? 1 : 0) +
+            "|h".concat((_o = params.hoveredFigureKey) !== null && _o !== void 0 ? _o : '') +
+            dataRev +
+            "|k".concat((_q = (_p = options === null || options === void 0 ? void 0 : options.extraKey) === null || _p === void 0 ? void 0 : _p.call(options, params)) !== null && _q !== void 0 ? _q : '');
+        var slotKey = (_r = options === null || options === void 0 ? void 0 : options.slot) !== null && _r !== void 0 ? _r : '';
+        var slots = cache.get(params.overlay);
+        var entry = slots === null || slots === void 0 ? void 0 : slots.get(slotKey);
+        if (entry !== undefined && entry.signature === signature) {
+            return entry.figures;
+        }
+        var result = fn(params);
+        var figures = Array.isArray(result) ? result : [result];
+        if (slots === undefined) {
+            slots = new Map();
+            cache.set(params.overlay, slots);
+        }
+        slots.set(slotKey, { signature: signature, figures: figures });
+        return figures;
+    };
+    WRAP_META.set(wrapped, { base: fn, options: options, viewportCull: false });
+    return wrapped;
+}
+/**
+ * Collapse a self-wrapped callback into a single cache layer owned by the
+ * caller's options — the registry uses this so a tool that applied
+ * withFigureCache/withPerfPipeline itself doesn't pay two signature
+ * computations or suffer stale-through-inner hits. The returned wrapper
+ * keeps the tool's viewport-cull + extraKey and adopts the caller's
+ * slot/includeDataRev.
+ */
+function rewrapFigureCache(fn, options) {
+    var _a, _b, _c;
+    var meta = WRAP_META.get(fn);
+    if (meta === undefined) {
+        return withFigureCache(fn, options);
+    }
+    var inner = meta.viewportCull ? withViewportCull(meta.base, meta.options) : meta.base;
+    return withFigureCache(inner, {
+        includeDataRev: (options === null || options === void 0 ? void 0 : options.includeDataRev) === true || ((_a = meta.options) === null || _a === void 0 ? void 0 : _a.includeDataRev) === true,
+        extraKey: (_c = (_b = meta.options) === null || _b === void 0 ? void 0 : _b.extraKey) !== null && _c !== void 0 ? _c : options === null || options === void 0 ? void 0 : options.extraKey,
+        slot: options === null || options === void 0 ? void 0 : options.slot
+    });
+}
+function boundsOutside(bounds, bounding, margin) {
+    return (bounds.x + bounds.width < -margin ||
+        bounds.x > bounding.width + margin ||
+        bounds.y + bounds.height < -margin ||
+        bounds.y > bounding.height + margin);
+}
+/**
+ * Drop figures that declare `bounds` fully outside the viewport. Figures
+ * without bounds are always kept (opt-in per figure).
+ */
+function withViewportCull(fn, options) {
+    var _a;
+    var margin = (_a = options === null || options === void 0 ? void 0 : options.margin) !== null && _a !== void 0 ? _a : 24;
+    return function (params) {
+        var result = fn(params);
+        var figures = Array.isArray(result) ? result : [result];
+        var bounding = params.bounding;
+        return figures.filter(function (figure) {
+            var bounds = figure.bounds;
+            return bounds === undefined || !boundsOutside(bounds, bounding, margin);
+        });
+    };
+}
+/**
+ * Convenience: cache → cull. The composition order matters — cull is inner
+ * so off-screen figures never enter the cache output.
+ */
+function withPerfPipeline(fn, options) {
+    var wrapped = withFigureCache(withViewportCull(fn, options), options);
+    // Tag with the RAW callback so rewrapFigureCache rebuilds cull+cache in
+    // one layer instead of treating the culled wrapper as the base.
+    WRAP_META.set(wrapped, { base: fn, options: options, viewportCull: true });
+    return wrapped;
+}
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -33620,702 +35461,52 @@ function computeResizeCursor(from, to) {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-function caretOrigin(textAlign, textWidth, rtl) {
-    switch (textAlign) {
-        case 'center': return textWidth / 2;
-        case 'start': return rtl ? textWidth : 0;
-        case 'end': return rtl ? 0 : textWidth;
-        case 'right': return textWidth;
-        default: return 0;
+/**
+ * Shared helpers for the annotations tool group — every tool is text-bearing
+ * (except flagMark), renders through the 'richText' figure, and edits through
+ * the in-place overlay text editor opened on placement + double-click.
+ */
+/**
+ * The floating toolbar and settings dialog write a GENERIC
+ * `styles.text.{color,size,weight,style,align}` namespace, while tools keep
+ * their own flat style bag (`styles.<toolKey>`) and the text tool family
+ * shares `styles.textNote`. This resolver merges all three — tool-specific
+ * keys win over shared, both win over the generic text.* writes — and
+ * translates text.* to the flat names readers actually consume:
+ * size→fontSize, weight→bold, style→italic. `text.style` never lands on a
+ * figure (where it would alias the fill/stroke mode field).
+ */
+function resolvedTextStyles(overlay, styleKey) {
+    var styles = overlay.styles;
+    var generic = styles === null || styles === void 0 ? void 0 : styles.text;
+    var resolved = __assign(__assign({}, styles === null || styles === void 0 ? void 0 : styles.textNote), styles === null || styles === void 0 ? void 0 : styles[styleKey]);
+    if (generic !== undefined) {
+        if (isString(generic.color))
+            resolved.color = generic.color;
+        if (isNumber(generic.size))
+            resolved.fontSize = generic.size;
+        if (generic.weight === 'bold' || generic.weight === 'normal')
+            resolved.bold = generic.weight === 'bold';
+        if (generic.style === 'italic' || generic.style === 'normal')
+            resolved.italic = generic.style === 'italic';
+        if (isString(generic.family))
+            resolved.fontFamily = generic.family;
+        if (isString(generic.backgroundColor))
+            resolved.backgroundColor = generic.backgroundColor;
     }
+    return resolved;
 }
 /**
- * Map a string position through wrapped and hidden line segments to caret
- * coordinates. A caret at a wrap boundary advances to the next visible line.
+ * Horizontal text alignment — extendData.horzTextAlign (per-drawing) wins
+ * over the generic styles.text.align write.
  */
-function getCaretPosition(options) {
-    var symbolPosition = options.symbolPosition, textWidth = options.textWidth, lines = options.lines, lineHeight = options.lineHeight, font = options.font, textAlign = options.textAlign, _a = options.lineSpacing, lineSpacing = _a === void 0 ? 0 : _a, _b = options.rtl, rtl = _b === void 0 ? false : _b, widthCache = options.widthCache;
-    var caretX = caretOrigin(textAlign, textWidth, rtl);
-    var caretY = 0;
-    var lineAdvance = lineHeight + lineSpacing;
-    var consumedSymbols = 0;
-    var lineNumber = 0;
-    var visibleText = '';
-    for (var index = 0; index < lines.length; index++) {
-        var positionInLine = symbolPosition - consumedSymbols;
-        var _c = lines[index], wrappedLinePart = _c.wrappedLinePart, wrappedLineEnd = _c.wrappedLineEnd, hidden = _c.hidden, text = _c.text;
-        var nextLine = index < lines.length - 1 ? lines[index + 1] : null;
-        if (!hidden) {
-            visibleText = text;
-        }
-        if (nextLine !== null && positionInLine > text.length) {
-            consumedSymbols += text.length + (wrappedLinePart && !wrappedLineEnd ? 0 : 1);
-            if (!hidden) {
-                caretY += lineAdvance;
-            }
-            continue;
-        }
-        if (hidden) {
-            caretY -= lineAdvance;
-        }
-        var caretMovesToNextLine = wrappedLinePart &&
-            !wrappedLineEnd &&
-            text.length === positionInLine &&
-            nextLine !== null &&
-            !nextLine.hidden;
-        if (hidden) {
-            visibleText += ' ';
-            positionInLine = visibleText.length;
-        }
-        if (textAlign === 'center') {
-            if (caretMovesToNextLine) {
-                caretX = textWidth / 2;
-            }
-            else {
-                var lineWidth = measureText(visibleText, font, widthCache).width;
-                var prefixWidth = measureText(visibleText.slice(0, positionInLine), font, widthCache).width;
-                var centerX = textWidth / 2;
-                caretX = rtl
-                    ? centerX + lineWidth / 2 - prefixWidth
-                    : centerX - lineWidth / 2 + prefixWidth;
-            }
-        }
-        else if ((textAlign === 'right' && !rtl) ||
-            (textAlign === 'left' && rtl) ||
-            textAlign === 'end') {
-            if (caretMovesToNextLine) {
-                caretX = textWidth;
-            }
-            else {
-                var measuredWidth = measureText(visibleText.slice(positionInLine), font, widthCache).width;
-                caretX = rtl ? measuredWidth : textWidth - measuredWidth;
-            }
-        }
-        else if (caretMovesToNextLine) {
-            caretX = 0;
-        }
-        else {
-            var measuredWidth = measureText(visibleText.slice(0, positionInLine), font, widthCache).width;
-            caretX = rtl ? textWidth - measuredWidth : measuredWidth;
-        }
-        if (caretMovesToNextLine) {
-            lineNumber = index + 1;
-            caretY += lineAdvance;
-        }
-        else {
-            lineNumber = index;
-        }
-        break;
-    }
-    return { x: caretX, y: caretY, lineNumber: lineNumber };
-}
-/**
- * Selection rectangles per visible line — including the space width that an
- * explicit newline contributes at a line end. Same math as drawSelection,
- * returned as data so the editor can render DOM nodes.
- */
-function getSelectionRects(options) {
-    var start = options.start, end = options.end, lines = options.lines, font = options.font, left = options.left, right = options.right, lineHeight = options.lineHeight, _a = options.lineSpacing, lineSpacing = _a === void 0 ? 0 : _a, textAlign = options.textAlign, _b = options.rtl, rtl = _b === void 0 ? false : _b, widthCache = options.widthCache;
-    var lineAdvance = lineHeight + lineSpacing;
-    var centerX = (left + right) / 2;
-    var rects = [];
-    if (start.lineNumber === end.lineNumber) {
-        rects.push({
-            x: Math.min(start.x, end.x),
-            y: start.y,
-            width: Math.abs(start.x - end.x),
-            height: lineAdvance
-        });
-        return rects;
-    }
-    var spaceWidth = measureText(' ', font, widthCache).width;
-    var visibleLineIndex = 0;
-    for (var lineIndex = start.lineNumber; lineIndex <= end.lineNumber; lineIndex++) {
-        var isFirstLine = lineIndex === start.lineNumber;
-        var isLastLine = lineIndex === end.lineNumber;
-        var line = lines[lineIndex];
-        if (lineIndex >= lines.length || line.hidden) {
-            continue;
-        }
-        var lineWidth = measureText(line.text, font, widthCache).width;
-        var selectionLeft = 0;
-        var selectionRight = 0;
-        var rightAligned = false;
-        if (textAlign === 'center') {
-            selectionLeft = isFirstLine ? start.x : (rtl ? centerX + lineWidth / 2 : centerX - lineWidth / 2);
-            selectionRight = isLastLine ? end.x : (rtl ? centerX - lineWidth / 2 : centerX + lineWidth / 2);
-        }
-        else if (textAlign === 'right' ||
-            (rtl && textAlign === 'start') ||
-            (!rtl && textAlign === 'end')) {
-            selectionLeft = isFirstLine ? start.x : right - lineWidth;
-            selectionRight = isLastLine ? end.x : right;
-            rightAligned = true;
-        }
-        else {
-            selectionLeft = isFirstLine ? start.x : left;
-            selectionRight = isLastLine ? end.x : left + lineWidth;
-        }
-        var rangeLeft = Math.min(selectionLeft, selectionRight);
-        var rangeRight = Math.max(selectionLeft, selectionRight);
-        if (!(isLastLine || (line.wrappedLinePart && !line.wrappedLineEnd))) {
-            if (rightAligned) {
-                rangeLeft -= spaceWidth;
-            }
-            else {
-                rangeRight += spaceWidth;
-            }
-        }
-        rects.push({
-            x: rangeLeft,
-            y: start.y + visibleLineIndex * lineAdvance,
-            width: rangeRight - rangeLeft,
-            height: lineAdvance
-        });
-        visibleLineIndex += 1;
-    }
-    return rects;
-}
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-/**
- * Empirical textarea↔canvas letter-spacing compensation (verbatim from
- * TradingView module 488679). Key = `${fontSize}${b}${i}_${normalizedDpr}`.
- * Matching the native textarea's wrapping to the canvas measurement is
- * pixel-sensitive — keep the table exact and DO NOT add fallbacks.
- */
-var LETTER_SPACING_BY_FONT_AND_DPR = new Map([
-    ['10b_2', 0.15], ['10bi_2', 0.15], ['12_3', 0.8],
-    ['12b_2', 0.5], ['12bi_2', 0.45], ['14b_2', 0.65],
-    ['14bi_2', 0.65], ['16_2.5', 0.8], ['16b_2', 0.8],
-    ['16bi_2', 0.75], ['16b_2.5', 0.8], ['16bi_2.5', 0.75],
-    ['16bi_3', 0.65], ['20_2', 1], ['20b_2', 0.8],
-    ['20bi_2', 0.75], ['20bi_3', 0.55], ['20_2.5', 0.25],
-    ['20_3', 0.8], ['24_2.5', 0.95], ['24_3', 0.95],
-    ['28_2', 1.4], ['28_2.5', 1.38], ['28_3', 1.38],
-    ['32_2', 1.6], ['32_2.5', 1.6], ['32_3', 1.6]
-]);
-function normalizedDevicePixelRatio(dpr) {
-    if (dpr <= 2 || dpr >= 3) {
-        return dpr;
-    }
-    return dpr < 2.5 ? 2 : 2.5;
-}
-/**
- * Letter-spacing compensation for the invisible textarea — undefined means
- * the font/dpr combo has no calibrated entry and 'normal' should be used
- * (the original deliberately has no fallback).
- */
-function getEditorLetterSpacing(font, fontSize, dpr) {
-    var boldSuffix = font.includes('bold') ? 'b' : '';
-    var italicSuffix = font.includes('italic') ? 'i' : '';
-    return LETTER_SPACING_BY_FONT_AND_DPR.get("".concat(fontSize).concat(boldSuffix).concat(italicSuffix, "_").concat(normalizedDevicePixelRatio(dpr)));
-}
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-var EDITOR_PADDING = 2;
-/** TradingView MouseEventHandlerDelay.ResetClick. */
-var OPENING_CLICK_GUARD_MS = 500;
-var STYLE_ID = 'sc-text-editor-styles';
-var stylesInjected = false;
-function ensureEditorStyles() {
-    if (stylesInjected || typeof document === 'undefined') {
-        return;
-    }
-    stylesInjected = true;
-    var style = document.createElement('style');
-    style.id = STYLE_ID;
-    // Caret: TV blinks at 1s period (500 off / 500 on) starting 300ms after
-    // open — steps(1) holds each keyframe half the period.
-    style.textContent = "\n@keyframes sc-caret-blink { 0% { opacity: 0 } 50% { opacity: 1 } 100% { opacity: 0 } }\n.sc-text-caret { animation: sc-caret-blink 1s steps(1) 0.3s infinite; }\n.sc-text-sel { position: absolute; pointer-events: none; }\n".trim();
-    document.head.appendChild(style);
-}
-var sharedWidthCache = createTextWidthCache();
-function createTextEditorSession(options) {
-    return new TextEditorSessionImp(options);
-}
-var TextEditorSessionImp = /** @class */ (function () {
-    function TextEditorSessionImp(options) {
-        var _this = this;
-        var _a;
-        this._mountedAt = performance.now();
-        this._closed = false;
-        this._unmounts = [];
-        this._options = options;
-        this._layer = getPaneDomLayer(options.chart, options.paneId);
-        ensureEditorStyles();
-        this._wrapper = createDom('div', {
-            position: 'absolute',
-            margin: '0',
-            boxSizing: 'border-box',
-            pointerEvents: 'none'
-        });
-        this._wrapper.setAttribute('data-name', 'text-editor');
-        this._textarea = createDom('textarea', {
-            // Invisible input device — the chart renders the text.
-            opacity: '0',
-            position: 'absolute',
-            margin: '0',
-            border: '0',
-            outline: '0',
-            padding: "".concat(EDITOR_PADDING, "px"),
-            overflow: 'hidden',
-            resize: 'none',
-            boxSizing: 'border-box',
-            pointerEvents: 'all',
-            background: 'transparent'
-        });
-        this._textarea.value = options.value;
-        if (options.placeholder !== undefined) {
-            this._textarea.placeholder = options.placeholder;
-        }
-        if (options.maxLength !== undefined) {
-            this._textarea.maxLength = options.maxLength;
-        }
-        this._textarea.setAttribute('data-qa-id', 'inplace-text-editor');
-        this._wrapper.appendChild(this._textarea);
-        this._caret = createDom('div', {
-            position: 'absolute',
-            pointerEvents: 'none',
-            width: '2px'
-        });
-        this._caret.classList.add('sc-text-caret');
-        this._wrapper.appendChild(this._caret);
-        this._selHost = createDom('div', { position: 'absolute', pointerEvents: 'none', top: '0', left: '0' });
-        this._wrapper.insertBefore(this._selHost, this._textarea);
-        // 500ms opening-click guard: during the ResetClick window the click that
-        // opened the editor keeps flowing to the chart (TV parity); after that
-        // all gestures inside the editor are contained.
-        var unmountWrapper = (_a = this._layer) === null || _a === void 0 ? void 0 : _a.mount(this._wrapper, {
-            interactive: true,
-            isolate: function () { return performance.now() - _this._mountedAt > OPENING_CLICK_GUARD_MS; }
-        });
-        if (unmountWrapper !== undefined) {
-            this._unmounts.push(unmountWrapper);
-        }
-        this._bindEvents();
-        this._relayout();
-        // Focus after mount so the opening click can't steal it back.
-        this._textarea.focus();
-        this._textarea.setSelectionRange(options.value.length, options.value.length);
-        this._syncCaret();
-    }
-    Object.defineProperty(TextEditorSessionImp.prototype, "value", {
-        get: function () {
-            return this._textarea.value;
-        },
-        enumerable: false,
-        configurable: true
-    });
-    Object.defineProperty(TextEditorSessionImp.prototype, "closed", {
-        get: function () {
-            return this._closed;
-        },
-        enumerable: false,
-        configurable: true
-    });
-    TextEditorSessionImp.prototype._bindEvents = function () {
-        var _this = this;
-        var onChange = function () {
-            _this._emitSelection();
-            _this._relayout();
-            _this._syncCaret();
-        };
-        var onKeyDown = function (e) {
-            // Escape commits (approved TV behavior — never cancels).
-            if (e.key === 'Escape' || (_this._options.forbidLineBreaks === true && e.key === 'Enter')) {
-                e.preventDefault();
-                _this.close('hotkey');
-            }
-        };
-        var onBlur = function () {
-            _this.close('blur');
-        };
-        var onSelect = function () {
-            _this._emitSelection();
-            _this._syncCaret();
-        };
-        var syncSelection = function () {
-            _this._emitSelection();
-            _this._syncCaret();
-        };
-        this._textarea.addEventListener('input', onChange);
-        this._textarea.addEventListener('keydown', onKeyDown);
-        this._textarea.addEventListener('blur', onBlur);
-        this._textarea.addEventListener('select', onSelect);
-        document.addEventListener('mousemove', syncSelection);
-        document.addEventListener('touchmove', syncSelection);
-        this._unmounts.push(function () {
-            document.removeEventListener('mousemove', syncSelection);
-            document.removeEventListener('touchmove', syncSelection);
-        });
-    };
-    TextEditorSessionImp.prototype._emitSelection = function () {
-        var _a, _b;
-        (_b = (_a = this._options).onSelectionChange) === null || _b === void 0 ? void 0 : _b.call(_a, {
-            start: this._textarea.selectionStart,
-            end: this._textarea.selectionEnd
-        });
-    };
-    /** Reposition the wrapper + textarea + caret + selection from layout(). */
-    TextEditorSessionImp.prototype._relayout = function () {
-        var info = this._options.layout(this._textarea.value).info;
-        var textWidth = Math.ceil(info.textRight - info.textLeft) + 1;
-        var textHeight = Math.ceil(info.textBottom - info.textTop);
-        var top = 0;
-        var left = 0;
-        var rotationAngle = 0;
-        if (info.centerRotation === undefined || info.centerRotation.angle === 0) {
-            top = Math.round(info.textTop);
-            left = Math.round(info.textLeft);
-        }
-        else {
-            left = info.centerRotation.x - textWidth / 2;
-            top = info.centerRotation.y - textHeight / 2;
-            rotationAngle = info.centerRotation.angle;
-        }
-        var w = this._wrapper.style;
-        w.left = "".concat(left - EDITOR_PADDING, "px");
-        w.top = "".concat(top - EDITOR_PADDING, "px");
-        w.width = "".concat(textWidth + 2 * EDITOR_PADDING, "px");
-        w.height = "".concat(textHeight + 2 * EDITOR_PADDING, "px");
-        w.transform = rotationAngle !== 0 ? "rotate(".concat(rotationAngle, "rad)") : '';
-        w.transformOrigin = rotationAngle !== 0 ? 'center' : '';
-        var t = this._textarea.style;
-        t.width = '100%';
-        t.height = '100%';
-        t.font = info.font;
-        t.lineHeight = "".concat(info.fontSize + info.lineSpacing, "px");
-        t.textAlign = info.textAlign;
-        t.direction = info.rtl === true ? 'rtl' : 'ltr';
-        var spacing = this._options.wordWrapEnabled === true
-            ? getEditorLetterSpacing(info.font, info.fontSize, window.devicePixelRatio)
-            : undefined;
-        t.letterSpacing = spacing !== undefined ? "".concat(spacing, "px") : 'normal';
-    };
-    /** Update the DOM caret + selection rects from the textarea selection. */
-    TextEditorSessionImp.prototype._syncCaret = function () {
-        var e_1, _a;
-        var _b, _c;
-        if (this._closed) {
-            return;
-        }
-        var value = this._textarea.value;
-        var _d = this._options.layout(value), info = _d.info, lines = _d.lines;
-        var textWidth = Math.ceil(info.textRight - info.textLeft) + 1;
-        var lineHeight = info.fontSize + info.lineSpacing;
-        var start = getCaretPosition({
-            symbolPosition: this._textarea.selectionStart,
-            textWidth: textWidth,
-            lines: lines,
-            font: info.font,
-            lineHeight: info.fontSize,
-            lineSpacing: info.lineSpacing,
-            textAlign: info.textAlign,
-            rtl: info.rtl,
-            widthCache: sharedWidthCache
-        });
-        var end = getCaretPosition({
-            symbolPosition: this._textarea.selectionEnd,
-            textWidth: textWidth,
-            lines: lines,
-            font: info.font,
-            lineHeight: info.fontSize,
-            lineSpacing: info.lineSpacing,
-            textAlign: info.textAlign,
-            rtl: info.rtl,
-            widthCache: sharedWidthCache
-        });
-        // Selection highlights — DOM rects, zero canvas cost.
-        this._selHost.innerHTML = '';
-        if (this._textarea.selectionStart !== this._textarea.selectionEnd) {
-            var rects = getSelectionRects({
-                start: start,
-                end: end,
-                lines: lines,
-                font: info.font,
-                left: 0,
-                right: textWidth,
-                lineHeight: info.fontSize,
-                lineSpacing: info.lineSpacing,
-                textAlign: info.textAlign,
-                rtl: info.rtl,
-                widthCache: sharedWidthCache
-            });
-            try {
-                for (var rects_1 = __values(rects), rects_1_1 = rects_1.next(); !rects_1_1.done; rects_1_1 = rects_1.next()) {
-                    var r = rects_1_1.value;
-                    var node = createDom('div', {
-                        position: 'absolute',
-                        left: "".concat(r.x + EDITOR_PADDING, "px"),
-                        top: "".concat(r.y + EDITOR_PADDING, "px"),
-                        width: "".concat(r.width, "px"),
-                        height: "".concat(r.height, "px"),
-                        background: (_b = this._options.selectionColor) !== null && _b !== void 0 ? _b : 'rgba(41, 98, 255, 0.4)'
-                    });
-                    node.classList.add('sc-text-sel');
-                    this._selHost.appendChild(node);
-                }
-            }
-            catch (e_1_1) { e_1 = { error: e_1_1 }; }
-            finally {
-                try {
-                    if (rects_1_1 && !rects_1_1.done && (_a = rects_1.return)) _a.call(rects_1);
-                }
-                finally { if (e_1) throw e_1.error; }
-            }
-            this._caret.style.display = 'none';
-        }
-        else {
-            // Caret position is relative to the text box inside the wrapper's padding.
-            this._caret.style.display = '';
-            this._caret.style.left = "".concat(start.x + EDITOR_PADDING, "px");
-            this._caret.style.top = "".concat(start.y + EDITOR_PADDING, "px");
-            this._caret.style.height = "".concat(lineHeight, "px");
-            var dpr = window.devicePixelRatio;
-            this._caret.style.width = "".concat(Math.max(2 * Math.floor(dpr), 2) / dpr, "px");
-            this._caret.style.background = (_c = this._options.caretColor) !== null && _c !== void 0 ? _c : '#1e222d';
-        }
-    };
-    /** End the session — commits finalValue exactly once. */
-    TextEditorSessionImp.prototype.close = function (reason) {
-        if (reason === void 0) { reason = 'external'; }
-        if (this._closed) {
-            return;
-        }
-        this._closed = true;
-        var finalValue = this._textarea.value;
-        this._unmounts.forEach(function (unmount) {
-            unmount();
-        });
-        this._unmounts = [];
-        this._options.onClose(reason, finalValue);
-    };
-    return TextEditorSessionImp;
-}());
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-function openOverlayTextEditor(options) {
-    var _a, _b;
-    var chart = options.chart, overlay = options.overlay;
-    var paneId = (_a = options.paneId) !== null && _a !== void 0 ? _a : overlay.paneId;
-    var anchor = (_b = options.anchor) !== null && _b !== void 0 ? _b : (function () {
-        var _a, _b, _c;
-        var coordinate = chart.convertToPixel((_a = overlay.points[0]) !== null && _a !== void 0 ? _a : {}, { paneId: paneId });
-        return { x: (_b = coordinate.x) !== null && _b !== void 0 ? _b : 0, y: (_c = coordinate.y) !== null && _c !== void 0 ? _c : 0 };
-    });
-    return createTextEditorSession({
-        chart: chart,
-        paneId: paneId,
-        value: options.data().text,
-        maxLength: options.maxLength,
-        forbidLineBreaks: options.forbidLineBreaks,
-        wordWrapEnabled: options.wordWrapEnabled,
-        selectionColor: options.selectionColor,
-        caretColor: options.caretColor,
-        layout: function (value) {
-            var box = computeTextBoxLayout(__assign(__assign({}, options.data()), { text: value }), anchor());
-            return {
-                info: {
-                    font: box.font,
-                    fontSize: box.fontSize,
-                    textLeft: box.textLeft,
-                    textTop: box.textTop,
-                    textRight: box.textRight,
-                    textBottom: box.textBottom,
-                    textAlign: box.textAlign,
-                    lineSpacing: box.lineSpacing,
-                    centerRotation: box.centerTextRotation,
-                    rtl: options.data().rtl
-                },
-                lines: box.linesInfo.linesIncludingHidden
-            };
-        },
-        onClose: function (_reason, finalValue) {
-            if (finalValue.trim().length === 0) {
-                if (options.onEmpty !== undefined) {
-                    options.onEmpty();
-                }
-                else {
-                    chart.removeOverlay({ id: overlay.id, paneId: paneId });
-                }
-            }
-            else {
-                options.onCommit(finalValue);
-            }
-        }
-    });
-}
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-function getBoxData$8(overlay) {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
-    // extendData may be absent at runtime when the overlay was created
-    // without a payload — treat as empty rather than crash the figure path.
-    var extendData = (_a = overlay.extendData) !== null && _a !== void 0 ? _a : {};
-    var styles = ((_d = (_c = (_b = overlay.styles) === null || _b === void 0 ? void 0 : _b.textNote) !== null && _c !== void 0 ? _c : overlay.styles) !== null && _d !== void 0 ? _d : {});
-    return {
-        text: (_e = extendData.text) !== null && _e !== void 0 ? _e : '',
-        fontSize: (_f = styles.fontSize) !== null && _f !== void 0 ? _f : 12,
-        bold: styles.bold,
-        italic: styles.italic,
-        fontFamily: styles.fontFamily,
-        wordWrapWidth: extendData.wordWrapWidth,
-        maxHeight: extendData.maxHeight,
-        horzAlign: (_g = extendData.horzAlign) !== null && _g !== void 0 ? _g : 'left',
-        vertAlign: (_h = extendData.vertAlign) !== null && _h !== void 0 ? _h : 'top',
-        horzTextAlign: extendData.horzTextAlign,
-        angle: extendData.angle,
-        boxWidth: extendData.boxWidth,
-        boxHeight: extendData.boxHeight,
-        boxPadding: styles.boxPadding,
-        boxPaddingVert: styles.boxPaddingVert,
-        boxPaddingHorz: styles.boxPaddingHorz,
-        lineSpacing: styles.lineSpacing,
-        rtl: extendData.rtl
-    };
-}
-function getFigureStyle(overlay) {
+function resolvedHorzTextAlign(overlay, fallback) {
     var _a, _b, _c;
-    var styles = ((_c = (_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a.textNote) !== null && _b !== void 0 ? _b : overlay.styles) !== null && _c !== void 0 ? _c : {});
-    return {
-        color: styles.color,
-        backgroundColor: styles.backgroundColor,
-        borderColor: styles.borderColor,
-        borderWidth: styles.borderWidth,
-        backgroundRoundRect: styles.backgroundRoundRect,
-        boxShadow: styles.boxShadow,
-        outlineBorder: styles.outlineBorder
-    };
+    var ed = (_a = overlay.extendData) === null || _a === void 0 ? void 0 : _a.horzTextAlign;
+    var generic = (_c = (_b = overlay.styles) === null || _b === void 0 ? void 0 : _b.text) === null || _c === void 0 ? void 0 : _c.align;
+    var v = ed !== null && ed !== void 0 ? ed : generic;
+    return v === 'left' || v === 'center' || v === 'right' ? v : fallback;
 }
-function openEditor$8(chart, overlay) {
-    // Mirror/ghost/locked overlays never open an editor — editing happens on
-    // the owning chart and propagates through the sync layer.
-    if (overlay.ghost || overlay.synced || overlay.lock) {
-        return;
-    }
-    var wordWrapEnabled = getBoxData$8(overlay).wordWrapWidth !== undefined;
-    openOverlayTextEditor({
-        chart: chart,
-        overlay: overlay,
-        data: function () { return getBoxData$8(overlay); },
-        wordWrapEnabled: wordWrapEnabled,
-        forbidLineBreaks: !wordWrapEnabled,
-        onCommit: function (value) {
-            chart.overrideOverlay({
-                id: overlay.id,
-                paneId: overlay.paneId,
-                extendData: __assign(__assign({}, overlay.extendData), { text: value })
-            });
-        }
-    });
-}
-var textNote = {
-    name: 'text',
-    totalStep: 2,
-    needDefaultPointFigure: false,
-    needDefaultXAxisFigure: false,
-    needDefaultYAxisFigure: false,
-    createPointFigures: function (_a) {
-        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered;
-        if (coordinates.length === 0) {
-            return [];
-        }
-        var data = getBoxData$8(overlay);
-        var attrs = __assign({ x: coordinates[0].x, y: coordinates[0].y }, data);
-        var figures = [
-            {
-                key: 'textBox',
-                type: 'richText',
-                attrs: attrs,
-                styles: getFigureStyle(overlay)
-            }
-        ];
-        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
-            coordinates: coordinates,
-            isSelected: isSelected,
-            isHovered: isHovered,
-            isDrawing: overlay.isDrawing(),
-            lock: overlay.lock,
-            keyPrefix: 'anchor_'
-        })), false));
-        return figures;
-    },
-    onDrawEnd: function (_a) {
-        var overlay = _a.overlay, chart = _a.chart;
-        // Placing a text tool drops straight into editing (TV parity) — but
-        // only for locally drawn, completed overlays.
-        if (!overlay.isDrawing()) {
-            openEditor$8(chart, overlay);
-        }
-    },
-    onDoubleClick: function (_a) {
-        var overlay = _a.overlay, chart = _a.chart;
-        openEditor$8(chart, overlay);
-    }
-};
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 /**
  * TextBoxData populated from the shared style fields + a text payload —
  * the per-tool callers add their own alignment/geometry fields.
@@ -34361,7 +35552,9 @@ function commitText(chart, overlay, value, patch) {
     chart.overrideOverlay({
         id: overlay.id,
         paneId: overlay.paneId,
-        extendData: __assign(__assign(__assign({}, overlay.extendData), patch), { text: value })
+        // Legacy payloads arrive as raw strings/functions — spreading a string
+        // would write char-index keys ({'0':'h','1':'i',...}) into extendData.
+        extendData: __assign(__assign(__assign({}, (isObject(overlay.extendData) ? overlay.extendData : {})), patch), { text: value })
     });
 }
 /**
@@ -34381,6 +35574,7 @@ function openAnnotationEditor(options) {
         anchor: options.anchor,
         wordWrapEnabled: options.wordWrapEnabled,
         forbidLineBreaks: options.forbidLineBreaks,
+        allowTab: options.allowTab,
         onCommit: options.onCommit,
         onEmpty: options.onEmpty
     });
@@ -34418,31 +35612,150 @@ function textEditorHooks(open) {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var STYLE_KEY$7 = 'anchoredNote';
+function getBoxData$9(overlay) {
+    var _a, _b, _c, _d, _e, _f, _g;
+    // extendData may be absent at runtime when the overlay was created
+    // without a payload — treat as empty rather than crash the figure path.
+    var extendData = (_a = overlay.extendData) !== null && _a !== void 0 ? _a : {};
+    var styles = resolvedTextStyles(overlay, 'textNote');
+    return {
+        text: (_c = (_b = liveTextOf(overlay)) !== null && _b !== void 0 ? _b : extendData.text) !== null && _c !== void 0 ? _c : '',
+        fontSize: (_d = styles.fontSize) !== null && _d !== void 0 ? _d : 12,
+        bold: styles.bold,
+        italic: styles.italic,
+        fontFamily: styles.fontFamily,
+        wordWrapWidth: extendData.wordWrapWidth,
+        maxHeight: extendData.maxHeight,
+        horzAlign: (_e = extendData.horzAlign) !== null && _e !== void 0 ? _e : 'left',
+        vertAlign: (_f = extendData.vertAlign) !== null && _f !== void 0 ? _f : 'top',
+        horzTextAlign: resolvedHorzTextAlign(overlay, (_g = extendData.horzTextAlign) !== null && _g !== void 0 ? _g : 'left'),
+        angle: extendData.angle,
+        boxWidth: extendData.boxWidth,
+        boxHeight: extendData.boxHeight,
+        boxPadding: styles.boxPadding,
+        boxPaddingVert: styles.boxPaddingVert,
+        boxPaddingHorz: styles.boxPaddingHorz,
+        lineSpacing: styles.lineSpacing,
+        rtl: extendData.rtl
+    };
+}
+function getFigureStyle(overlay) {
+    var styles = resolvedTextStyles(overlay, 'textNote');
+    return {
+        color: styles.color,
+        backgroundColor: styles.backgroundColor,
+        borderColor: styles.borderColor,
+        borderWidth: styles.borderWidth,
+        backgroundRoundRect: styles.backgroundRoundRect,
+        boxShadow: styles.boxShadow,
+        outlineBorder: styles.outlineBorder
+    };
+}
+function openEditor$9(chart, overlay) {
+    // Mirror/ghost/locked overlays never open an editor — editing happens on
+    // the owning chart and propagates through the sync layer.
+    if (overlay.ghost || overlay.synced || overlay.lock) {
+        return;
+    }
+    var wordWrapEnabled = getBoxData$9(overlay).wordWrapWidth !== undefined;
+    openOverlayTextEditor({
+        chart: chart,
+        overlay: overlay,
+        data: function () { return getBoxData$9(overlay); },
+        wordWrapEnabled: wordWrapEnabled,
+        forbidLineBreaks: !wordWrapEnabled,
+        onCommit: function (value) {
+            chart.overrideOverlay({
+                id: overlay.id,
+                paneId: overlay.paneId,
+                extendData: __assign(__assign({}, overlay.extendData), { text: value })
+            });
+        }
+    });
+}
+var textNote = {
+    name: 'text',
+    totalStep: 2,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    createPointFigures: function (_a) {
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
+        if (coordinates.length === 0) {
+            return [];
+        }
+        var data = getBoxData$9(overlay);
+        var attrs = __assign({ x: coordinates[0].x, y: coordinates[0].y }, data);
+        var figures = [
+            {
+                key: 'textBox',
+                type: 'richText',
+                attrs: attrs,
+                styles: getFigureStyle(overlay)
+            }
+        ];
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isTouch: isTouch,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_'
+        })), false));
+        return figures;
+    },
+    onDrawEnd: function (_a) {
+        var overlay = _a.overlay, chart = _a.chart;
+        // Placing a text tool drops straight into editing (TV parity) — but
+        // only for locally drawn, completed overlays.
+        if (!overlay.isDrawing()) {
+            openEditor$9(chart, overlay);
+        }
+    },
+    onDoubleClick: function (_a) {
+        var overlay = _a.overlay, chart = _a.chart;
+        openEditor$9(chart, overlay);
+    }
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var STYLE_KEY$8 = 'anchoredNote';
 var DEFAULT_STEM_GAP = 10;
 var DEFAULT_MARKER_RADIUS = 3;
-function getNoteStyles$1(overlay) {
-    var _a, _b;
-    return ((_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a[STYLE_KEY$7]) !== null && _b !== void 0 ? _b : {});
+function getNoteStyles$2(overlay) {
+    return resolvedTextStyles(overlay, STYLE_KEY$8);
 }
-function getText$4(overlay) {
-    var _a;
+function getText$5(overlay) {
+    var _a, _b;
     var extendData = overlay.extendData;
     if (isString(extendData)) {
         return extendData;
     }
-    return (_a = extendData === null || extendData === void 0 ? void 0 : extendData.text) !== null && _a !== void 0 ? _a : '';
+    return (_b = (_a = liveTextOf(overlay)) !== null && _a !== void 0 ? _a : extendData === null || extendData === void 0 ? void 0 : extendData.text) !== null && _b !== void 0 ? _b : '';
 }
-function getBoxData$7(overlay) {
+function getBoxData$8(overlay) {
     var _a;
-    var styles = getNoteStyles$1(overlay);
-    return __assign(__assign({}, baseTextBoxData(getText$4(overlay), styles)), { horzAlign: 'center', vertAlign: 'bottom', horzTextAlign: 'center', offsetY: (_a = styles.stemGap) !== null && _a !== void 0 ? _a : DEFAULT_STEM_GAP });
+    var styles = getNoteStyles$2(overlay);
+    return __assign(__assign({}, baseTextBoxData(getText$5(overlay), styles)), { horzAlign: 'center', vertAlign: 'bottom', horzTextAlign: resolvedHorzTextAlign(overlay, 'center'), offsetY: (_a = styles.stemGap) !== null && _a !== void 0 ? _a : DEFAULT_STEM_GAP });
 }
-function openEditor$7(chart, overlay) {
+function openEditor$8(chart, overlay) {
     openAnnotationEditor({
         chart: chart,
         overlay: overlay,
-        data: function () { return getBoxData$7(overlay); },
+        data: function () { return getBoxData$8(overlay); },
         anchor: function () { var _a; return pointToCoordinate$3(chart, overlay.paneId, (_a = overlay.points[0]) !== null && _a !== void 0 ? _a : {}); },
         forbidLineBreaks: true,
         onCommit: function (value) {
@@ -34466,13 +35779,13 @@ var anchoredNote = __assign({ name: 'anchoredNote', totalStep: 2, needDefaultPoi
         }
     }, createPointFigures: function (_a) {
         var _b, _c;
-        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         if (coordinates.length === 0) {
             return [];
         }
         var point = coordinates[0];
-        var styles = getNoteStyles$1(overlay);
-        var data = getBoxData$7(overlay);
+        var styles = getNoteStyles$2(overlay);
+        var data = getBoxData$8(overlay);
         var attrs = __assign({ x: point.x, y: point.y }, data);
         var layout = getRichTextLayout(attrs);
         var markerColor = (_b = styles.markerColor) !== null && _b !== void 0 ? _b : styles.backgroundColor;
@@ -34517,12 +35830,13 @@ var anchoredNote = __assign({ name: 'anchoredNote', totalStep: 2, needDefaultPoi
             coordinates: coordinates,
             isSelected: isSelected,
             isHovered: isHovered,
+            isTouch: isTouch,
             isDrawing: overlay.isDrawing(),
             lock: overlay.lock,
             keyPrefix: 'anchor_'
         })), false));
         return figures;
-    } }, textEditorHooks(openEditor$7));
+    } }, textEditorHooks(openEditor$8));
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -34538,16 +35852,15 @@ var anchoredNote = __assign({ name: 'anchoredNote', totalStep: 2, needDefaultPoi
  * limitations under the License.
  */
 function getStyles(overlay) {
-    var _a, _b, _c, _d, _e;
-    // anchoredText shares the text tool's style shape; fall back to the
-    // legacy 'textNote' key so overlays styled for 'text' render identically.
-    return ((_e = (_d = (_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a.anchoredText) !== null && _b !== void 0 ? _b : (_c = overlay.styles) === null || _c === void 0 ? void 0 : _c.textNote) !== null && _d !== void 0 ? _d : overlay.styles) !== null && _e !== void 0 ? _e : {});
+    // anchoredText shares the text tool's style shape; resolvedTextStyles
+    // merges styles.textNote + styles.anchoredText + the generic text.* writes.
+    return resolvedTextStyles(overlay, 'anchoredText');
 }
-function getBoxData$6(overlay) {
-    var _a, _b, _c;
+function getBoxData$7(overlay) {
+    var _a, _b, _c, _d;
     var extendData = (_a = overlay.extendData) !== null && _a !== void 0 ? _a : {};
     var styles = getStyles(overlay);
-    return __assign(__assign({}, baseTextBoxData(extendData.text, styles)), { wordWrapWidth: extendData.wordWrapWidth, maxHeight: extendData.maxHeight, horzAlign: (_b = extendData.horzAlign) !== null && _b !== void 0 ? _b : 'left', vertAlign: (_c = extendData.vertAlign) !== null && _c !== void 0 ? _c : 'top', horzTextAlign: extendData.horzTextAlign, angle: extendData.angle, boxWidth: extendData.boxWidth, boxHeight: extendData.boxHeight, rtl: extendData.rtl });
+    return __assign(__assign({}, baseTextBoxData((_b = liveTextOf(overlay)) !== null && _b !== void 0 ? _b : extendData.text, styles)), { wordWrapWidth: extendData.wordWrapWidth, maxHeight: extendData.maxHeight, horzAlign: (_c = extendData.horzAlign) !== null && _c !== void 0 ? _c : 'left', vertAlign: (_d = extendData.vertAlign) !== null && _d !== void 0 ? _d : 'top', horzTextAlign: resolvedHorzTextAlign(overlay, 'left'), angle: extendData.angle, boxWidth: extendData.boxWidth, boxHeight: extendData.boxHeight, rtl: extendData.rtl });
 }
 function clamp01(value) {
     return Math.max(0, Math.min(1, value));
@@ -34558,10 +35871,12 @@ function pointSnapshotEquals(point, data) {
         point.value === data.anchorValue;
 }
 /**
- * Resolve the box origin in pane pixels. Side effect: when the data point
- * moved since the last capture (a user drag) the fraction + snapshot are
- * rewritten in place so the box follows the cursor — invalidateFigures()
- * marks the figure cache dirty for the next pass.
+ * Resolve the box origin in WIDGET-LOCAL pixels — figure coordinates are
+ * 0-based inside the main-widget canvas, so the stored fraction applies
+ * to bounding.width/height directly (bounding.left/top are the widget's
+ * pane-space offset and do NOT belong in canvas math). When the data
+ * point moved since the last capture (a drag in flight) the box follows
+ * the live coordinate; onPressedMoveEnd re-captures the fraction.
  */
 function resolveScreenPosition(overlay, coordinate, bounding) {
     var _a, _b, _c, _d;
@@ -34570,33 +35885,47 @@ function resolveScreenPosition(overlay, coordinate, bounding) {
     var haveFraction = data.anchorXPercent !== undefined && data.anchorYPercent !== undefined;
     if (haveFraction && pointSnapshotEquals(point, data)) {
         return {
-            x: bounding.left + bounding.width * ((_c = data.anchorXPercent) !== null && _c !== void 0 ? _c : 0),
-            y: bounding.top + bounding.height * ((_d = data.anchorYPercent) !== null && _d !== void 0 ? _d : 0)
+            x: bounding.width * ((_c = data.anchorXPercent) !== null && _c !== void 0 ? _c : 0),
+            y: bounding.height * ((_d = data.anchorYPercent) !== null && _d !== void 0 ? _d : 0)
         };
     }
-    var xPercent = bounding.width > 0 ? clamp01((coordinate.x - bounding.left) / bounding.width) : 0.5;
-    var yPercent = bounding.height > 0 ? clamp01((coordinate.y - bounding.top) / bounding.height) : 0.5;
-    if (!isValid(overlay.extendData)) {
-        overlay.extendData = { anchored: true };
-    }
-    var extendData = overlay.extendData;
-    extendData.anchorXPercent = xPercent;
-    extendData.anchorYPercent = yPercent;
-    extendData.anchorTimestamp = point.timestamp;
-    extendData.anchorDataIndex = point.dataIndex;
-    extendData.anchorValue = point.value;
-    overlay.invalidateFigures();
     return { x: coordinate.x, y: coordinate.y };
 }
-function openEditor$6(chart, overlay) {
-    var data = getBoxData$6(overlay);
+/**
+ * Persist the screen fraction + point snapshot through overrideOverlay —
+ * this is what actually lands in serialization (in-place extendData
+ * writes inside the figure callback never reach persistence). Called on
+ * drawEnd and whenever a point/body drag ends.
+ */
+function captureScreenFraction(chart, overlay) {
+    var _a, _b, _c;
+    var size = chart.getSize(overlay.paneId, 'main');
+    if (size === null || size.width <= 0 || size.height <= 0) {
+        return;
+    }
+    var point = (_a = overlay.points[0]) !== null && _a !== void 0 ? _a : {};
+    var coordinate = chart.convertToPixel(point, { paneId: overlay.paneId });
+    var ext = isValid(overlay.extendData) && typeof overlay.extendData === 'object'
+        ? __assign({}, overlay.extendData) : {};
+    ext.anchored = true;
+    ext.anchorXPercent = clamp01(((_b = coordinate.x) !== null && _b !== void 0 ? _b : 0) / size.width);
+    ext.anchorYPercent = clamp01(((_c = coordinate.y) !== null && _c !== void 0 ? _c : 0) / size.height);
+    ext.anchorTimestamp = point.timestamp;
+    ext.anchorDataIndex = point.dataIndex;
+    ext.anchorValue = point.value;
+    chart.overrideOverlay({ id: overlay.id, paneId: overlay.paneId, extendData: ext });
+}
+function openEditor$7(chart, overlay) {
+    var data = getBoxData$7(overlay);
     var wordWrapEnabled = data.wordWrapWidth !== undefined;
     openAnnotationEditor({
         chart: chart,
         overlay: overlay,
-        data: function () { return getBoxData$6(overlay); },
+        data: function () { return getBoxData$7(overlay); },
         // The editor must cover the RENDERED box (screen-fraction position),
-        // not the data point — they diverge once the chart scrolls.
+        // not the data point — they diverge once the chart scrolls. The DOM
+        // layer lives inside the main-widget host, so fractions apply to the
+        // widget size directly (no left/top offset).
         anchor: function () {
             var _a, _b, _c, _d;
             var size = chart.getSize(overlay.paneId, 'main');
@@ -34605,8 +35934,8 @@ function openEditor$6(chart, overlay) {
                 extendData.anchorXPercent !== undefined &&
                 extendData.anchorYPercent !== undefined) {
                 return {
-                    x: size.left + size.width * extendData.anchorXPercent,
-                    y: size.top + size.height * extendData.anchorYPercent
+                    x: size.width * extendData.anchorXPercent,
+                    y: size.height * extendData.anchorYPercent
                 };
             }
             var coordinate = chart.convertToPixel((_b = overlay.points[0]) !== null && _b !== void 0 ? _b : {}, { paneId: overlay.paneId });
@@ -34619,13 +35948,20 @@ function openEditor$6(chart, overlay) {
         }
     });
 }
-var anchoredText = __assign({ name: 'anchoredText', totalStep: 2, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, createPointFigures: function (_a) {
-        var overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected, isHovered = _a.isHovered;
+var anchoredText = {
+    name: 'anchoredText',
+    totalStep: 2,
+    cullable: false,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    createPointFigures: function (_a) {
+        var overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         if (coordinates.length === 0) {
             return [];
         }
         var position = resolveScreenPosition(overlay, coordinates[0], bounding);
-        var data = getBoxData$6(overlay);
+        var data = getBoxData$7(overlay);
         var attrs = __assign({ x: position.x, y: position.y }, data);
         var layout = getRichTextLayout(attrs);
         var figures = [
@@ -34642,16 +35978,18 @@ var anchoredText = __assign({ name: 'anchoredText', totalStep: 2, needDefaultPoi
                 }
             }
         ];
-        // The draggable handle sits on the RENDERED box (bottom-center), not on
-        // the raw data coordinate — scrolling leaves the data point behind.
+        // The draggable handle sits on the rendered box at its ORIGIN (top-left)
+        // — point writes map cursor → box origin, so a handle anywhere else
+        // would teleport the box by the handle↔origin offset on the first move.
         var handle = {
-            x: layout.boxLeft + layout.boxWidth / 2,
-            y: layout.boxTop + layout.boxHeight
+            x: layout.boxLeft,
+            y: layout.boxTop
         };
         figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
             coordinates: [handle],
             isSelected: isSelected,
             isHovered: isHovered,
+            isTouch: isTouch,
             isDrawing: overlay.isDrawing(),
             lock: overlay.lock,
             shape: 'circle',
@@ -34659,7 +35997,16 @@ var anchoredText = __assign({ name: 'anchoredText', totalStep: 2, needDefaultPoi
             keyPrefix: 'anchor_'
         })), false));
         return figures;
-    } }, textEditorHooks(openEditor$6));
+    },
+    onDrawEnd: function (e) {
+        captureScreenFraction(e.chart, e.overlay);
+        textEditorHooks(openEditor$7).onDrawEnd(e);
+    },
+    onDoubleClick: textEditorHooks(openEditor$7).onDoubleClick,
+    onPressedMoveEnd: function (e) {
+        captureScreenFraction(e.chart, e.overlay);
+    }
+};
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -34674,34 +36021,33 @@ var anchoredText = __assign({ name: 'anchoredText', totalStep: 2, needDefaultPoi
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var STYLE_KEY$6 = 'callout';
+var STYLE_KEY$7 = 'callout';
 var TARGET_DOT_RADIUS = 3;
 var ARROW_ANGLE = Math.PI / 6;
 function getCalloutStyles(overlay) {
-    var _a, _b;
-    return ((_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a[STYLE_KEY$6]) !== null && _b !== void 0 ? _b : {});
+    return resolvedTextStyles(overlay, STYLE_KEY$7);
 }
-function getText$3(overlay) {
-    var _a;
+function getText$4(overlay) {
+    var _a, _b;
     var extendData = overlay.extendData;
     if (isString(extendData)) {
         return extendData;
     }
-    return (_a = extendData === null || extendData === void 0 ? void 0 : extendData.text) !== null && _a !== void 0 ? _a : '';
+    return (_b = (_a = liveTextOf(overlay)) !== null && _a !== void 0 ? _a : extendData === null || extendData === void 0 ? void 0 : extendData.text) !== null && _b !== void 0 ? _b : '';
 }
-function getBoxData$5(overlay) {
+function getBoxData$6(overlay) {
     var _a;
     var extendData = (_a = overlay.extendData) !== null && _a !== void 0 ? _a : {};
     var styles = getCalloutStyles(overlay);
-    return __assign(__assign({}, baseTextBoxData(getText$3(overlay), styles)), { wordWrapWidth: extendData.wordWrapWidth, horzAlign: 'center', vertAlign: 'middle', horzTextAlign: 'center' });
+    return __assign(__assign({}, baseTextBoxData(getText$4(overlay), styles)), { wordWrapWidth: extendData.wordWrapWidth, horzAlign: 'center', vertAlign: 'middle', horzTextAlign: resolvedHorzTextAlign(overlay, 'center') });
 }
-function openEditor$5(chart, overlay) {
-    var data = getBoxData$5(overlay);
+function openEditor$6(chart, overlay) {
+    var data = getBoxData$6(overlay);
     var wordWrapEnabled = data.wordWrapWidth !== undefined;
     openAnnotationEditor({
         chart: chart,
         overlay: overlay,
-        data: function () { return getBoxData$5(overlay); },
+        data: function () { return getBoxData$6(overlay); },
         // The box lives at point 1 — the editor must anchor there, not point 0.
         anchor: function () { var _a; return pointToCoordinate$3(chart, overlay.paneId, (_a = overlay.points[1]) !== null && _a !== void 0 ? _a : {}); },
         wordWrapEnabled: wordWrapEnabled,
@@ -34727,12 +36073,12 @@ var callout = __assign({ name: 'callout', totalStep: 3, needDefaultPointFigure: 
         }
     }, createPointFigures: function (_a) {
         var _b, _c, _d;
-        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         if (coordinates.length === 0) {
             return [];
         }
         var styles = getCalloutStyles(overlay);
-        var data = getBoxData$5(overlay);
+        var data = getBoxData$6(overlay);
         var connectorColor = (_b = styles.connectorColor) !== null && _b !== void 0 ? _b : styles.borderColor;
         var connectorWidth = (_c = styles.connectorWidth) !== null && _c !== void 0 ? _c : 2;
         var arrowSize = (_d = styles.arrowSize) !== null && _d !== void 0 ? _d : 8;
@@ -34818,12 +36164,13 @@ var callout = __assign({ name: 'callout', totalStep: 3, needDefaultPointFigure: 
             coordinates: coordinates,
             isSelected: isSelected,
             isHovered: isHovered,
+            isTouch: isTouch,
             isDrawing: overlay.isDrawing(),
             lock: overlay.lock,
             keyPrefix: 'anchor_'
         })), false));
         return figures;
-    } }, textEditorHooks(openEditor$5));
+    } }, textEditorHooks(openEditor$6));
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -34838,31 +36185,30 @@ var callout = __assign({ name: 'callout', totalStep: 3, needDefaultPointFigure: 
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var STYLE_KEY$5 = 'comment';
+var STYLE_KEY$6 = 'comment';
 var DEFAULT_TAIL_HEIGHT = 10;
 var DEFAULT_TAIL_WIDTH = 6;
 function getCommentStyles(overlay) {
-    var _a, _b;
-    return ((_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a[STYLE_KEY$5]) !== null && _b !== void 0 ? _b : {});
+    return resolvedTextStyles(overlay, STYLE_KEY$6);
 }
-function getText$2(overlay) {
-    var _a;
+function getText$3(overlay) {
+    var _a, _b;
     var extendData = overlay.extendData;
     if (isString(extendData)) {
         return extendData;
     }
-    return (_a = extendData === null || extendData === void 0 ? void 0 : extendData.text) !== null && _a !== void 0 ? _a : '';
+    return (_b = (_a = liveTextOf(overlay)) !== null && _a !== void 0 ? _a : extendData === null || extendData === void 0 ? void 0 : extendData.text) !== null && _b !== void 0 ? _b : '';
 }
-function getBoxData$4(overlay) {
+function getBoxData$5(overlay) {
     var _a;
     var styles = getCommentStyles(overlay);
-    return __assign(__assign({}, baseTextBoxData(getText$2(overlay), styles)), { horzAlign: 'center', vertAlign: 'bottom', horzTextAlign: 'center', offsetY: (_a = styles.tailHeight) !== null && _a !== void 0 ? _a : DEFAULT_TAIL_HEIGHT });
+    return __assign(__assign({}, baseTextBoxData(getText$3(overlay), styles)), { horzAlign: 'center', vertAlign: 'bottom', horzTextAlign: resolvedHorzTextAlign(overlay, 'center'), offsetY: (_a = styles.tailHeight) !== null && _a !== void 0 ? _a : DEFAULT_TAIL_HEIGHT });
 }
-function openEditor$4(chart, overlay) {
+function openEditor$5(chart, overlay) {
     openAnnotationEditor({
         chart: chart,
         overlay: overlay,
-        data: function () { return getBoxData$4(overlay); },
+        data: function () { return getBoxData$5(overlay); },
         anchor: function () { var _a; return pointToCoordinate$3(chart, overlay.paneId, (_a = overlay.points[0]) !== null && _a !== void 0 ? _a : {}); },
         onCommit: function (value) {
             commitText(chart, overlay, value);
@@ -34881,13 +36227,13 @@ var comment = __assign({ name: 'comment', totalStep: 2, needDefaultPointFigure: 
         }
     }, createPointFigures: function (_a) {
         var _b, _c;
-        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         if (coordinates.length === 0) {
             return [];
         }
         var point = coordinates[0];
         var styles = getCommentStyles(overlay);
-        var data = getBoxData$4(overlay);
+        var data = getBoxData$5(overlay);
         var attrs = __assign({ x: point.x, y: point.y }, data);
         // Capsule = fully rounded rect: radius is half the laid-out height.
         var layout = getRichTextLayout(attrs);
@@ -34927,12 +36273,13 @@ var comment = __assign({ name: 'comment', totalStep: 2, needDefaultPointFigure: 
             coordinates: coordinates,
             isSelected: isSelected,
             isHovered: isHovered,
+            isTouch: isTouch,
             isDrawing: overlay.isDrawing(),
             lock: overlay.lock,
             keyPrefix: 'anchor_'
         })), false));
         return figures;
-    } }, textEditorHooks(openEditor$4));
+    } }, textEditorHooks(openEditor$5));
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -34947,10 +36294,10 @@ var comment = __assign({ name: 'comment', totalStep: 2, needDefaultPointFigure: 
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var STYLE_KEY$4 = 'flagMark';
+var STYLE_KEY$5 = 'flagMark';
 function getFlagStyles(overlay) {
     var _a, _b;
-    return ((_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a[STYLE_KEY$4]) !== null && _b !== void 0 ? _b : {});
+    return ((_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a[STYLE_KEY$5]) !== null && _b !== void 0 ? _b : {});
 }
 var flagMark = {
     name: 'flagMark',
@@ -34970,7 +36317,7 @@ var flagMark = {
     },
     createPointFigures: function (_a) {
         var _b, _c, _d, _e, _f, _g;
-        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         if (coordinates.length === 0) {
             return [];
         }
@@ -35027,6 +36374,7 @@ var flagMark = {
             coordinates: coordinates,
             isSelected: isSelected,
             isHovered: isHovered,
+            isTouch: isTouch,
             isDrawing: overlay.isDrawing(),
             lock: overlay.lock,
             keyPrefix: 'anchor_'
@@ -35048,29 +36396,28 @@ var flagMark = {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var STYLE_KEY$3 = 'note';
-function getNoteStyles(overlay) {
-    var _a, _b;
-    return ((_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a[STYLE_KEY$3]) !== null && _b !== void 0 ? _b : {});
+var STYLE_KEY$4 = 'note';
+function getNoteStyles$1(overlay) {
+    return resolvedTextStyles(overlay, STYLE_KEY$4);
 }
-function getText$1(overlay) {
-    var _a;
+function getText$2(overlay) {
+    var _a, _b;
     // Kernel simpleTag stored the label as the raw extendData string.
     var extendData = overlay.extendData;
     if (isString(extendData)) {
         return extendData;
     }
-    return (_a = extendData === null || extendData === void 0 ? void 0 : extendData.text) !== null && _a !== void 0 ? _a : '';
+    return (_b = (_a = liveTextOf(overlay)) !== null && _a !== void 0 ? _a : extendData === null || extendData === void 0 ? void 0 : extendData.text) !== null && _b !== void 0 ? _b : '';
 }
-function getBoxData$3(overlay) {
-    var styles = getNoteStyles(overlay);
-    return __assign(__assign({}, baseTextBoxData(getText$1(overlay), styles)), { horzAlign: 'center', vertAlign: 'middle', horzTextAlign: 'center' });
+function getBoxData$4(overlay) {
+    var styles = getNoteStyles$1(overlay);
+    return __assign(__assign({}, baseTextBoxData(getText$2(overlay), styles)), { horzAlign: 'center', vertAlign: 'middle', horzTextAlign: resolvedHorzTextAlign(overlay, 'center') });
 }
-function openEditor$3(chart, overlay) {
+function openEditor$4(chart, overlay) {
     openAnnotationEditor({
         chart: chart,
         overlay: overlay,
-        data: function () { return getBoxData$3(overlay); },
+        data: function () { return getBoxData$4(overlay); },
         forbidLineBreaks: true,
         onCommit: function (value) {
             commitText(chart, overlay, value);
@@ -35089,11 +36436,11 @@ var simpleTag = __assign({ name: 'simpleTag', totalStep: 2, needDefaultPointFigu
             boxPaddingVert: 4
         }
     }, createPointFigures: function (_a) {
-        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         if (coordinates.length === 0) {
             return [];
         }
-        var data = getBoxData$3(overlay);
+        var data = getBoxData$4(overlay);
         var attrs = __assign({ x: coordinates[0].x, y: coordinates[0].y }, data);
         var layout = getRichTextLayout(attrs);
         var figures = [
@@ -35101,7 +36448,7 @@ var simpleTag = __assign({ name: 'simpleTag', totalStep: 2, needDefaultPointFigu
                 key: 'notePill',
                 type: 'richText',
                 attrs: attrs,
-                styles: richTextFigureStyle(getNoteStyles(overlay)),
+                styles: richTextFigureStyle(getNoteStyles$1(overlay)),
                 bounds: {
                     x: layout.boxLeft,
                     y: layout.boxTop,
@@ -35114,12 +36461,168 @@ var simpleTag = __assign({ name: 'simpleTag', totalStep: 2, needDefaultPointFigu
             coordinates: coordinates,
             isSelected: isSelected,
             isHovered: isHovered,
+            isTouch: isTouch,
             isDrawing: overlay.isDrawing(),
             lock: overlay.lock,
             keyPrefix: 'anchor_'
         })), false));
         return figures;
-    } }, textEditorHooks(openEditor$3));
+    } }, textEditorHooks(openEditor$4));
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var STYLE_KEY$3 = 'textNote';
+var STEM_HEIGHT = 50;
+var ARROW_HALF_WIDTH$1 = 4;
+var ARROW_HEIGHT = 5;
+function getNoteStyles(overlay) {
+    return resolvedTextStyles(overlay, STYLE_KEY$3);
+}
+function getText$1(overlay) {
+    var _a, _b;
+    var extendData = overlay.extendData;
+    if (isString(extendData)) {
+        return extendData;
+    }
+    if (isFunction(extendData)) {
+        return extendData(overlay);
+    }
+    return (_b = (_a = liveTextOf(overlay)) !== null && _a !== void 0 ? _a : extendData === null || extendData === void 0 ? void 0 : extendData.text) !== null && _b !== void 0 ? _b : '';
+}
+function getBoxData$3(overlay) {
+    var styles = getNoteStyles(overlay);
+    return __assign(__assign({}, baseTextBoxData(getText$1(overlay), styles)), { horzAlign: 'center', vertAlign: 'bottom', horzTextAlign: 'center' });
+}
+function openEditor$3(chart, overlay) {
+    openAnnotationEditor({
+        chart: chart,
+        overlay: overlay,
+        data: function () { return getBoxData$3(overlay); },
+        // The label renders at the arrow TIP (pt.y - 63 with baseline 'bottom'),
+        // not at the anchor point — without the raised anchor the editor box
+        // covers the stem while the caret blinks 60px below the glyphs.
+        anchor: function () {
+            var _a;
+            var c = pointToCoordinate$3(chart, overlay.paneId, (_a = overlay.points[0]) !== null && _a !== void 0 ? _a : {});
+            return { x: c.x, y: c.y - (STEM_HEIGHT + ARROW_HEIGHT + 8) };
+        },
+        forbidLineBreaks: true,
+        onCommit: function (value) {
+            commitText(chart, overlay, value);
+        }
+    });
+}
+var simpleAnnotation = {
+    name: 'simpleAnnotation',
+    totalStep: 2,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    styles: {
+        textNote: {
+            color: '#FFFFFF',
+            fontSize: 12,
+            bold: false
+        },
+        line: {
+            color: '#2962FF',
+            size: 1,
+            style: 'solid'
+        },
+        polygon: {
+            color: '#2962FF',
+            style: 'fill'
+        }
+    },
+    createPointFigures: function (_a) {
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
+        if (coordinates.length === 0) {
+            return [];
+        }
+        var _b = coordinates[0], x = _b.x, y = _b.y;
+        var stemTop = y - 6;
+        var stemBottom = stemTop - STEM_HEIGHT;
+        var arrowTip = stemBottom - ARROW_HEIGHT;
+        var styles = overlay.styles;
+        var figures = [
+            {
+                key: 'stem',
+                type: 'line',
+                attrs: { coordinates: [{ x: x, y: stemTop }, { x: x, y: stemBottom }] },
+                styles: styles === null || styles === void 0 ? void 0 : styles.line
+            },
+            {
+                key: 'arrow',
+                type: 'polygon',
+                attrs: {
+                    coordinates: [
+                        { x: x, y: stemBottom },
+                        { x: x - ARROW_HALF_WIDTH$1, y: arrowTip },
+                        { x: x + ARROW_HALF_WIDTH$1, y: arrowTip }
+                    ]
+                },
+                styles: styles === null || styles === void 0 ? void 0 : styles.polygon
+            },
+            {
+                key: 'label',
+                type: 'text',
+                attrs: {
+                    x: x,
+                    y: arrowTip - 2,
+                    text: getText$1(overlay),
+                    align: 'center',
+                    baseline: 'bottom'
+                },
+                styles: {
+                    color: getNoteStyles(overlay).color,
+                    size: getNoteStyles(overlay).fontSize,
+                    family: getNoteStyles(overlay).fontFamily,
+                    weight: getNoteStyles(overlay).bold === true ? 'bold' : 'normal',
+                    style: 'fill'
+                },
+                bounds: {
+                    x: x - 40,
+                    y: arrowTip - 24,
+                    width: 80,
+                    height: 26
+                }
+            }
+        ];
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isTouch: isTouch,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_'
+        })), false));
+        return figures;
+    },
+    onDrawEnd: function (_a) {
+        var overlay = _a.overlay, chart = _a.chart;
+        var ed = overlay.extendData;
+        if (isValid(ed) && !isObject(ed)) {
+            // Legacy string/function extendData — normalize to the object form so
+            // settings commits merge cleanly. Object payloads keep their keys.
+            overlay.extendData = { text: getText$1(overlay) };
+            overlay.invalidateFigures();
+        }
+        openEditor$3(chart, overlay);
+    },
+    onDoubleClick: textEditorHooks(openEditor$3).onDoubleClick
+};
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -35137,8 +36640,7 @@ var simpleTag = __assign({ name: 'simpleTag', totalStep: 2, needDefaultPointFigu
 var STYLE_KEY$2 = 'priceLabel';
 var DEFAULT_TIP_WIDTH = 6;
 function getLabelStyles(overlay) {
-    var _a, _b;
-    return ((_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a[STYLE_KEY$2]) !== null && _b !== void 0 ? _b : {});
+    return resolvedTextStyles(overlay, STYLE_KEY$2);
 }
 function getPrecision(chart, overlay, isCandle) {
     var _a, _b;
@@ -35154,6 +36656,10 @@ function getPrecision(chart, overlay, isCandle) {
 }
 function getLabelText(chart, overlay, isCandle) {
     var _a, _b;
+    var live = liveTextOf(overlay);
+    if (live !== undefined) {
+        return live;
+    }
     var extendData = overlay.extendData;
     if (isString(extendData)) {
         return extendData;
@@ -35167,7 +36673,7 @@ function getLabelText(chart, overlay, isCandle) {
 function getBoxData$2(chart, overlay, isCandle) {
     var _a;
     var styles = getLabelStyles(overlay);
-    return __assign(__assign({}, baseTextBoxData(getLabelText(chart, overlay, isCandle), styles)), { bold: (_a = styles.bold) !== null && _a !== void 0 ? _a : true, horzAlign: 'left', vertAlign: 'middle', horzTextAlign: 'center' });
+    return __assign(__assign({}, baseTextBoxData(getLabelText(chart, overlay, isCandle), styles)), { bold: (_a = styles.bold) !== null && _a !== void 0 ? _a : true, horzAlign: 'left', vertAlign: 'middle', horzTextAlign: resolvedHorzTextAlign(overlay, 'center') });
 }
 function openEditor$2(chart, overlay) {
     var _a;
@@ -35186,7 +36692,13 @@ function openEditor$2(chart, overlay) {
         },
         forbidLineBreaks: true,
         onCommit: function (value) {
-            commitText(chart, overlay, value);
+            var _a, _b;
+            // The editor seeds itself with the auto-formatted price — committing
+            // it verbatim would freeze the label as a static string and kill live
+            // price tracking forever. Unchanged => stay in auto mode (text '').
+            var isCandle = overlay.paneId === PaneIdConstants.CANDLE;
+            var auto = formatPrecision$1((_b = (_a = overlay.points[0]) === null || _a === void 0 ? void 0 : _a.value) !== null && _b !== void 0 ? _b : 0, getPrecision(chart, overlay, isCandle));
+            commitText(chart, overlay, value === auto ? '' : value);
         }
     });
 }
@@ -35204,7 +36716,7 @@ var priceLabel = __assign({ name: 'priceLabel', totalStep: 2, needDefaultPointFi
         }
     }, createPointFigures: function (_a) {
         var _b, _c;
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         if (coordinates.length === 0) {
             return [];
         }
@@ -35247,6 +36759,7 @@ var priceLabel = __assign({ name: 'priceLabel', totalStep: 2, needDefaultPointFi
             coordinates: coordinates,
             isSelected: isSelected,
             isHovered: isHovered,
+            isTouch: isTouch,
             isDrawing: overlay.isDrawing(),
             lock: overlay.lock,
             moveDirections: ['vert'],
@@ -35274,16 +36787,15 @@ var ARROW_TIP = 8;
 var SIGN_PADDING_HORZ = 8;
 var BASE_RADIUS = 4;
 function getSignpostStyles(overlay) {
-    var _a, _b;
-    return ((_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a[STYLE_KEY$1]) !== null && _b !== void 0 ? _b : {});
+    return resolvedTextStyles(overlay, STYLE_KEY$1);
 }
 function getText(overlay) {
-    var _a;
+    var _a, _b;
     var extendData = overlay.extendData;
     if (isString(extendData)) {
         return extendData;
     }
-    return (_a = extendData === null || extendData === void 0 ? void 0 : extendData.text) !== null && _a !== void 0 ? _a : '';
+    return (_b = (_a = liveTextOf(overlay)) !== null && _a !== void 0 ? _a : extendData === null || extendData === void 0 ? void 0 : extendData.text) !== null && _b !== void 0 ? _b : '';
 }
 function getDirection(overlay) {
     var extendData = overlay.extendData;
@@ -35292,7 +36804,7 @@ function getDirection(overlay) {
 function getBoxData$1(overlay) {
     var _a;
     var styles = getSignpostStyles(overlay);
-    return __assign(__assign({}, baseTextBoxData(getText(overlay), styles)), { bold: (_a = styles.bold) !== null && _a !== void 0 ? _a : true, horzAlign: 'center', vertAlign: 'middle', horzTextAlign: 'center' });
+    return __assign(__assign({}, baseTextBoxData(getText(overlay), styles)), { bold: (_a = styles.bold) !== null && _a !== void 0 ? _a : true, horzAlign: 'center', vertAlign: 'middle', horzTextAlign: resolvedHorzTextAlign(overlay, 'center') });
 }
 function openEditor$1(chart, overlay) {
     var _a;
@@ -35328,7 +36840,7 @@ var signpost = __assign({ name: 'signpost', totalStep: 2, needDefaultPointFigure
         }
     }, createPointFigures: function (_a) {
         var _b, _c, _d, _e, _f;
-        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         if (coordinates.length === 0) {
             return [];
         }
@@ -35395,6 +36907,7 @@ var signpost = __assign({ name: 'signpost', totalStep: 2, needDefaultPointFigure
             coordinates: coordinates,
             isSelected: isSelected,
             isHovered: isHovered,
+            isTouch: isTouch,
             isDrawing: overlay.isDrawing(),
             lock: overlay.lock,
             keyPrefix: 'anchor_'
@@ -35422,8 +36935,7 @@ var DEFAULT_TABLE_WIDTH = 300;
 var DEFAULT_TABLE_HEIGHT = 120;
 var DEFAULT_CELL_PADDING = 4;
 function getTableStyles(overlay) {
-    var _a, _b;
-    return ((_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a[STYLE_KEY]) !== null && _b !== void 0 ? _b : {});
+    return resolvedTextStyles(overlay, STYLE_KEY);
 }
 function getExtendData(overlay) {
     var extendData = overlay.extendData;
@@ -35435,6 +36947,10 @@ function getExtendData(overlay) {
 }
 function getGrid(overlay) {
     var _a, _b, _c, _d;
+    var live = liveTextOf(overlay);
+    if (live !== undefined) {
+        return tsvToGrid(live);
+    }
     var extendData = getExtendData(overlay);
     var rows = Math.max(1, (_a = extendData.rows) !== null && _a !== void 0 ? _a : DEFAULT_ROWS);
     var cols = Math.max(1, (_b = extendData.cols) !== null && _b !== void 0 ? _b : DEFAULT_COLS);
@@ -35490,11 +37006,11 @@ function tsvToGrid(tsv) {
     return { rows: rows, cols: cols, cells: cells };
 }
 function getBoxData(overlay) {
-    var _a, _b;
+    var _a, _b, _c;
     var styles = getTableStyles(overlay);
     var extendData = getExtendData(overlay);
-    var _c = getGrid(overlay), rows = _c.rows, cols = _c.cols, cells = _c.cells;
-    return __assign(__assign({}, baseTextBoxData(gridToTsv(rows, cols, cells), styles)), { boxWidth: (_a = extendData.tableWidth) !== null && _a !== void 0 ? _a : DEFAULT_TABLE_WIDTH, boxHeight: (_b = extendData.tableHeight) !== null && _b !== void 0 ? _b : DEFAULT_TABLE_HEIGHT, horzAlign: 'left', vertAlign: 'top' });
+    var _d = getGrid(overlay), rows = _d.rows, cols = _d.cols, cells = _d.cells;
+    return __assign(__assign({}, baseTextBoxData((_a = liveTextOf(overlay)) !== null && _a !== void 0 ? _a : gridToTsv(rows, cols, cells), styles)), { boxWidth: (_b = extendData.tableWidth) !== null && _b !== void 0 ? _b : DEFAULT_TABLE_WIDTH, boxHeight: (_c = extendData.tableHeight) !== null && _c !== void 0 ? _c : DEFAULT_TABLE_HEIGHT, horzAlign: 'left', vertAlign: 'top' });
 }
 function openEditor(chart, overlay) {
     openAnnotationEditor({
@@ -35502,6 +37018,7 @@ function openEditor(chart, overlay) {
         overlay: overlay,
         data: function () { return getBoxData(overlay); },
         anchor: function () { var _a; return pointToCoordinate$3(chart, overlay.paneId, (_a = overlay.points[0]) !== null && _a !== void 0 ? _a : {}); },
+        allowTab: true,
         onCommit: function (value) {
             var _a = tsvToGrid(value), rows = _a.rows, cols = _a.cols, cells = _a.cells;
             chart.overrideOverlay({
@@ -35525,7 +37042,7 @@ var table = __assign({ name: 'table', totalStep: 2, needDefaultPointFigure: fals
         }
     }, createPointFigures: function (_a) {
         var _b, _c, _d, _e, _f, _g;
-        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         if (coordinates.length === 0) {
             return [];
         }
@@ -35634,6 +37151,7 @@ var table = __assign({ name: 'table', totalStep: 2, needDefaultPointFigure: fals
             coordinates: coordinates,
             isSelected: isSelected,
             isHovered: isHovered,
+            isTouch: isTouch,
             isDrawing: overlay.isDrawing(),
             lock: overlay.lock,
             keyPrefix: 'anchor_'
@@ -35850,12 +37368,13 @@ function extendSegment(start, end, extendLeft, extendRight, width) {
 var fibChannel = {
     name: 'fibChannel',
     totalStep: 4,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
     createPointFigures: function (_a) {
         var _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p;
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         var figures = [];
         if (coordinates.length < 2) {
             return figures;
@@ -35885,6 +37404,7 @@ var fibChannel = {
                 coordinates: coordinates,
                 isSelected: isSelected,
                 isHovered: isHovered,
+                isTouch: isTouch,
                 isDrawing: overlay.isDrawing(),
                 lock: overlay.lock,
                 keyPrefix: 'anchor_'
@@ -35969,6 +37489,7 @@ var fibChannel = {
             coordinates: coordinates,
             isSelected: isSelected,
             isHovered: isHovered,
+            isTouch: isTouch,
             isDrawing: overlay.isDrawing(),
             lock: overlay.lock,
             keyPrefix: 'anchor_'
@@ -35993,12 +37514,13 @@ var fibChannel = {
 var fibExtension = {
     name: 'fibExtension',
     totalStep: 4,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
     createPointFigures: function (_a) {
         var _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         var figures = [];
         if (coordinates.length < 2) {
             return figures;
@@ -36024,6 +37546,7 @@ var fibExtension = {
                 coordinates: coordinates,
                 isSelected: isSelected,
                 isHovered: isHovered,
+                isTouch: isTouch,
                 isDrawing: overlay.isDrawing(),
                 lock: overlay.lock,
                 keyPrefix: 'anchor_'
@@ -36102,6 +37625,7 @@ var fibExtension = {
             coordinates: coordinates,
             isSelected: isSelected,
             isHovered: isHovered,
+            isTouch: isTouch,
             isDrawing: overlay.isDrawing(),
             lock: overlay.lock,
             keyPrefix: 'anchor_'
@@ -36126,12 +37650,13 @@ var fibExtension = {
 var fibRetracement = {
     name: 'fibonacciLine',
     totalStep: 3,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
     createPointFigures: function (_a) {
         var _b, _c, _d, _e, _f, _g, _h, _j, _k;
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         var figures = [];
         if (coordinates.length < 2) {
             return figures;
@@ -36218,6 +37743,7 @@ var fibRetracement = {
             coordinates: coordinates,
             isSelected: isSelected,
             isHovered: isHovered,
+            isTouch: isTouch,
             isDrawing: overlay.isDrawing(),
             lock: overlay.lock,
             keyPrefix: 'anchor_',
@@ -36243,12 +37769,13 @@ var fibRetracement = {
 var fibTimeExtension = {
     name: 'fibTimeExtension',
     totalStep: 4,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
     createPointFigures: function (_a) {
         var _b, _c, _d, _e, _f, _g, _h;
-        var overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         var figures = [];
         if (coordinates.length < 2) {
             return figures;
@@ -36277,6 +37804,7 @@ var fibTimeExtension = {
                 coordinates: coordinates,
                 isSelected: isSelected,
                 isHovered: isHovered,
+                isTouch: isTouch,
                 isDrawing: overlay.isDrawing(),
                 lock: overlay.lock,
                 keyPrefix: 'anchor_'
@@ -36352,6 +37880,7 @@ var fibTimeExtension = {
             coordinates: coordinates,
             isSelected: isSelected,
             isHovered: isHovered,
+            isTouch: isTouch,
             isDrawing: overlay.isDrawing(),
             lock: overlay.lock,
             keyPrefix: 'anchor_'
@@ -36376,12 +37905,13 @@ var fibTimeExtension = {
 var fibTimeZone = {
     name: 'fibTimeZone',
     totalStep: 3,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
     createPointFigures: function (_a) {
         var _b, _c, _d, _e, _f, _g, _h;
-        var overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         var figures = [];
         if (coordinates.length < 2) {
             return figures;
@@ -36452,6 +37982,7 @@ var fibTimeZone = {
             coordinates: coordinates,
             isSelected: isSelected,
             isHovered: isHovered,
+            isTouch: isTouch,
             isDrawing: overlay.isDrawing(),
             lock: overlay.lock,
             keyPrefix: 'anchor_',
@@ -36460,107 +37991,6 @@ var fibTimeZone = {
         return figures;
     }
 };
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-// Per-overlay, per-slot — an overlay wrapping more than one figure callback
-// (createPointFigures + createXAxisFigures + createYAxisFigures) gets an
-// independent entry per slot so the callbacks don't fight over one cache key.
-var cache = new WeakMap();
-function coordsSignature(coordinates) {
-    var e_1, _a;
-    // Quarter-pixel rounding absorbs sub-pixel jitter from axis math without
-    // masking real moves.
-    var sig = '';
-    try {
-        for (var coordinates_1 = __values(coordinates), coordinates_1_1 = coordinates_1.next(); !coordinates_1_1.done; coordinates_1_1 = coordinates_1.next()) {
-            var c = coordinates_1_1.value;
-            sig += "".concat(Math.round(c.x * 4), ",").concat(Math.round(c.y * 4), ";");
-        }
-    }
-    catch (e_1_1) { e_1 = { error: e_1_1 }; }
-    finally {
-        try {
-            if (coordinates_1_1 && !coordinates_1_1.done && (_a = coordinates_1.return)) _a.call(coordinates_1);
-        }
-        finally { if (e_1) throw e_1.error; }
-    }
-    return sig;
-}
-/**
- * CONTRACT: the returned array is SHARED — the view and every subsequent
- * createFigures call see the same instance until the signature changes.
- * Templates must treat it as read-only (never push/splice/mutate figure
- * attrs on the result).
- */
-function withFigureCache(fn, options) {
-    return function (params) {
-        var _a, _b, _c, _d;
-        var signature = coordsSignature(params.coordinates) +
-            "|r".concat(params.overlay.figuresRev) +
-            "|s".concat(params.isSelected === true ? 1 : 0, "h").concat(params.isHovered === true ? 1 : 0) +
-            "|l".concat(params.overlay.lock ? 1 : 0) +
-            "|b".concat(params.bounding.width, "x").concat(params.bounding.height) +
-            "|c".concat(params.overlay.currentStep) +
-            "|h".concat((_a = params.hoveredFigureKey) !== null && _a !== void 0 ? _a : '') +
-            "|k".concat((_c = (_b = options === null || options === void 0 ? void 0 : options.extraKey) === null || _b === void 0 ? void 0 : _b.call(options, params)) !== null && _c !== void 0 ? _c : '');
-        var slotKey = (_d = options === null || options === void 0 ? void 0 : options.slot) !== null && _d !== void 0 ? _d : '';
-        var slots = cache.get(params.overlay);
-        var entry = slots === null || slots === void 0 ? void 0 : slots.get(slotKey);
-        if (entry !== undefined && entry.signature === signature) {
-            return entry.figures;
-        }
-        var result = fn(params);
-        var figures = Array.isArray(result) ? result : [result];
-        if (slots === undefined) {
-            slots = new Map();
-            cache.set(params.overlay, slots);
-        }
-        slots.set(slotKey, { signature: signature, figures: figures });
-        return figures;
-    };
-}
-function boundsOutside(bounds, bounding, margin) {
-    return (bounds.x + bounds.width < -margin ||
-        bounds.x > bounding.width + margin ||
-        bounds.y + bounds.height < -margin ||
-        bounds.y > bounding.height + margin);
-}
-/**
- * Drop figures that declare `bounds` fully outside the viewport. Figures
- * without bounds are always kept (opt-in per figure).
- */
-function withViewportCull(fn, options) {
-    var _a;
-    var margin = (_a = options === null || options === void 0 ? void 0 : options.margin) !== null && _a !== void 0 ? _a : 24;
-    return function (params) {
-        var result = fn(params);
-        var figures = Array.isArray(result) ? result : [result];
-        var bounding = params.bounding;
-        return figures.filter(function (figure) {
-            var bounds = figure.bounds;
-            return bounds === undefined || !boundsOutside(bounds, bounding, margin);
-        });
-    };
-}
-/**
- * Convenience: cache → cull. The composition order matters — cull is inner
- * so off-screen figures never enter the cache output.
- */
-function withPerfPipeline(fn, options) {
-    return withFigureCache(withViewportCull(fn, options), options);
-}
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -36648,9 +38078,6 @@ function distance(a, b) {
     var dx = b.x - a.x;
     var dy = b.y - a.y;
     return Math.sqrt(dx * dx + dy * dy);
-}
-function midpoint(a, b) {
-    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }
 /**
  * Ray exit point: the ray from `from` through `through` clipped at the pane
@@ -37109,6 +38536,7 @@ var DEFAULT_LEVELS$5 = [
 var fibCircles = {
     name: 'fibCircles',
     totalStep: 3,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -37123,17 +38551,17 @@ var fibCircles = {
     },
     createPointFigures: withPerfPipeline(function (_a) {
         var _b, _c, _d, _e, _f, _g;
-        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
         var figures = [];
         if (coordinates.length >= 2) {
-            var _h = __read(coordinates, 2), p1 = _h[0], p2 = _h[1];
-            var baseRadius_1 = distance(p1, p2);
-            if (baseRadius_1 > 0) {
-                var center_1 = midpoint(p1, p2);
+            var _h = __read(coordinates, 2), p1_1 = _h[0], p2 = _h[1];
+            var dx_1 = Math.abs(p2.x - p1_1.x);
+            var dy_1 = Math.abs(p2.y - p1_1.y);
+            if (dx_1 > 0 || dy_1 > 0) {
                 if ((_c = extendData.trendlineVisible) !== null && _c !== void 0 ? _c : true) {
                     // Inherits styles.line (dashed trendline color from the toolbar).
-                    figures.push(lineFigure('fib_circles_trend', [[p1, p2]], {}));
+                    figures.push(lineFigure('fib_circles_trend', [[p1_1, p2]], {}));
                 }
                 var levels = readLevels(extendData, DEFAULT_LEVELS$5);
                 var showLabels_1 = (_d = extendData.showLabels) !== null && _d !== void 0 ? _d : true;
@@ -37142,20 +38570,21 @@ var fibCircles = {
                     if (!level.visible) {
                         return;
                     }
-                    var r = baseRadius_1 * level.coeff;
-                    if (r <= 0) {
+                    var rx = dx_1 * level.coeff;
+                    var ry = dy_1 * level.coeff;
+                    if (rx <= 0 && ry <= 0) {
                         return;
                     }
                     figures.push({
                         key: "fib_circle_".concat(index),
-                        type: 'circle',
-                        attrs: { x: center_1.x, y: center_1.y, r: r },
+                        type: 'ellipse',
+                        attrs: { x: p1_1.x, y: p1_1.y, rx: rx, ry: ry },
                         styles: { style: 'stroke', borderColor: level.color, borderSize: lineSize_1 },
-                        bounds: { x: center_1.x - r, y: center_1.y - r, width: r * 2, height: r * 2 }
+                        bounds: { x: p1_1.x - rx, y: p1_1.y - ry, width: rx * 2, height: ry * 2 }
                     });
                     if (showLabels_1) {
-                        // Label hangs off the circle's bottom point (TV labelPoint).
-                        figures.push(labelFigure("fib_circle_label_".concat(index), center_1.x, center_1.y + r, formatLevelLabel(level), level.color, 'center', 'top'));
+                        // Label hangs off the ellipse's bottom point (TV labelPoint).
+                        figures.push(labelFigure("fib_circle_label_".concat(index), p1_1.x, p1_1.y + ry, formatLevelLabel(level), level.color, 'center', 'top'));
                     }
                 });
             }
@@ -37164,6 +38593,7 @@ var fibCircles = {
             coordinates: coordinates,
             isSelected: isSelected,
             isHovered: isHovered,
+            isTouch: isTouch,
             isDrawing: overlay.isDrawing(),
             lock: overlay.lock,
             keyPrefix: 'anchor_',
@@ -37200,6 +38630,7 @@ var DEFAULT_LEVELS$4 = [
 var fibSpeedArcs = {
     name: 'fibSpeedArcs',
     totalStep: 3,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -37214,7 +38645,7 @@ var fibSpeedArcs = {
     },
     createPointFigures: withPerfPipeline(function (_a) {
         var _b, _c, _d, _e, _f, _g;
-        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
         var figures = [];
         if (coordinates.length >= 2) {
@@ -37259,6 +38690,7 @@ var fibSpeedArcs = {
             coordinates: coordinates,
             isSelected: isSelected,
             isHovered: isHovered,
+            isTouch: isTouch,
             isDrawing: overlay.isDrawing(),
             lock: overlay.lock,
             keyPrefix: 'anchor_',
@@ -37294,6 +38726,7 @@ var DEFAULT_LEVELS$3 = [
 var fibSpeedFan = {
     name: 'fibSpeedFan',
     totalStep: 3,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -37308,7 +38741,7 @@ var fibSpeedFan = {
     },
     createPointFigures: withPerfPipeline(function (_a) {
         var _b, _c, _d, _e, _f, _g;
-        var overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
         var figures = [];
         if (coordinates.length >= 2) {
@@ -37352,6 +38785,7 @@ var fibSpeedFan = {
             coordinates: coordinates,
             isSelected: isSelected,
             isHovered: isHovered,
+            isTouch: isTouch,
             isDrawing: overlay.isDrawing(),
             lock: overlay.lock,
             keyPrefix: 'anchor_',
@@ -37386,6 +38820,7 @@ var MIN_RADIUS_PX$1 = 0.5;
 var fibSpiral = {
     name: 'fibSpiral',
     totalStep: 3,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -37398,7 +38833,7 @@ var fibSpiral = {
     },
     createPointFigures: withPerfPipeline(function (_a) {
         var _b, _c, _d, _e, _f, _g;
-        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
         var figures = [];
         if (coordinates.length >= 2) {
@@ -37439,6 +38874,7 @@ var fibSpiral = {
             coordinates: coordinates,
             isSelected: isSelected,
             isHovered: isHovered,
+            isTouch: isTouch,
             isDrawing: overlay.isDrawing(),
             lock: overlay.lock,
             keyPrefix: 'anchor_',
@@ -37485,6 +38921,7 @@ function signedSectorAngle$1(a1, a2) {
 var fibWedge = {
     name: 'fibWedge',
     totalStep: 4,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -37499,7 +38936,7 @@ var fibWedge = {
     },
     createPointFigures: withPerfPipeline(function (_a) {
         var _b, _c, _d, _e, _f, _g, _h, _j;
-        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
         var figures = [];
         if (coordinates.length >= 3) {
@@ -37518,29 +38955,49 @@ var fibWedge = {
                     [p1_1, p2],
                     [p1_1, { x: p1_1.x + Math.cos(a2) * radius_1, y: p1_1.y + Math.sin(a2) * radius_1 }]
                 ], {}));
-                // Fib-ratio intermediate rays subdividing the sector angle.
+                // Fib-ratio concentric arcs spanning the sector — annular sectors
+                // at radius coeff × r, from boundary ray a1 to boundary ray a2.
                 var levels = readLevels(extendData, DEFAULT_LEVELS$2);
                 var showLabels_1 = (_j = extendData.showLabels) !== null && _j !== void 0 ? _j : true;
+                var startAngle_1 = da_1 > 0 ? a1_1 : a1_1 + da_1;
+                var endAngle_1 = da_1 > 0 ? a1_1 + da_1 : a1_1;
                 levels.forEach(function (level, index) {
                     if (!level.visible) {
                         return;
                     }
-                    var angle = a1_1 + da_1 * level.coeff;
-                    var end = { x: p1_1.x + Math.cos(angle) * radius_1, y: p1_1.y + Math.sin(angle) * radius_1 };
-                    figures.push(lineFigure("fib_wedge_ray_".concat(index), [[p1_1, end]], { style: 'solid', size: lineSize_1, color: level.color }));
+                    var r = radius_1 * level.coeff;
+                    if (r <= 0) {
+                        return;
+                    }
+                    var attrs = {
+                        x: p1_1.x,
+                        y: p1_1.y,
+                        r: r,
+                        startAngle: startAngle_1,
+                        endAngle: endAngle_1
+                    };
+                    figures.push({
+                        key: "fib_wedge_arc_".concat(index),
+                        type: 'arc',
+                        attrs: attrs,
+                        styles: { style: 'solid', size: lineSize_1, color: level.color },
+                        bounds: { x: p1_1.x - r, y: p1_1.y - r, width: r * 2, height: r * 2 }
+                    });
                     if (showLabels_1) {
-                        var labelRadius = radius_1 + 12;
-                        figures.push(labelFigure("fib_wedge_label_".concat(index), p1_1.x + Math.cos(angle) * labelRadius, p1_1.y + Math.sin(angle) * labelRadius, formatLevelLabel(level), level.color, 'center', 'middle'));
+                        // Label sits at the arc's angular midpoint (TV labelPoint).
+                        var midAngle = a1_1 + da_1 / 2;
+                        var labelRadius = r;
+                        figures.push(labelFigure("fib_wedge_label_".concat(index), p1_1.x + Math.cos(midAngle) * labelRadius, p1_1.y + Math.sin(midAngle) * labelRadius, formatLevelLabel(level), level.color, 'center', 'bottom'));
                     }
                 });
-                // Sector arc at the wedge radius closing the two boundary rays.
+                // Closing arc at the full wedge radius.
                 if (da_1 !== 0) {
                     var attrs = {
                         x: p1_1.x,
                         y: p1_1.y,
                         r: radius_1,
-                        startAngle: da_1 > 0 ? a1_1 : a1_1 + da_1,
-                        endAngle: da_1 > 0 ? a1_1 + da_1 : a1_1
+                        startAngle: startAngle_1,
+                        endAngle: endAngle_1
                     };
                     figures.push({
                         key: 'fib_wedge_arc',
@@ -37556,6 +39013,7 @@ var fibWedge = {
             coordinates: coordinates,
             isSelected: isSelected,
             isHovered: isHovered,
+            isTouch: isTouch,
             isDrawing: overlay.isDrawing(),
             lock: overlay.lock,
             keyPrefix: 'anchor_'
@@ -37597,9 +39055,8 @@ function lineStyleOverrides(overlay, chart, ext) {
     var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;
     var themeLine = chart.getStyles().overlay.line;
     var extStyle = ext === null || ext === void 0 ? void 0 : ext.lineStyle;
-    // Kernel LineType only knows 'solid' | 'dashed' — map 'dotted' to a
-    // tight dash pattern so consumer configs still render correctly.
-    var style = (_c = (_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a.line) === null || _b === void 0 ? void 0 : _b.style) !== null && _c !== void 0 ? _c : (extStyle === 'dashed' || extStyle === 'dotted' ? 'dashed' : 'solid');
+    // 'dotted' is a first-class LineType — figures render it via dashedValue.
+    var style = (_c = (_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a.line) === null || _b === void 0 ? void 0 : _b.style) !== null && _c !== void 0 ? _c : (extStyle === 'dashed' || extStyle === 'dotted' ? extStyle : 'solid');
     var dashedValue = (_f = (_e = (_d = overlay.styles) === null || _d === void 0 ? void 0 : _d.line) === null || _e === void 0 ? void 0 : _e.dashedValue) !== null && _f !== void 0 ? _f : (extStyle === 'dotted' ? [2, 2] : extStyle === 'dashed' ? [6, 4] : [2, 2]);
     return {
         color: (_l = (_k = (_j = (_h = (_g = overlay.styles) === null || _g === void 0 ? void 0 : _g.line) === null || _h === void 0 ? void 0 : _h.color) !== null && _j !== void 0 ? _j : ext === null || ext === void 0 ? void 0 : ext.lineColor) !== null && _k !== void 0 ? _k : ext === null || ext === void 0 ? void 0 : ext.color) !== null && _l !== void 0 ? _l : themeLine.color,
@@ -38133,6 +39590,7 @@ var DEFAULT_LEVELS$1 = [
 var gannBox = {
     name: 'gannBox',
     totalStep: 3,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -38419,6 +39877,7 @@ function correctToSquare(overlay, params, moveIndex, fixedIndex) {
 var gannComplex = {
     name: 'gannComplex',
     totalStep: 3,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -38437,7 +39896,7 @@ var gannComplex = {
     },
     createPointFigures: withPerfPipeline(function (_a) {
         var _b, _c, _d, _e, _f;
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         rememberLineChart(overlay, chart);
         var ext = isValid(overlay.extendData) ? overlay.extendData : {};
         var figures = [];
@@ -38479,6 +39938,7 @@ var gannComplex = {
             coordinates: coordinates,
             isSelected: isSelected,
             isHovered: isHovered,
+            isTouch: isTouch,
             isDrawing: overlay.isDrawing(),
             lock: overlay.lock,
             keyPrefix: 'anchor_',
@@ -38581,6 +40041,7 @@ var DEFAULT_LEVELS = [
 var gannFan = {
     name: 'gannFan',
     totalStep: 3,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -38594,7 +40055,7 @@ var gannFan = {
     },
     createPointFigures: withPerfPipeline(function (_a) {
         var _b, _c, _d, _e, _f;
-        var overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
         var figures = [];
         if (coordinates.length >= 2) {
@@ -38627,6 +40088,7 @@ var gannFan = {
             coordinates: coordinates,
             isSelected: isSelected,
             isHovered: isHovered,
+            isTouch: isTouch,
             isDrawing: overlay.isDrawing(),
             lock: overlay.lock,
             keyPrefix: 'anchor_',
@@ -38664,6 +40126,7 @@ function directionSigns(direction) {
 var gannFixed = {
     name: 'gannFixed',
     totalStep: 2,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -38833,6 +40296,7 @@ var gannFixed = {
 var gannSquare = {
     name: 'gannSquare',
     totalStep: 3,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -38848,7 +40312,7 @@ var gannSquare = {
     },
     createPointFigures: withPerfPipeline(function (_a) {
         var _b, _c, _d, _e, _f, _g, _h, _j, _k;
-        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         var ext = isValid(overlay.extendData) ? overlay.extendData : {};
         var figures = [];
         if (coordinates.length >= 2) {
@@ -38877,6 +40341,7 @@ var gannSquare = {
             coordinates: coordinates,
             isSelected: isSelected,
             isHovered: isHovered,
+            isTouch: isTouch,
             isDrawing: overlay.isDrawing(),
             lock: overlay.lock,
             keyPrefix: 'anchor_',
@@ -39314,6 +40779,8 @@ function readStoredPattern(extendData) {
 var barsPattern = {
     name: 'barsPattern',
     totalStep: 3,
+    cullable: false,
+    figureCacheDataRev: true,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -39494,7 +40961,10 @@ var barsPattern = {
             points[1].timestamp = ts;
         }
         if (isNumber(points[0].value)) {
-            points[1].value = points[0].value + firstP - lastP;
+            // Native scale: rightY-leftY must equal pc(lastP)-pc(firstP), which
+            // under a linear axis is -(p2.value - p1.value)·k — so the delta is
+            // lastP - firstP, not firstP - lastP (inverted copy otherwise).
+            points[1].value = points[0].value + lastP - firstP;
         }
         overlay.invalidateFigures();
     }
@@ -39520,12 +40990,13 @@ var ARROW_SIZE$3 = 6;
 var dateAndPriceRange = {
     name: 'dateAndPriceRange',
     totalStep: 3,
+    figureCacheDataRev: true,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
     createPointFigures: function (_a) {
         var _b, _c, _d, _e, _f, _g, _h, _j;
-        var chart = _a.chart, coordinates = _a.coordinates, overlay = _a.overlay, bounding = _a.bounding, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var chart = _a.chart, coordinates = _a.coordinates, overlay = _a.overlay, bounding = _a.bounding, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         if (coordinates.length < 2) {
             return [];
         }
@@ -39646,6 +41117,7 @@ var dateAndPriceRange = {
             coordinates: coordinates,
             isSelected: isSelected,
             isHovered: isHovered,
+            isTouch: isTouch,
             isDrawing: overlay.isDrawing(),
             lock: overlay.lock,
             keyPrefix: 'anchor_'
@@ -39673,12 +41145,13 @@ var ARROW_SIZE$2 = 6;
 var dateRange = {
     name: 'dateRange',
     totalStep: 3,
+    figureCacheDataRev: true,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
     createPointFigures: function (_a) {
         var _b, _c, _d, _e;
-        var chart = _a.chart, coordinates = _a.coordinates, overlay = _a.overlay, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var chart = _a.chart, coordinates = _a.coordinates, overlay = _a.overlay, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         if (coordinates.length < 2) {
             return [];
         }
@@ -39755,6 +41228,7 @@ var dateRange = {
             coordinates: coordinates,
             isSelected: isSelected,
             isHovered: isHovered,
+            isTouch: isTouch,
             isDrawing: overlay.isDrawing(),
             lock: overlay.lock,
             keyPrefix: 'anchor_'
@@ -39937,6 +41411,8 @@ function formatViDatePill(timestamp) {
 var forecast = {
     name: 'forecast',
     totalStep: 3,
+    cullable: false,
+    figureCacheDataRev: true,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -40437,6 +41913,8 @@ function pointBarIndex(point, store) {
 var ghostFeed = {
     name: 'ghostFeed',
     totalStep: 3,
+    cullable: false,
+    figureCacheDataRev: true,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -40589,25 +42067,29 @@ var POSITION_DEFAULTS = {
     alwaysShowStats: false,
     showPriceLabels: true
 };
+/** `??` lets NaN/negative persisted heights through — clamp to sane pixels. */
+function sanePx(value, fallback) {
+    return isNumber(value) && value > 0 ? value : fallback;
+}
 function getPositionExt(extendData) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
     var d = POSITION_DEFAULTS;
     var e = extendData !== null && extendData !== void 0 ? extendData : {};
     return {
-        profitHeight: (_a = e.profitHeight) !== null && _a !== void 0 ? _a : d.profitHeight,
-        stopHeight: (_b = e.stopHeight) !== null && _b !== void 0 ? _b : d.stopHeight,
-        zoneWidth: (_c = e.zoneWidth) !== null && _c !== void 0 ? _c : d.zoneWidth,
-        accountSize: (_d = e.accountSize) !== null && _d !== void 0 ? _d : d.accountSize,
-        risk: (_e = e.risk) !== null && _e !== void 0 ? _e : d.risk,
-        riskDisplayMode: (_f = e.riskDisplayMode) !== null && _f !== void 0 ? _f : d.riskDisplayMode,
-        tickMultiplier: (_g = e.tickMultiplier) !== null && _g !== void 0 ? _g : d.tickMultiplier,
-        lineColor: (_h = e.lineColor) !== null && _h !== void 0 ? _h : d.lineColor,
-        profitBackground: (_j = e.profitBackground) !== null && _j !== void 0 ? _j : d.profitBackground,
-        stopBackground: (_k = e.stopBackground) !== null && _k !== void 0 ? _k : d.stopBackground,
-        textColor: (_l = e.textColor) !== null && _l !== void 0 ? _l : d.textColor,
-        fontSize: (_m = e.fontSize) !== null && _m !== void 0 ? _m : d.fontSize,
-        alwaysShowStats: (_o = e.alwaysShowStats) !== null && _o !== void 0 ? _o : d.alwaysShowStats,
-        showPriceLabels: (_p = e.showPriceLabels) !== null && _p !== void 0 ? _p : d.showPriceLabels
+        profitHeight: sanePx(e.profitHeight, d.profitHeight),
+        stopHeight: sanePx(e.stopHeight, d.stopHeight),
+        zoneWidth: sanePx(e.zoneWidth, d.zoneWidth),
+        accountSize: (_a = e.accountSize) !== null && _a !== void 0 ? _a : d.accountSize,
+        risk: (_b = e.risk) !== null && _b !== void 0 ? _b : d.risk,
+        riskDisplayMode: (_c = e.riskDisplayMode) !== null && _c !== void 0 ? _c : d.riskDisplayMode,
+        tickMultiplier: (_d = e.tickMultiplier) !== null && _d !== void 0 ? _d : d.tickMultiplier,
+        lineColor: (_e = e.lineColor) !== null && _e !== void 0 ? _e : d.lineColor,
+        profitBackground: (_f = e.profitBackground) !== null && _f !== void 0 ? _f : d.profitBackground,
+        stopBackground: (_g = e.stopBackground) !== null && _g !== void 0 ? _g : d.stopBackground,
+        textColor: (_h = e.textColor) !== null && _h !== void 0 ? _h : d.textColor,
+        fontSize: (_j = e.fontSize) !== null && _j !== void 0 ? _j : d.fontSize,
+        alwaysShowStats: (_k = e.alwaysShowStats) !== null && _k !== void 0 ? _k : d.alwaysShowStats,
+        showPriceLabels: (_l = e.showPriceLabels) !== null && _l !== void 0 ? _l : d.showPriceLabels
     };
 }
 /**
@@ -40796,12 +42278,13 @@ function buildPositionYAxisFigures(params, direction) {
     var align = isFromZero ? 'left' : 'right';
     var x = isFromZero ? 0 : bounding.width;
     var figures = [];
+    var pillIndex = 0;
     var pill = function (y, value, bg) {
-        if (value == null) {
+        if (value == null || !Number.isFinite(y)) {
             return;
         }
         figures.push({
-            key: '',
+            key: "pos_axis_pill_".concat(pillIndex++),
             type: 'text',
             attrs: { x: x, y: y, text: fmtNum(value, precision), align: align, baseline: 'middle' },
             styles: {
@@ -40844,6 +42327,8 @@ function buildPositionYAxisFigures(params, direction) {
 var longPosition = {
     name: 'longPosition',
     totalStep: 2,
+    cullable: false,
+    figureCacheDataRev: true,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -40881,6 +42366,7 @@ var measure = {
     // Unlimited-step freehand: the stroke collects points for the whole
     // press-drag gesture; only the first/last points are ever read.
     totalStep: Number.MAX_SAFE_INTEGER,
+    figureCacheDataRev: true,
     freehand: true,
     freehandMinDistance: 4,
     transient: true,
@@ -41049,7 +42535,7 @@ var priceRange = {
     needDefaultYAxisFigure: false,
     createPointFigures: function (_a) {
         var _b, _c, _d, _e, _f, _g, _h, _j;
-        var chart = _a.chart, coordinates = _a.coordinates, overlay = _a.overlay, isSelected = _a.isSelected, isHovered = _a.isHovered;
+        var chart = _a.chart, coordinates = _a.coordinates, overlay = _a.overlay, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         if (coordinates.length < 2) {
             return [];
         }
@@ -41142,6 +42628,7 @@ var priceRange = {
             coordinates: coordinates,
             isSelected: isSelected,
             isHovered: isHovered,
+            isTouch: isTouch,
             isDrawing: overlay.isDrawing(),
             lock: overlay.lock,
             keyPrefix: 'anchor_'
@@ -41198,6 +42685,7 @@ function lerpHex(c1, c2, t) {
 var projection = {
     name: 'projection',
     totalStep: 4,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -41315,6 +42803,8 @@ var projection = {
 var shortPosition = {
     name: 'shortPosition',
     totalStep: 2,
+    cullable: false,
+    figureCacheDataRev: true,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -41617,7 +43107,7 @@ function pushLine(figures, key, coordinates, stroke) {
 }
 function buildPointFigures(variant, params) {
     var _a, _b;
-    var overlay = params.overlay, coordinates = params.coordinates, bounding = params.bounding, _c = params.isSelected, isSelected = _c === void 0 ? false : _c, _d = params.isHovered, isHovered = _d === void 0 ? false : _d;
+    var overlay = params.overlay, coordinates = params.coordinates, bounding = params.bounding, _c = params.isSelected, isSelected = _c === void 0 ? false : _c, _d = params.isHovered, isHovered = _d === void 0 ? false : _d, _e = params.isTouch, isTouch = _e === void 0 ? false : _e;
     var figures = [];
     var count = coordinates.length;
     if (count === 0) {
@@ -41638,7 +43128,7 @@ function buildPointFigures(variant, params) {
     // median lines sit below the tine bands.
     if (variant === 'original') {
         if (medianVisible && geom.median !== undefined) {
-            var _e = geom.median, from = _e.from, to = _e.to;
+            var _f = geom.median, from = _f.from, to = _f.to;
             var seg = clipRayToPane(from, sub(to, from), bounding, extendLines);
             if (seg !== null) {
                 pushLine(figures, 'median', [seg], medianStroke);
@@ -41671,7 +43161,7 @@ function buildPointFigures(variant, params) {
             pushLine(figures, 'back', [geom.back], medianStroke);
         }
         if (medianVisible && geom.median !== undefined) {
-            var _f = geom.median, from = _f.from, to = _f.to;
+            var _g = geom.median, from = _g.from, to = _g.to;
             var seg = clipRayToPane(from, sub(to, from), bounding, extendLines);
             if (seg !== null) {
                 pushLine(figures, 'median', [seg], medianStroke);
@@ -41730,6 +43220,7 @@ function buildPointFigures(variant, params) {
         coordinates: coordinates,
         isSelected: isSelected,
         isHovered: isHovered,
+        isTouch: isTouch,
         isDrawing: overlay.isDrawing(),
         lock: overlay.lock,
         keyPrefix: 'anchor_'
@@ -41744,6 +43235,7 @@ function createPitchforkTemplate(name, variant) {
     return {
         name: name,
         totalStep: 4,
+        cullable: false,
         needDefaultPointFigure: false,
         needDefaultXAxisFigure: false,
         needDefaultYAxisFigure: false,
@@ -41958,6 +43450,7 @@ var arrowLine = {
 var crossLine = {
     name: 'crossLine',
     totalStep: 2,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -42035,6 +43528,7 @@ var crossLine = {
 var horizontalRayLine = {
     name: 'horizontalRayLine',
     totalStep: 2,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -42200,6 +43694,7 @@ var horizontalRayLine = {
 var horizontalSegment = {
     name: 'horizontalSegment',
     totalStep: 3,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -42402,6 +43897,7 @@ var horizontalSegment = {
 var horizontalStraightLine = {
     name: 'horizontalStraightLine',
     totalStep: 2,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -42537,6 +44033,7 @@ function getPeriodMinutes(periodType, periodSpan) {
 var infoLine = {
     name: 'infoLine',
     totalStep: 3,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -42860,6 +44357,7 @@ var infoLine = {
 var priceLine = {
     name: 'priceLine',
     totalStep: 2,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -42954,6 +44452,7 @@ var priceLine = {
 var rayLine = {
     name: 'rayLine',
     totalStep: 3,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -43084,6 +44583,7 @@ var rayLine = {
 var segment = {
     name: 'segment',
     totalStep: 3,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -43239,6 +44739,7 @@ var segment = {
 var straightLine = {
     name: 'straightLine',
     totalStep: 3,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -43408,6 +44909,7 @@ function measureAngle(overlay, params) {
 var trendAngle = {
     name: 'trendAngle',
     totalStep: 3,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -43481,8 +44983,11 @@ var trendAngle = {
                 x: c1.x,
                 y: c1.y,
                 r: ARC_RADIUS,
-                startAngle: 0,
-                endAngle: -angleRad
+                // canvas arc() with ccw=false normalizes end<start into a full
+                // 2π−θ sweep — for a rising line (angleRad>0) that draws the
+                // COMPLEMENT wedge. Order angles so the sweep always covers θ.
+                startAngle: Math.min(0, -angleRad),
+                endAngle: Math.max(0, -angleRad)
             },
             styles: {
                 color: lineColor,
@@ -43558,6 +45063,33 @@ var trendAngle = {
     performEventPressedMove: function (params) {
         // Dragging the second anchor re-measures angle + distance (TV parity);
         // dragging P1 keeps the stored angle — the line translates rigidly.
+        if (params.performPointIndex === 0) {
+            // Rigid translate: the rendered endpoint follows P1 through the
+            // stored angle+distance, so translate the STORED p2 by the same
+            // drag delta — otherwise points[1] keeps its drag-start value and
+            // serialized geometry desyncs from what the user sees (the y-axis
+            // pill shows the stale price too).
+            var prev = params.prevPoints[0];
+            var curr = params.points[0];
+            var prev2 = params.prevPoints[1];
+            var p2 = params.points[1];
+            if (isValid(prev) && isValid(curr) && isValid(prev2) && isValid(p2)) {
+                if (isNumber(curr.dataIndex) && isNumber(prev.dataIndex) && isNumber(prev2.dataIndex)) {
+                    p2.dataIndex = prev2.dataIndex + (curr.dataIndex - prev.dataIndex);
+                    if (isNumber(prev2.timestamp) && isNumber(prev.timestamp) && isNumber(curr.timestamp)) {
+                        p2.timestamp = prev2.timestamp + (curr.timestamp - prev.timestamp);
+                    }
+                }
+                else if (isNumber(curr.timestamp) && isNumber(prev.timestamp) && isNumber(prev2.timestamp)) {
+                    p2.timestamp = prev2.timestamp + (curr.timestamp - prev.timestamp);
+                }
+                if (isNumber(curr.value) && isNumber(prev.value) && isNumber(prev2.value)) {
+                    p2.value = prev2.value + (curr.value - prev.value);
+                }
+                this.invalidateFigures();
+            }
+            return;
+        }
         if (params.performPointIndex !== 1) {
             return;
         }
@@ -43589,6 +45121,7 @@ var trendAngle = {
 var verticalRayLine = {
     name: 'verticalRayLine',
     totalStep: 3,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -43792,6 +45325,7 @@ var verticalSegment = {
 var verticalStraightLine = {
     name: 'verticalStraightLine',
     totalStep: 2,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -44243,6 +45777,7 @@ function pushChannelXAxisPills(figures, prefix, coordinates, points, color) {
 var disjointChannel = {
     name: 'disjointChannel',
     totalStep: 4,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -44270,7 +45805,11 @@ var disjointChannel = {
         var hasMirror = coordinates.length >= 3;
         var cornerP = { x: t.x, y: hasMirror ? coordinates[2].y : 0 };
         var cornerA = { x: b.x, y: cornerP.y + (t.y - b.y) };
-        var _f = __read(getExtendedCoordinates(cornerA, cornerP, bounding.width, bounding.height, extendLeft, extendRight), 2), s2 = _f[0], e2 = _f[1];
+        // Degenerate mirrored edge (b.x === t.x): extension would read the
+        // zero-width edge as vertical and paint a full-height phantom line.
+        var _f = __read(cornerA.x === cornerP.x
+            ? [cornerA, cornerP]
+            : getExtendedCoordinates(cornerA, cornerP, bounding.width, bounding.height, extendLeft, extendRight), 2), s2 = _f[0], e2 = _f[1];
         // Fill — TradingView DisjointChannelRenderer quad [b, t, P, A].
         if (hasMirror && channelFillEnabled(ext)) {
             var fill_1 = channelFillColor(ext, stroke.color);
@@ -44477,6 +46016,7 @@ var disjointChannel = {
 var flatTopBottom = {
     name: 'flatTopBottom',
     totalStep: 4,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -44504,7 +46044,11 @@ var flatTopBottom = {
         var levelY = hasLevel ? coordinates[2].y : 0;
         var p = { x: d.x, y: levelY };
         var c = { x: h.x, y: levelY };
-        var _f = __read(getExtendedCoordinates(p, c, bounding.width, bounding.height, extendLeft, extendRight), 2), s2 = _f[0], e2 = _f[1];
+        // Degenerate flat edge (d.x === h.x): extension would read the
+        // zero-width edge as vertical and paint a full-height phantom line.
+        var _f = __read(p.x === c.x
+            ? [p, c]
+            : getExtendedCoordinates(p, c, bounding.width, bounding.height, extendLeft, extendRight), 2), s2 = _f[0], e2 = _f[1];
         // Fill — TradingView DisjointChannelRenderer quad [d, h, c, p].
         if (hasLevel && channelFillEnabled(ext)) {
             var fill_1 = channelFillColor(ext, stroke.color);
@@ -44709,6 +46253,7 @@ var flatTopBottom = {
 var parallelStraightLine = {
     name: 'parallelStraightLine',
     totalStep: 4,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -45007,13 +46552,65 @@ var parallelStraightLine = {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+function computeEdges(coordinates, bounding, extendLeft, extendRight) {
+    if (coordinates.length < 2) {
+        return null;
+    }
+    var c0 = coordinates[0];
+    var c1 = coordinates[1];
+    var c2 = coordinates[2];
+    var xs = coordinates.map(function (c) { return c.x; });
+    var leftX = extendLeft ? 0 : Math.min.apply(Math, __spreadArray([], __read(xs), false));
+    var rightX = extendRight ? bounding.width : Math.max.apply(Math, __spreadArray([], __read(xs), false));
+    if (Math.abs(c1.x - c0.x) < 1e-10) {
+        // Degenerate vertical middle — parallel edges are verticals offset by
+        // the same x-distance as P2 is from the middle.
+        var middle_1 = [{ x: c0.x, y: 0 }, { x: c0.x, y: bounding.height }];
+        if (!isValid(c2)) {
+            return { middle: middle_1, edge: middle_1, mirror: middle_1 };
+        }
+        var distance = c0.x - c2.x;
+        return {
+            middle: middle_1,
+            edge: [{ x: c2.x, y: 0 }, { x: c2.x, y: bounding.height }],
+            mirror: [{ x: c0.x + distance, y: 0 }, { x: c0.x + distance, y: bounding.height }]
+        };
+    }
+    var k = (c1.y - c0.y) / (c1.x - c0.x);
+    var b = c0.y - k * c0.x;
+    var middle = [
+        { x: leftX, y: leftX * k + b },
+        { x: rightX, y: rightX * k + b }
+    ];
+    if (!isValid(c2)) {
+        return { middle: middle, edge: middle, mirror: middle };
+    }
+    var b1 = c2.y - k * c2.x;
+    var bm = 2 * b - b1;
+    return {
+        middle: middle,
+        edge: [
+            { x: leftX, y: leftX * k + b1 },
+            { x: rightX, y: rightX * k + b1 }
+        ],
+        mirror: [
+            { x: leftX, y: leftX * k + bm },
+            { x: rightX, y: rightX * k + bm }
+        ]
+    };
+}
 var priceChannelLine = {
     name: 'priceChannelLine',
-    totalStep: 3,
+    totalStep: 4,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
     extendData: {
+        // Upstream renders the edges across the whole pane — default both
+        // extensions on so legacy records (no extendData) match pixel-for-pixel.
+        extendLeft: true,
+        extendRight: true,
         fillBackground: true,
         transparency: 80
     },
@@ -45026,24 +46623,20 @@ var priceChannelLine = {
         }
         var ext = isValid(overlay.extendData) ? overlay.extendData : {};
         var stroke = channelStrokeOf(overlay, chart, ext);
-        var extendLeft = ext.extendLeft === true;
-        var extendRight = ext.extendRight === true;
+        var extendLeft = ext.extendLeft !== false;
+        var extendRight = ext.extendRight !== false;
         var precision = pricePrecisionOf(chart, overlay, yAxis, ext.pricePrecision);
-        var _b = __read(coordinates, 2), c0 = _b[0], c1 = _b[1];
-        var minX = Math.min(c0.x, c1.x);
-        var maxX = Math.max(c0.x, c1.x);
-        // Flat edges at each anchor's own level, rendered over the anchor
-        // x-slab (extended to the pane edges when enabled).
-        var leftX = extendLeft ? 0 : minX;
-        var rightX = extendRight ? bounding.width : maxX;
-        var s1 = { x: leftX, y: c0.y };
-        var e1 = { x: rightX, y: c0.y };
-        var s2 = { x: leftX, y: c1.y };
-        var e2 = { x: rightX, y: c1.y };
-        // Fill — TV band polygon over the anchor quad (unextended anchors;
-        // the clip sequence applies the extension flags itself).
-        if (channelFillEnabled(ext) && Math.abs(c1.y - c0.y) > 1e-10) {
-            var band = channelBandPolygon({ x: c0.x, y: c0.y }, { x: c1.x, y: c0.y }, { x: c0.x, y: c1.y }, { x: c1.x, y: c1.y }, extendLeft, extendRight, bounding);
+        var edges = computeEdges(coordinates, bounding, extendLeft, extendRight);
+        if (edges === null) {
+            return figures;
+        }
+        var hasEdge = isValid(coordinates[2]) &&
+            (Math.abs(edges.edge[0].x - edges.middle[0].x) > 1e-10 ||
+                Math.abs(edges.edge[0].y - edges.middle[0].y) > 1e-10);
+        // Fill — the full channel region sits between the two OUTER edges
+        // (P2-parallel on one side of the middle, the mirror on the other).
+        if (hasEdge && channelFillEnabled(ext)) {
+            var band = channelBandPolygon(edges.edge[0], edges.edge[1], edges.mirror[0], edges.mirror[1], extendLeft, extendRight, bounding);
             if (band.length >= 3) {
                 figures.push({
                     key: 'pcl_fill',
@@ -45055,27 +46648,49 @@ var priceChannelLine = {
             }
         }
         figures.push({
-            key: 'pcl_line1',
+            key: 'pcl_middle',
             type: 'line',
-            attrs: { coordinates: [s1, e1] },
+            attrs: { coordinates: edges.middle },
             styles: stroke
         });
-        figures.push({
-            key: 'pcl_line2',
-            type: 'line',
-            attrs: { coordinates: [s2, e2] },
-            styles: stroke
-        });
-        // Price labels at the two levels (TradingView `showPrices` parity).
-        if (ext.showPrices === true || ext.showPriceLabels === true || ext.showPriceLabel === true) {
-            var points = overlay.points;
-            var p0 = isValid(points[0]) ? points[0] : {};
-            var p1 = isValid(points[1]) ? points[1] : {};
-            pushSidePriceLabel(figures, 'pcl_price0', c0, p0.value, c0.x <= c1.x ? 'left' : 'right', stroke.color, precision);
-            pushSidePriceLabel(figures, 'pcl_price1', c1, p1.value, c1.x > c0.x ? 'right' : 'left', stroke.color, precision);
+        if (hasEdge) {
+            figures.push({
+                key: 'pcl_edge',
+                type: 'line',
+                attrs: { coordinates: edges.edge },
+                styles: stroke
+            });
+            figures.push({
+                key: 'pcl_mirror',
+                type: 'line',
+                attrs: { coordinates: edges.mirror },
+                styles: stroke
+            });
         }
-        var diagonalCursor = computeResizeCursor(c0, c1);
-        var antiCursor = computeResizeCursor({ x: c0.x, y: c1.y }, { x: c1.x, y: c0.y });
+        // Price labels at each edge's right-end level (TradingView
+        // `showPrices` parity — the edge levels, not raw anchor values).
+        if (ext.showPrices === true || ext.showPriceLabels === true || ext.showPriceLabel === true) {
+            var rightEnd = function (edge) { return edge[1].x >= edge[0].x ? edge[1] : edge[0]; };
+            var edgeValue = function (y) {
+                if (yAxis === null) {
+                    return undefined;
+                }
+                var v = yAxis.convertFromPixel(y);
+                return isNumber(v) ? v : undefined;
+            };
+            var cMid = rightEnd(edges.middle);
+            pushSidePriceLabel(figures, 'pcl_price_mid', cMid, edgeValue(cMid.y), 'right', stroke.color, precision);
+            if (hasEdge) {
+                var cEdge = rightEnd(edges.edge);
+                var cMirror = rightEnd(edges.mirror);
+                pushSidePriceLabel(figures, 'pcl_price_edge', cEdge, edgeValue(cEdge.y), 'right', stroke.color, precision);
+                pushSidePriceLabel(figures, 'pcl_price_mirror', cMirror, edgeValue(cMirror.y), 'right', stroke.color, precision);
+            }
+        }
+        // All anchors move along/alongside the middle line — same diagonal
+        // cursor for each (the parallel edge drags keep the slope anyway).
+        var diagonalCursor = computeResizeCursor(coordinates[0], coordinates[1]);
+        var cursors = coordinates.map(function () { return diagonalCursor; });
         figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
             coordinates: coordinates,
             isSelected: isSelected,
@@ -45083,24 +46698,8 @@ var priceChannelLine = {
             isDrawing: overlay.isDrawing(),
             lock: overlay.lock,
             isTouch: isTouch,
-            cursors: [diagonalCursor, diagonalCursor]
+            cursors: cursors
         })), false));
-        // The other two corners — each drags its side's index plus the
-        // opposite anchor's price (Flat Top/Bottom corner-pin behavior).
-        var interactive = !overlay.lock && !overlay.isDrawing() &&
-            ((isSelected !== null && isSelected !== void 0 ? isSelected : false) || (isHovered !== null && isHovered !== void 0 ? isHovered : false));
-        if (interactive && Math.abs(c1.y - c0.y) > 1e-10 && Math.abs(c1.x - c0.x) > 1e-10) {
-            figures.push(channelHandleFigure('pcl_ne', { x: c1.x, y: c0.y }, {
-                pointIndex: 1,
-                cursor: antiCursor,
-                isTouch: isTouch
-            }));
-            figures.push(channelHandleFigure('pcl_sw', { x: c0.x, y: c1.y }, {
-                pointIndex: 0,
-                cursor: antiCursor,
-                isTouch: isTouch
-            }));
-        }
         return figures;
     },
     createXAxisFigures: function (_a) {
@@ -45124,26 +46723,7 @@ var priceChannelLine = {
         return figures;
     },
     performEventPressedMove: function (params) {
-        var points = params.points;
-        var index = params.performPointIndex;
-        var key = params.figureKey;
-        if (key === 'pcl_ne' || key === 'pcl_sw') {
-            // Off-diagonal corner — kernel wrote the dragged index's point =
-            // cursor; restore its price and push the dragged level into the
-            // OPPOSITE anchor (each corner carries the other edge's level).
-            var dragged = points[index];
-            var otherIndex = 1 - index;
-            var other = points[otherIndex];
-            var prev = isValid(params.prevPoints[index]) ? params.prevPoints[index] : {};
-            if (isValid(dragged) && isValid(other) && isNumber(dragged.value)) {
-                other.value = dragged.value;
-                if (isNumber(prev.value)) {
-                    dragged.value = prev.value;
-                }
-            }
-            return;
-        }
-        if (index === 1) {
+        if (params.performPointIndex === 1) {
             applySnap45(this, params, 0);
         }
     },
@@ -45218,8 +46798,11 @@ function computeRegression(chart, overlay, cfg) {
     if (i1 < 0 || i2 < 0 || Math.abs(i2 - i1) < 1) {
         return null;
     }
-    var start = Math.max(0, Math.min(i1, i2));
-    var end = Math.min(dataList.length - 1, Math.max(i1, i2));
+    // Floor/ceil fractional legacy indices — a fractional start would index
+    // dataList[10.4] → undefined → getPriceFromSource returns 0 and the fit
+    // collapses onto the price-0 baseline.
+    var start = Math.max(0, Math.floor(Math.min(i1, i2)));
+    var end = Math.min(dataList.length - 1, Math.ceil(Math.max(i1, i2)));
     if (end - start < 1) {
         return null;
     }
@@ -45260,9 +46843,37 @@ function toPixelPoints(chart, paneId, points) {
     var converted = chart.convertToPixel(points, { paneId: paneId });
     return isArray(converted) ? converted : [converted];
 }
+/**
+ * TradingView `_updateAnchorsPrice` — after an anchor or body drag the
+ * stored prices snap back onto the fitted line so serialization and axis
+ * pills carry the regression values, not the raw pointer y.
+ */
+function snapAnchorsToFit(overlay, points) {
+    var chart = lineChartOf(overlay);
+    if (chart === undefined) {
+        return;
+    }
+    var ext = isValid(overlay.extendData) ? overlay.extendData : {};
+    var fit = computeRegression(chart, overlay, resolveConfig(ext));
+    if (fit === null) {
+        return;
+    }
+    var p0 = isValid(points[0]) ? points[0] : undefined;
+    var p1 = isValid(points[1]) ? points[1] : undefined;
+    var anchorAtStart = fit.i1 <= fit.i2 ? p0 : p1;
+    var anchorAtEnd = fit.i1 <= fit.i2 ? p1 : p0;
+    if (isValid(anchorAtStart)) {
+        anchorAtStart.value = fit.regStartVal;
+    }
+    if (isValid(anchorAtEnd)) {
+        anchorAtEnd.value = fit.regEndVal;
+    }
+}
 var regressionTrend = {
     name: 'regressionTrend',
     totalStep: 3,
+    cullable: false,
+    figureCacheDataRev: true,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -45545,28 +47156,13 @@ var regressionTrend = {
         }
     }),
     performEventPressedMove: function (params) {
-        // TradingView `_updateAnchorsPrice` — after each anchor drag the stored
-        // prices snap back onto the fitted line so serialization and axis
-        // pills carry the regression values, not the raw pointer y.
-        var chart = lineChartOf(this);
-        if (chart === undefined) {
-            return;
-        }
-        var ext = isValid(this.extendData) ? this.extendData : {};
-        var fit = computeRegression(chart, this, resolveConfig(ext));
-        if (fit === null) {
-            return;
-        }
-        var p0 = isValid(params.points[0]) ? params.points[0] : undefined;
-        var p1 = isValid(params.points[1]) ? params.points[1] : undefined;
-        var anchorAtStart = fit.i1 <= fit.i2 ? p0 : p1;
-        var anchorAtEnd = fit.i1 <= fit.i2 ? p1 : p0;
-        if (isValid(anchorAtStart)) {
-            anchorAtStart.value = fit.regStartVal;
-        }
-        if (isValid(anchorAtEnd)) {
-            anchorAtEnd.value = fit.regEndVal;
-        }
+        snapAnchorsToFit(this, params.points);
+    },
+    performEventBodyMove: function (params) {
+        // Body drags shift BOTH anchors by the pointer delta — the stored
+        // prices then sit off the fitted line at the new x-range. Re-snap
+        // exactly like an anchor drag or serialized values desync.
+        snapAnchorsToFit(this, params.points);
     }
 };
 
@@ -45598,7 +47194,7 @@ function shapeStrokeOf(overlay, chart, ext, channel) {
     var themePoly = chart.getStyles().overlay[channel];
     var channelStyles = (_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a[channel]) !== null && _b !== void 0 ? _b : {};
     var extStyle = (_c = ext.borderStyle) !== null && _c !== void 0 ? _c : ext.lineStyle;
-    var style = (_d = channelStyles.borderStyle) !== null && _d !== void 0 ? _d : (extStyle === 'solid' ? 'solid' : extStyle !== undefined ? 'dashed' : themePoly.borderStyle);
+    var style = (_d = channelStyles.borderStyle) !== null && _d !== void 0 ? _d : (extStyle === 'solid' || extStyle === 'dotted' ? extStyle : extStyle !== undefined ? 'dashed' : themePoly.borderStyle);
     var dashedValue = (_e = channelStyles.borderDashedValue) !== null && _e !== void 0 ? _e : (extStyle !== undefined ? SHAPE_DASH_MAP[extStyle] : themePoly.borderDashedValue);
     return {
         color: (_j = (_h = (_g = (_f = channelStyles.borderColor) !== null && _f !== void 0 ? _f : ext.borderColor) !== null && _g !== void 0 ? _g : ext.lineColor) !== null && _h !== void 0 ? _h : ext.color) !== null && _j !== void 0 ? _j : themePoly.borderColor,
@@ -46198,6 +47794,7 @@ var AXIS_PILL_COLOR$1 = '#2962FF';
 var circle = {
     name: 'circle',
     totalStep: 3,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -46631,6 +48228,7 @@ var AXIS_PILL_COLOR = '#2962FF';
 var ellipse = {
     name: 'ellipse',
     totalStep: 3,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -47179,6 +48777,7 @@ var OPPOSITE_CORNER = {
 var rect = {
     name: 'rect',
     totalStep: 3,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -48042,6 +49641,8 @@ var MAX_CYCLE_LINES = 512;
 var cyclicLines = {
     name: 'cyclicLines',
     totalStep: 3,
+    cullable: false,
+    figureCacheDataRev: true,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -48074,19 +49675,17 @@ var cyclicLines = {
             if (isNumber(p0.dataIndex) && isNumber(p1.dataIndex) && isValid(xAxis)) {
                 var step = p1.dataIndex - p0.dataIndex;
                 if (step !== 0) {
-                    var range = chart.getVisibleRange();
-                    var to = isValid(range) ? range.to : Number.MAX_SAFE_INTEGER;
-                    var from = isValid(range) ? range.from : 0;
-                    for (var index = p0.dataIndex; step > 0 ? index <= to : index >= from; index += step) {
-                        if (xs.length >= MAX_CYCLE_LINES) {
-                            break;
-                        }
+                    // March in dataIndex space but bound by PIXELS — visibleRange is
+                    // clamped to loaded data and would stop the march at the last
+                    // real bar, dropping lines that belong in the empty future
+                    // margin (dataIndexToCoordinate extrapolates fine there).
+                    for (var index = p0.dataIndex; xs.length < MAX_CYCLE_LINES; index += step) {
                         var x = xAxis.convertToPixel(index);
-                        if (x >= -pad && x <= bounding.width + pad) {
-                            xs.push(x);
-                        }
-                        else if (step > 0 ? x > bounding.width + pad : x < -pad) {
+                        if (step > 0 ? x > bounding.width + pad : x < -pad) {
                             break;
+                        }
+                        if (x >= -pad) {
+                            xs.push(x);
                         }
                     }
                 }
@@ -48565,6 +50164,7 @@ function extendRayToPaneEdge(from, dir, bounding) {
 var headAndShoulders = {
     name: 'headAndShoulders',
     totalStep: 8,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -48691,6 +50291,7 @@ var headAndShoulders = {
 var sineLine = {
     name: 'sineLine',
     totalStep: 3,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -48856,6 +50457,7 @@ var MAX_CYCLE_DOMES = 512;
 var timeCycles = {
     name: 'timeCycles',
     totalStep: 3,
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
@@ -48931,8 +50533,10 @@ var timeCycles = {
         return figures;
     }),
     // TradingView `addPoint`/`setPoint`: both anchors share one baseline
-    // price — whichever anchor is dragged/drag-placed wins, the other
-    // follows. During replay the normalized pair converges to point[0].
+    // price. While DRAWING, point[0] owns the baseline — placing point[1]
+    // snaps it onto point[0]'s level (never drags the baseline down to
+    // wherever the second click lands). Post-draw drags keep whichever
+    // anchor moved as the source.
     performEventPressedMove: function (_a) {
         var points = _a.points, performPointIndex = _a.performPointIndex;
         var moved = points[performPointIndex];
@@ -48943,10 +50547,13 @@ var timeCycles = {
     },
     performEventMoveForDrawing: function (_a) {
         var points = _a.points, performPointIndex = _a.performPointIndex;
+        if (performPointIndex === 0) {
+            return;
+        }
+        var baseline = points[0];
         var moved = points[performPointIndex];
-        var other = points[1 - performPointIndex];
-        if (isValid(moved) && isValid(other) && isNumber(moved.value)) {
-            other.value = moved.value;
+        if (isValid(baseline) && isValid(moved) && isNumber(baseline.value)) {
+            moved.value = baseline.value;
         }
     }
 };
@@ -49005,26 +50612,26 @@ var trianglePattern = {
         var wedge = null;
         if (coordinates.length === 4) {
             var _d = __read(coordinates, 4), a = _d[0], b = _d[1], c = _d[2], d = _d[3];
-            if (Math.abs(c.x - a.x) < 1 || Math.abs(d.x - b.x) < 1) {
-                return [];
-            }
+            var degenerate = Math.abs(c.x - a.x) < 1 || Math.abs(d.x - b.x) < 1;
             var slopeAC = (c.y - a.y) / (c.x - a.x);
             var slopeBD = (d.y - b.y) / (d.x - b.x);
-            if (Math.abs(slopeAC - slopeBD) < 1e-6) {
-                return [];
+            // Only the WEDGE is skipped when legs are vertical/parallel — legs,
+            // labels and anchors still render (a degenerate wedge is not a
+            // degenerate drawing).
+            if (!degenerate && Math.abs(slopeAC - slopeBD) >= 1e-6) {
+                var edgeX = Math.min(a.x, b.x, c.x, d.x);
+                var wedgeA = { x: edgeX, y: a.y + (edgeX - a.x) * slopeAC };
+                var wedgeB = { x: edgeX, y: b.y + (edgeX - b.x) * slopeBD };
+                var apexX = (b.y - a.y + a.x * slopeAC - b.x * slopeBD) / (slopeAC - slopeBD);
+                if (apexX < edgeX) {
+                    // Crossing sits left of every vertex — cap on the right edge.
+                    edgeX = Math.max(a.x, b.x, c.x, d.x);
+                    wedgeA = { x: edgeX, y: a.y + (edgeX - a.x) * slopeAC };
+                    wedgeB = { x: edgeX, y: b.y + (edgeX - b.x) * slopeBD };
+                }
+                var apex = { x: apexX, y: a.y + (apexX - a.x) * slopeAC };
+                wedge = [wedgeA, wedgeB, apex];
             }
-            var edgeX = Math.min(a.x, b.x, c.x, d.x);
-            var wedgeA = { x: edgeX, y: a.y + (edgeX - a.x) * slopeAC };
-            var wedgeB = { x: edgeX, y: b.y + (edgeX - b.x) * slopeBD };
-            var apexX = (b.y - a.y + a.x * slopeAC - b.x * slopeBD) / (slopeAC - slopeBD);
-            if (apexX < edgeX) {
-                // Crossing sits left of every vertex — cap on the right edge.
-                edgeX = Math.max(a.x, b.x, c.x, d.x);
-                wedgeA = { x: edgeX, y: a.y + (edgeX - a.x) * slopeAC };
-                wedgeB = { x: edgeX, y: b.y + (edgeX - b.x) * slopeBD };
-            }
-            var apex = { x: apexX, y: a.y + (apexX - a.x) * slopeAC };
-            wedge = [wedgeA, wedgeB, apex];
         }
         // Solid legs (TV draws three separate solid trend lines).
         for (var i = 1; i < coordinates.length; i++) {
@@ -49645,6 +51252,23 @@ var highlighter = {
  * Loaded AFTER src/extension/overlay (barrel order in src/index.ts), so
  * same-name rebuilt templates replace their kernel predecessors.
  */
+/**
+ * Decorates a template's figure callbacks with the shared per-overlay/
+ * per-slot cache (coordinates + figuresRev + selection/hover + lock +
+ * bounding + currentStep + isTouch signature; `figureCacheDataRev` adds
+ * chart.getDataList() revision for data-reading tools). Templates may opt
+ * out entirely via `figuresCacheable: false`.
+ */
+function withDrawingsFigureCache(template) {
+    if (template.figuresCacheable === false) {
+        return template;
+    }
+    var cacheOpts = { includeDataRev: template.figureCacheDataRev === true };
+    var wrap = function (fn, slot) {
+        return (fn == null ? null : rewrapFigureCache(fn, __assign(__assign({}, cacheOpts), { slot: slot })));
+    };
+    return __assign(__assign({}, template), { createPointFigures: wrap(template.createPointFigures, 'point'), createXAxisFigures: wrap(template.createXAxisFigures, 'x'), createYAxisFigures: wrap(template.createYAxisFigures, 'y') });
+}
 var drawingTools = [
     textNote,
     anchoredNote,
@@ -49653,6 +51277,7 @@ var drawingTools = [
     comment,
     flagMark,
     simpleTag,
+    simpleAnnotation,
     priceLabel,
     signpost,
     table,
@@ -49738,31 +51363,8 @@ var drawingTools = [
     highlighter
 ];
 drawingTools.forEach(function (template) {
-    registerOverlay(template);
+    registerOverlay(withDrawingsFigureCache(template));
 });
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-function getCommonState(overlay) {
-    var _a;
-    var ed = overlay.extendData;
-    return (_a = ed === null || ed === void 0 ? void 0 : ed.common) !== null && _a !== void 0 ? _a : {};
-}
-function isVisibleOnInterval(overlay, interval) {
-    var visibleIntervals = getCommonState(overlay).visibleIntervals;
-    return visibleIntervals === undefined || visibleIntervals.length === 0 || visibleIntervals.includes(interval);
-}
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
