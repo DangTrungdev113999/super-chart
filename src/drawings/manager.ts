@@ -534,12 +534,19 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
           }
         })
       } else {
+        // Pending-removal tombstones apply to upserts too — a peer's stale
+        // upsert arriving after the user's local delete must not resurrect
+        // the drawing before the remove reaches the store.
+        const pendingRemoves = new Set<string>()
+        pendingByScope.forEach(bucket => {
+          bucket.remove.forEach(id => pendingRemoves.add(id))
+        })
         event.drawings.forEach(d => {
           try {
             const existing = chart.getOverlayById(d.id)
             if (existing !== null && !existing.isDrawing() && d.completed) {
               chart.overrideOverlay(serializedToOverlayCreate(d))
-            } else if (d.completed && existing === null) {
+            } else if (d.completed && existing === null && !pendingRemoves.has(d.id)) {
               shadow.set(d.id, d)
               chart.createOverlay(serializedToOverlayCreate(d))
             }
