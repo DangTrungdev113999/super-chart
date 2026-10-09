@@ -41,13 +41,38 @@ export interface DrawingToolCapabilities {
  * renders controls in this order; each control is a self-describing slot
  * so no consumer hard-codes button wiring.
  */
+/**
+ * A style write target: `[root, ...keys]` where root selects the overlay
+ * property (`styles` or `extendData`) the path is applied under. Recipes
+ * MUST name a path the tool's renderer actually reads — the role→path
+ * defaults only cover the `styles.line/polygon/rect/text` convention.
+ */
+export type StylePath = [target: 'styles' | 'extendData', ...keys: string[]]
+
+/**
+ * Per-tool override map for the toolbar/schema style surface — keys are
+ * semantic slots, values the live read/write path for that tool.
+ */
+export interface DrawingStylePaths {
+  lineColor?: StylePath
+  lineWidth?: StylePath
+  lineStyle?: StylePath
+  fillColor?: StylePath
+  backgroundColor?: StylePath
+  textColor?: StylePath
+  textSize?: StylePath
+  textWeight?: StylePath
+  textStyle?: StylePath
+  textAlign?: StylePath
+}
+
 export type ToolbarControl =
-  | { kind: 'color', role: 'line' | 'fill' | 'text' | 'background' }
-  | { kind: 'style', role: 'line' | 'text' }
-  | { kind: 'width' }
+  | { kind: 'color', role: 'line' | 'fill' | 'text' | 'background', path?: StylePath }
+  | { kind: 'style', role: 'line' | 'text', path?: StylePath }
+  | { kind: 'width', path?: StylePath }
   | { kind: 'levels' }
-  | { kind: 'text' }
-  | { kind: 'textAlign' }
+  | { kind: 'text', path?: StylePath }
+  | { kind: 'textAlign', path?: StylePath }
   | { kind: 'geometry', options: Array<'rect' | 'rotated' | 'ellipse'> }
   | { kind: 'lock' }
   | { kind: 'visibility' }
@@ -70,6 +95,9 @@ export interface DrawingToolItem {
   hotkey?: string
   capabilities: DrawingToolCapabilities
   toolbarRecipe: ToolbarControl[]
+  /** Live read/write path overrides for the recipe's style controls — the
+   * toolbar and settings schema both resolve through this map. */
+  stylePaths?: DrawingStylePaths
   /** False while a tool is planned but not yet shipped — hosts dim it. */
   available: boolean
   /**
@@ -100,22 +128,40 @@ function caps (partial: Partial<DrawingToolCapabilities> & Pick<DrawingToolCapab
   return { freehand: false, hasText: false, multiline: false, ...BASE, ...partial }
 }
 
+const TAIL: ToolbarControl[] = [
+  { kind: 'lock' }, { kind: 'visibility' }, { kind: 'clone' },
+  { kind: 'settings' }, { kind: 'remove' }, { kind: 'more' }
+]
+
 const LINE_RECIPE: ToolbarControl[] = [
   { kind: 'color', role: 'line' }, { kind: 'style', role: 'line' }, { kind: 'width' },
-  { kind: 'snap45' }, { kind: 'lock' }, { kind: 'visibility' }, { kind: 'clone' },
-  { kind: 'settings' }, { kind: 'remove' }, { kind: 'more' }
+  { kind: 'snap45' }, ...TAIL
 ]
 
 const FIB_RECIPE: ToolbarControl[] = [
   { kind: 'color', role: 'line' }, { kind: 'levels' }, { kind: 'style', role: 'line' },
-  { kind: 'lock' }, { kind: 'visibility' }, { kind: 'clone' }, { kind: 'settings' },
-  { kind: 'remove' }, { kind: 'more' }
+  { kind: 'width' }, ...TAIL
 ]
 
-const SHAPE_RECIPE: ToolbarControl[] = [
-  { kind: 'color', role: 'line' }, { kind: 'color', role: 'fill' }, { kind: 'style', role: 'line' },
-  { kind: 'lock' }, { kind: 'visibility' }, { kind: 'clone' }, { kind: 'settings' },
-  { kind: 'remove' }, { kind: 'more' }
+/**
+ * Stroke/fill live under `styles.<channel>.border*` / `.color` — the channel
+ * is per-tool (rect | circle | polygon | arc), so the recipe is a factory.
+ */
+function shapeRecipe (channel: 'rect' | 'circle' | 'polygon' | 'arc', fill: 'rect' | 'circle' | 'polygon' | 'arc' = channel): ToolbarControl[] {
+  return [
+    { kind: 'color', role: 'line', path: ['styles', channel, 'borderColor'] },
+    { kind: 'color', role: 'fill', path: ['styles', fill, 'color'] },
+    { kind: 'style', role: 'line', path: ['styles', channel, 'borderStyle'] },
+    { kind: 'width', path: ['styles', channel, 'borderSize'] },
+    ...TAIL
+  ]
+}
+
+/** Line-drawn freehand/curve tools read styles.line.* — same surface as
+ * LINE_RECIPE minus the 45° snap control. */
+const PATH_RECIPE: ToolbarControl[] = [
+  { kind: 'color', role: 'line' }, { kind: 'style', role: 'line' }, { kind: 'width' },
+  ...TAIL
 ]
 
 const TEXT_RECIPE: ToolbarControl[] = [
@@ -124,11 +170,95 @@ const TEXT_RECIPE: ToolbarControl[] = [
   { kind: 'settings' }, { kind: 'remove' }, { kind: 'more' }
 ]
 
+/** Measure/range tools style via extendData — generic roles resolve through
+ * each item's stylePaths, so the recipe stays family-shaped. */
 const MEASURE_RECIPE: ToolbarControl[] = [
   { kind: 'color', role: 'line' }, { kind: 'color', role: 'background' }, { kind: 'text' },
   { kind: 'lock' }, { kind: 'visibility' }, { kind: 'clone' }, { kind: 'settings' },
   { kind: 'remove' }, { kind: 'more' }
 ]
+
+const RANGE_RECIPE: ToolbarControl[] = [
+  { kind: 'color', role: 'line' }, { kind: 'style', role: 'line' }, { kind: 'width' },
+  ...TAIL
+]
+
+const POSITION_RECIPE: ToolbarControl[] = [
+  { kind: 'color', role: 'line' }, { kind: 'color', role: 'fill' },
+  { kind: 'color', role: 'background' }, { kind: 'color', role: 'text' },
+  { kind: 'text' }, ...TAIL
+]
+
+/** ExtendData style-path maps for tools whose renderers never read
+ * styles.line.* — writing the default paths used to be dead code. */
+const RANGE_STYLE_PATHS: DrawingStylePaths = {
+  lineColor: ['extendData', 'color'],
+  lineStyle: ['extendData', 'lineStyle'],
+  lineWidth: ['extendData', 'lineWidth']
+}
+
+const MARK_STYLE_PATHS: DrawingStylePaths = {
+  lineColor: ['extendData', 'color']
+}
+
+const HIGHLIGHTER_STYLE_PATHS: DrawingStylePaths = {
+  lineColor: ['extendData', 'color'],
+  lineWidth: ['extendData', 'lineWidth']
+}
+
+const BARS_PATTERN_STYLE_PATHS: DrawingStylePaths = {
+  lineColor: ['extendData', 'color']
+}
+
+const GHOST_FEED_STYLE_PATHS: DrawingStylePaths = {
+  fillColor: ['extendData', 'upColor'],
+  backgroundColor: ['extendData', 'downColor']
+}
+
+const POSITION_STYLE_PATHS: DrawingStylePaths = {
+  lineColor: ['extendData', 'lineColor'],
+  fillColor: ['extendData', 'profitBackground'],
+  backgroundColor: ['extendData', 'stopBackground'],
+  textColor: ['extendData', 'textColor'],
+  textSize: ['extendData', 'fontSize']
+}
+
+const FORECAST_STYLE_PATHS: DrawingStylePaths = {
+  lineColor: ['extendData', 'lineColor'],
+  backgroundColor: ['extendData', 'sourceBgColor'],
+  textColor: ['extendData', 'targetTextColor']
+}
+
+const PROJECTION_STYLE_PATHS: DrawingStylePaths = {
+  lineColor: ['extendData', 'lineColor'],
+  lineWidth: ['extendData', 'lineWidth'],
+  fillColor: ['extendData', 'color1'],
+  backgroundColor: ['extendData', 'color2']
+}
+
+const PROJECTION_RECIPE: ToolbarControl[] = [
+  { kind: 'color', role: 'line' }, { kind: 'width' },
+  { kind: 'color', role: 'fill' }, { kind: 'color', role: 'background' },
+  ...TAIL
+]
+
+const COLOR_ONLY_RECIPE: ToolbarControl[] = [
+  { kind: 'color', role: 'line' }, ...TAIL
+]
+
+const HIGHLIGHTER_RECIPE: ToolbarControl[] = [
+  { kind: 'color', role: 'line' }, { kind: 'width' }, ...TAIL
+]
+
+const ZONE_COLORS_RECIPE: ToolbarControl[] = [
+  { kind: 'color', role: 'fill' }, { kind: 'color', role: 'background' }, ...TAIL
+]
+
+const MEASURE_STYLE_PATHS: DrawingStylePaths = {
+  lineColor: ['extendData', 'color'],
+  fillColor: ['extendData', 'upColor'],
+  backgroundColor: ['extendData', 'downColor']
+}
 
 function item (
   id: string,
@@ -137,7 +267,7 @@ function item (
   iconId: DrawingIconId,
   capabilities: DrawingToolCapabilities,
   toolbarRecipe: ToolbarControl[],
-  extra?: Partial<Pick<DrawingToolItem, 'hotkey' | 'available' | 'nonTool'>>
+  extra?: Partial<Pick<DrawingToolItem, 'hotkey' | 'available' | 'nonTool' | 'stylePaths'>>
 ): DrawingToolItem {
   return { id, overlayName, title, iconId, capabilities, toolbarRecipe, available: true, ...extra }
 }
@@ -276,21 +406,21 @@ function buildCatalog (): DrawingToolGroup[] {
         {
           id: 'forecast',
           items: [
-            item('forecast', 'forecast', 'Forecast', 'forecast', caps({ anchorCount: 2 }), MEASURE_RECIPE),
-            item('projection', 'projection', 'Projection', 'forecast', caps({ anchorCount: 3 }), MEASURE_RECIPE),
-            item('barsPattern', 'barsPattern', 'Bars Pattern', 'path', caps({ anchorCount: 2 }), MEASURE_RECIPE),
-            item('ghostFeed', 'ghostFeed', 'Ghost Feed', 'path', caps({ anchorCount: 2 }), MEASURE_RECIPE)
+            item('forecast', 'forecast', 'Forecast', 'forecast', caps({ anchorCount: 2 }), MEASURE_RECIPE, { stylePaths: FORECAST_STYLE_PATHS }),
+            item('projection', 'projection', 'Projection', 'forecast', caps({ anchorCount: 3 }), PROJECTION_RECIPE, { stylePaths: PROJECTION_STYLE_PATHS }),
+            item('barsPattern', 'barsPattern', 'Bars Pattern', 'path', caps({ anchorCount: 2 }), COLOR_ONLY_RECIPE, { stylePaths: BARS_PATTERN_STYLE_PATHS }),
+            item('ghostFeed', 'ghostFeed', 'Ghost Feed', 'path', caps({ anchorCount: 2 }), ZONE_COLORS_RECIPE, { stylePaths: GHOST_FEED_STYLE_PATHS })
           ]
         },
         {
           id: 'measurers',
           items: [
-            item('measure', 'measure', 'Measure', 'measure', caps({ anchorCount: 0, freehand: true, snap45: false }), MEASURE_RECIPE),
-            item('dateRange', 'dateRange', 'Date Range', 'dateRange', caps({ anchorCount: 2 }), MEASURE_RECIPE),
-            item('priceRange', 'priceRange', 'Price Range', 'priceRange', caps({ anchorCount: 2 }), MEASURE_RECIPE),
-            item('dateAndPriceRange', 'dateAndPriceRange', 'Date and Price Range', 'dateRange', caps({ anchorCount: 2 }), MEASURE_RECIPE),
-            item('longPosition', 'longPosition', 'Long Position', 'longPosition', caps({ anchorCount: 1 }), MEASURE_RECIPE),
-            item('shortPosition', 'shortPosition', 'Short Position', 'shortPosition', caps({ anchorCount: 1 }), MEASURE_RECIPE)
+            item('measure', 'measure', 'Measure', 'measure', caps({ anchorCount: 0, freehand: true, snap45: false }), ZONE_COLORS_RECIPE, { stylePaths: MEASURE_STYLE_PATHS }),
+            item('dateRange', 'dateRange', 'Date Range', 'dateRange', caps({ anchorCount: 2 }), RANGE_RECIPE, { stylePaths: RANGE_STYLE_PATHS }),
+            item('priceRange', 'priceRange', 'Price Range', 'priceRange', caps({ anchorCount: 2 }), RANGE_RECIPE, { stylePaths: RANGE_STYLE_PATHS }),
+            item('dateAndPriceRange', 'dateAndPriceRange', 'Date and Price Range', 'dateRange', caps({ anchorCount: 2 }), RANGE_RECIPE, { stylePaths: RANGE_STYLE_PATHS }),
+            item('longPosition', 'longPosition', 'Long Position', 'longPosition', caps({ anchorCount: 1 }), POSITION_RECIPE, { stylePaths: POSITION_STYLE_PATHS }),
+            item('shortPosition', 'shortPosition', 'Short Position', 'shortPosition', caps({ anchorCount: 1 }), POSITION_RECIPE, { stylePaths: POSITION_STYLE_PATHS })
           ]
         }
       ]
@@ -302,34 +432,34 @@ function buildCatalog (): DrawingToolGroup[] {
         {
           id: 'brushes',
           items: [
-            item('brush', 'brush', 'Brush', 'brush', caps({ anchorCount: 0, freehand: true, snap45: false }), SHAPE_RECIPE),
-            item('highlighter', 'highlighter', 'Highlighter', 'highlighter', caps({ anchorCount: 0, freehand: true, snap45: false }), SHAPE_RECIPE),
-            item('path', 'path', 'Path', 'path', caps({ anchorCount: -1, snap45: false }), SHAPE_RECIPE)
+            item('brush', 'brush', 'Brush', 'brush', caps({ anchorCount: 0, freehand: true, snap45: false }), PATH_RECIPE),
+            item('highlighter', 'highlighter', 'Highlighter', 'highlighter', caps({ anchorCount: 0, freehand: true, snap45: false }), HIGHLIGHTER_RECIPE, { stylePaths: HIGHLIGHTER_STYLE_PATHS }),
+            item('path', 'path', 'Path', 'path', caps({ anchorCount: -1, snap45: false }), PATH_RECIPE)
           ]
         },
         {
           id: 'arrows',
           items: [
-            item('arrowMarkUp', 'arrowMarkUp', 'Arrow Mark Up', 'arrow', caps({ anchorCount: 1, snap45: false }), SHAPE_RECIPE),
-            item('arrowMarkDown', 'arrowMarkDown', 'Arrow Mark Down', 'arrow', caps({ anchorCount: 1, snap45: false }), SHAPE_RECIPE),
-            item('arrowMarkLeft', 'arrowMarkLeft', 'Arrow Mark Left', 'arrow', caps({ anchorCount: 1, snap45: false }), SHAPE_RECIPE),
-            item('arrowMarkRight', 'arrowMarkRight', 'Arrow Mark Right', 'arrow', caps({ anchorCount: 1, snap45: false }), SHAPE_RECIPE),
-            item('arrowMarker', 'arrowMarker', 'Arrow Marker', 'arrow', caps({ anchorCount: 2, snap45: false }), SHAPE_RECIPE)
+            item('arrowMarkUp', 'arrowMarkUp', 'Arrow Mark Up', 'arrow', caps({ anchorCount: 1, snap45: false }), COLOR_ONLY_RECIPE, { stylePaths: MARK_STYLE_PATHS }),
+            item('arrowMarkDown', 'arrowMarkDown', 'Arrow Mark Down', 'arrow', caps({ anchorCount: 1, snap45: false }), COLOR_ONLY_RECIPE, { stylePaths: MARK_STYLE_PATHS }),
+            item('arrowMarkLeft', 'arrowMarkLeft', 'Arrow Mark Left', 'arrow', caps({ anchorCount: 1, snap45: false }), COLOR_ONLY_RECIPE, { stylePaths: MARK_STYLE_PATHS }),
+            item('arrowMarkRight', 'arrowMarkRight', 'Arrow Mark Right', 'arrow', caps({ anchorCount: 1, snap45: false }), COLOR_ONLY_RECIPE, { stylePaths: MARK_STYLE_PATHS }),
+            item('arrowMarker', 'arrowMarker', 'Arrow Marker', 'arrow', caps({ anchorCount: 2, snap45: false }), COLOR_ONLY_RECIPE, { stylePaths: MARK_STYLE_PATHS })
           ]
         },
         {
           id: 'shapes',
           items: [
-            item('rect', 'rect', 'Rectangle', 'rect', caps({ anchorCount: 2 }), SHAPE_RECIPE),
-            item('rotatedRect', 'rotatedRect', 'Rotated Rectangle', 'rotatedRect', caps({ anchorCount: 3 }), SHAPE_RECIPE),
-            item('parallelogram', 'parallelogram', 'Parallelogram', 'rect', caps({ anchorCount: 3 }), SHAPE_RECIPE),
-            item('circle', 'circle', 'Circle', 'circle', caps({ anchorCount: 2 }), SHAPE_RECIPE),
-            item('ellipse', 'ellipse', 'Ellipse', 'ellipse', caps({ anchorCount: 2 }), SHAPE_RECIPE),
-            item('triangle', 'triangle', 'Triangle', 'triangle', caps({ anchorCount: 3 }), SHAPE_RECIPE),
-            item('arc', 'arc', 'Arc', 'arc', caps({ anchorCount: 3 }), SHAPE_RECIPE),
-            item('curve', 'curve', 'Curve', 'curve', caps({ anchorCount: 2 }), SHAPE_RECIPE),
-            item('doubleCurve', 'doubleCurve', 'Double Curve', 'curve', caps({ anchorCount: 2 }), SHAPE_RECIPE),
-            item('polyline', 'polyline', 'Polyline', 'polyline', caps({ anchorCount: -1 }), SHAPE_RECIPE)
+            item('rect', 'rect', 'Rectangle', 'rect', caps({ anchorCount: 2 }), shapeRecipe('rect')),
+            item('rotatedRect', 'rotatedRect', 'Rotated Rectangle', 'rotatedRect', caps({ anchorCount: 3 }), shapeRecipe('polygon')),
+            item('parallelogram', 'parallelogram', 'Parallelogram', 'rect', caps({ anchorCount: 3 }), shapeRecipe('polygon')),
+            item('circle', 'circle', 'Circle', 'circle', caps({ anchorCount: 2 }), shapeRecipe('circle')),
+            item('ellipse', 'ellipse', 'Ellipse', 'ellipse', caps({ anchorCount: 2 }), shapeRecipe('circle')),
+            item('triangle', 'triangle', 'Triangle', 'triangle', caps({ anchorCount: 3 }), shapeRecipe('polygon')),
+            item('arc', 'arc', 'Arc', 'arc', caps({ anchorCount: 3 }), shapeRecipe('arc', 'polygon')),
+            item('curve', 'curve', 'Curve', 'curve', caps({ anchorCount: 2 }), PATH_RECIPE),
+            item('doubleCurve', 'doubleCurve', 'Double Curve', 'curve', caps({ anchorCount: 2 }), PATH_RECIPE),
+            item('polyline', 'polyline', 'Polyline', 'polyline', caps({ anchorCount: -1 }), shapeRecipe('polygon'))
           ]
         }
       ]
@@ -355,8 +485,10 @@ function buildCatalog (): DrawingToolGroup[] {
             item('callout', 'callout', 'Callout', 'callout', caps({ anchorCount: 2, hasText: true, multiline: true, snap45: false }), TEXT_RECIPE),
             item('priceLabel', 'priceLabel', 'Price Label', 'priceLabel', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE),
             item('priceNote', 'simpleAnnotation', 'Price Note', 'priceLabel', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE),
-            item('flag', 'flagMark', 'Flag Mark', 'flag', caps({ anchorCount: 1, snap45: false }), TEXT_RECIPE),
-            item('table', 'table', 'Table', 'note', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE)
+            // flagMark styles live under styles.flagMark (flagColor/poleColor)
+            // — the generic text recipe wrote dead styles.text.* paths.
+            item('flag', 'flagMark', 'Flag Mark', 'flag', caps({ anchorCount: 1, snap45: false }), ZONE_COLORS_RECIPE, { stylePaths: { fillColor: ['styles', 'flagMark', 'flagColor'], backgroundColor: ['styles', 'flagMark', 'poleColor'] } }),
+            item('table', 'table', 'Table', 'note', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE, { stylePaths: { textAlign: ['styles', 'table', 'textAlign'] } })
           ]
         }
       ]

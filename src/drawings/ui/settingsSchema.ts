@@ -15,7 +15,7 @@
 import { isArray, isBoolean, isNumber } from '../../common/utils/typeChecks'
 import type { Overlay } from '../../component/Overlay'
 
-import type { DrawingToolItem } from '../catalog'
+import type { DrawingStylePaths, DrawingToolItem, StylePath } from '../catalog'
 import type { DrawingExtendData } from '../types'
 
 /**
@@ -137,41 +137,59 @@ function findLevelsPath (extendData: unknown): { path: string[], levels: unknown
 
 function styleFields (overlay: Overlay, item: DrawingToolItem | undefined, draft: SettingsDraft): SettingField[] {
   const styles = (overlay.styles ?? {}) as Record<string, unknown>
-  const liveStyles = (): Record<string, unknown> => (overlay.styles ?? {}) as Record<string, unknown>
+  const paths = item?.stylePaths ?? {}
   const fields: SettingField[] = []
+
+  // Resolve a stylePaths entry against its styles.* default, then bind
+  // get/set to the right draft channel (extendData-targeted paths write
+  // through draft.extendData — measure/position tools never read styles.*).
+  const resolve = (slot: keyof DrawingStylePaths, fallback: string[]): StylePath => {
+    const sp = paths[slot]
+    if (sp !== undefined) {
+      return sp
+    }
+    return ['styles', ...fallback]
+  }
+  const liveRoot = (sp: StylePath): unknown =>
+    sp[0] === 'extendData' ? overlay.extendData : liveStyles()
+  const liveStyles = (): Record<string, unknown> => (overlay.styles ?? {}) as Record<string, unknown>
+  const bind = (sp: StylePath): Pick<SettingField, 'get' | 'set'> => ({
+    get: () => readPath(liveRoot(sp), sp.slice(1)),
+    set: v => {
+      if (sp[0] === 'extendData') {
+        draft.extendData(sp.slice(1), v)
+      } else {
+        draft.style(sp.slice(1), v)
+      }
+    }
+  })
+
   const hasLine = styles.line !== undefined || hasRecipeControl(item, 'color', 'line') || hasRecipeControl(item, 'style', 'line')
   const hasText = item?.capabilities.hasText === true || styles.text !== undefined
   const hasFill = hasRecipeControl(item, 'color', 'fill') || styles.polygon !== undefined
 
   if (hasLine) {
+    const lineColor = resolve('lineColor', ['line', 'color'])
+    const lineWidth = resolve('lineWidth', ['line', 'size'])
+    const lineStyle = resolve('lineStyle', ['line', 'style'])
     fields.push(
-      {
-        id: 'lineColor',
-        kind: 'color',
-        label: 'Line color',
-        get: () => readPath(liveStyles(), ['line', 'color']),
-        set: v => { draft.style(['line', 'color'], v) }
-      },
-      {
-        id: 'lineWidth',
-        kind: 'number',
-        label: 'Width',
-        min: 1,
-        max: 8,
-        step: 1,
-        get: () => readPath(liveStyles(), ['line', 'size']),
-        set: v => { draft.style(['line', 'size'], v) }
-      },
+      { id: 'lineColor', kind: 'color', label: 'Line color', ...bind(lineColor) },
+      { id: 'lineWidth', kind: 'number', label: 'Width', min: 1, max: 8, step: 1, ...bind(lineWidth) },
       {
         id: 'lineStyle',
         kind: 'select',
         label: 'Style',
         options: LINE_STYLE_OPTIONS,
-        get: () => readPath(liveStyles(), ['line', 'style']) ?? 'solid',
+        ...bind(lineStyle),
+        get: () => readPath(liveRoot(lineStyle), lineStyle.slice(1)) ?? 'solid',
         set: v => {
-          draft.style(['line', 'style'], v)
-          if (typeof v === 'string' && v in DASHED_VALUE) {
-            draft.style(['line', 'dashedValue'], DASHED_VALUE[v])
+          if (lineStyle[0] === 'extendData') {
+            draft.extendData(lineStyle.slice(1), v)
+          } else {
+            draft.style(lineStyle.slice(1), v)
+            if (typeof v === 'string' && v in DASHED_VALUE) {
+              draft.style(['line', 'dashedValue'], DASHED_VALUE[v])
+            }
           }
         }
       }
@@ -179,66 +197,51 @@ function styleFields (overlay: Overlay, item: DrawingToolItem | undefined, draft
   }
 
   if (hasFill) {
-    fields.push({
-      id: 'fillColor',
-      kind: 'color',
-      label: 'Fill color',
-      get: () => readPath(liveStyles(), ['polygon', 'color']),
-      set: v => { draft.style(['polygon', 'color'], v) }
-    })
+    const fillColor = resolve('fillColor', ['polygon', 'color'])
+    fields.push({ id: 'fillColor', kind: 'color', label: 'Fill color', ...bind(fillColor) })
   }
 
   if (hasRecipeControl(item, 'color', 'background')) {
-    fields.push({
-      id: 'backgroundColor',
-      kind: 'color',
-      label: 'Background',
-      get: () => readPath(liveStyles(), ['rect', 'color']),
-      set: v => { draft.style(['rect', 'color'], v) }
-    })
+    const backgroundColor = resolve('backgroundColor', ['rect', 'color'])
+    fields.push({ id: 'backgroundColor', kind: 'color', label: 'Background', ...bind(backgroundColor) })
   }
 
   if (hasText) {
+    const textColor = resolve('textColor', ['text', 'color'])
+    const textSize = resolve('textSize', ['text', 'size'])
+    const textWeight = resolve('textWeight', ['text', 'weight'])
+    const textStyle = resolve('textStyle', ['text', 'style'])
+    const textAlign = resolve('textAlign', ['text', 'align'])
     fields.push(
-      {
-        id: 'textColor',
-        kind: 'color',
-        label: 'Text color',
-        get: () => readPath(liveStyles(), ['text', 'color']),
-        set: v => { draft.style(['text', 'color'], v) }
-      },
-      {
-        id: 'textSize',
-        kind: 'number',
-        label: 'Font size',
-        min: 8,
-        max: 64,
-        step: 1,
-        get: () => readPath(liveStyles(), ['text', 'size']),
-        set: v => { draft.style(['text', 'size'], v) }
-      },
+      { id: 'textColor', kind: 'color', label: 'Text color', ...bind(textColor) },
+      { id: 'textSize', kind: 'number', label: 'Font size', min: 8, max: 64, step: 1, ...bind(textSize) },
       {
         id: 'textBold',
         kind: 'checkbox',
         label: 'Bold',
-        get: () => readPath(liveStyles(), ['text', 'weight']) === 'bold',
-        set: v => { draft.style(['text', 'weight'], v === true ? 'bold' : 'normal') }
+        get: () => readPath(liveRoot(textWeight), textWeight.slice(1)) === 'bold',
+        set: v => {
+          if (textWeight[0] === 'extendData') {
+            draft.extendData(textWeight.slice(1), v === true ? 'bold' : 'normal')
+          } else {
+            draft.style(textWeight.slice(1), v === true ? 'bold' : 'normal')
+          }
+        }
       },
       {
         id: 'textItalic',
         kind: 'checkbox',
         label: 'Italic',
-        get: () => readPath(liveStyles(), ['text', 'style']) === 'italic',
-        set: v => { draft.style(['text', 'style'], v === true ? 'italic' : 'normal') }
+        get: () => readPath(liveRoot(textStyle), textStyle.slice(1)) === 'italic',
+        set: v => {
+          if (textStyle[0] === 'extendData') {
+            draft.extendData(textStyle.slice(1), v === true ? 'italic' : 'normal')
+          } else {
+            draft.style(textStyle.slice(1), v === true ? 'italic' : 'normal')
+          }
+        }
       },
-      {
-        id: 'textAlign',
-        kind: 'select',
-        label: 'Align',
-        options: TEXT_ALIGN_OPTIONS,
-        get: () => readPath(liveStyles(), ['text', 'align']) ?? 'center',
-        set: v => { draft.style(['text', 'align'], v) }
-      }
+      { id: 'textAlign', kind: 'select', label: 'Align', options: TEXT_ALIGN_OPTIONS, ...bind(textAlign) }
     )
   }
   return fields
@@ -253,7 +256,9 @@ function optionFields (overlay: Overlay, draft: SettingsDraft): SettingField[] {
   }
   const record = ed as Record<string, unknown>
   return Object.keys(record)
-    .filter(key => key !== 'common' && key !== 'data' && isBoolean(record[key]))
+    // `_`-prefixed runtime keys and `isEditing` are transient state —
+    // serialize strips them; surfacing them as toggles corrupts the strip.
+    .filter(key => key !== 'common' && key !== 'data' && !key.startsWith('_') && key !== 'isEditing' && isBoolean(record[key]))
     .map(key => ({
       id: `flag_${key}`,
       kind: 'checkbox' as const,
@@ -299,7 +304,9 @@ function coordinateFields (overlay: Overlay, draft: SettingsDraft): SettingField
         id: `point_${index}_time`,
         kind: 'datetime',
         label: 'Time',
-        get: () => overlay.points[index].timestamp,
+        // points can shrink (undo/remote) while the dialog is open —
+        // a stale index must not throw mid-render.
+        get: () => overlay.points[index]?.timestamp,
         set: v => { draft.point(index, { timestamp: v as number }) }
       })
     }
@@ -309,7 +316,7 @@ function coordinateFields (overlay: Overlay, draft: SettingsDraft): SettingField
         kind: 'number',
         label: 'Price',
         step: 0,
-        get: () => overlay.points[index].value,
+        get: () => overlay.points[index]?.value,
         set: v => { draft.point(index, { value: v as number }) }
       })
     }

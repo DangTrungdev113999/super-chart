@@ -86,6 +86,8 @@ export interface TextStyle extends Padding {
   size: number
   family: string
   weight: number | string
+  /** CSS font-style — `style` is the fill/stroke draw mode, not italic. */
+  fontStyle?: 'normal' | 'italic' | 'oblique'
   borderStyle: LineType
   borderDashedValue: number[]
   borderSize: number

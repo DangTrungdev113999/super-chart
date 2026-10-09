@@ -121,7 +121,7 @@ export function createAnchorFigures (params: AnchorFiguresParams): OverlayFigure
     return []
   }
   if (lock) {
-    return createSelectionOutlineFigures({ coordinates, styles })
+    return createSelectionOutlineFigures({ coordinates, styles, isTouch, isDrawing })
   }
 
   const half = isTouch ? ANCHOR_HALF_TOUCH : ANCHOR_HALF_MOUSE

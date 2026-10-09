@@ -210,7 +210,12 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
   }
 
   function cancelInProgress (): boolean {
-    const inProgress = chart.getOverlays().find(o => o.isDrawing())
+    // Target the progress slot first — ghost/synced mirrors report
+    // isDrawing() too and a peer's mid-draw mirror must not eat the Esc.
+    const slot = chart.getChartStore().getProgressOverlayInfo()?.overlay
+    const inProgress = isValid(slot) && !slot.ghost && !slot.synced
+      ? slot
+      : chart.getOverlays().find(o => o.isDrawing() && !o.ghost && !o.synced)
     if (inProgress === undefined) {
       return false
     }
@@ -269,7 +274,9 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
           return false
         }
         clipboard = serializeOverlay(selected)
-        return true
+        // serializeOverlay returns null for synced/ghost/transient picks —
+        // report unconsumed so Ctrl+C still reaches the browser.
+        return clipboard !== null
       },
       onPaste: () => {
         if (clipboard === null) {

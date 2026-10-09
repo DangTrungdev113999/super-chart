@@ -109,6 +109,11 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
         if (overlay.isDrawing() && progressOverlayPaneId === paneId && this._canDrawPoints()) {
           overlay.eventMoveForDrawing(this._coordinateToPoint(overlay, event), event)
           overlay.onDrawing?.({ chart, overlay, ...event })
+          // onDrawing may have removed the overlay — stepping/emitting
+          // 'progress' for a dead id resurrects it on sync mirrors.
+          if (chartStore.getOverlayById(overlay.id) === null) {
+            return true
+          }
           overlay.nextStep()
           chartStore.executeAction('onOverlayChange', { type: 'progress', overlay })
           if (!overlay.isDrawing()) {
@@ -232,6 +237,11 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
       }
       overlay.eventMoveForDrawing(this._coordinateToPoint(overlay, event), event)
       overlay.onDrawing?.({ chart, overlay, ...event })
+      // Same dead-overlay guard as the click path — a hook that removed the
+      // overlay must stop this handler before nextStep/'progress'.
+      if (chartStore.getOverlayById(overlay.id) === null) {
+        return true
+      }
       overlay.nextStep()
       chartStore.executeAction('onOverlayChange', { type: 'progress', overlay })
       if (!overlay.isDrawing()) {

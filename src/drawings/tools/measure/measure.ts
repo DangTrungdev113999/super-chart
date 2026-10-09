@@ -71,7 +71,7 @@ const measure: OverlayTemplate<MeasureExtendData> = {
     const startPrice = p1?.value ?? 0
     const endPrice = p2?.value ?? 0
     const priceDiff = endPrice - startPrice
-    const pricePct = startPrice !== 0 ? (priceDiff / startPrice) * 100 : 0
+    const pricePct = startPrice !== 0 ? (priceDiff / Math.abs(startPrice)) * 100 : 0
     const pips = Math.round(priceDiff * 100)
 
     const stats = windowStats(chart.getDataList(), p1, p2)

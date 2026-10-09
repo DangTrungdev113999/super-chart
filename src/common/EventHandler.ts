@@ -624,6 +624,12 @@ export default class EventHandlerImp {
     this._activeTouchId = null
     this._lastTouchEventTimeStamp = this._eventTimeStamp(touchCancelEvent)
     this._clearLongTapTimeout()
+    // A cancelled gesture must retire the tap chain + long-tap latch too —
+    // otherwise a fast tap after the cancel inherits the dead window and
+    // fires a phantom doubleTap, and _longTapActive would keep blocking
+    // pinch starts until the next completed gesture.
+    this._longTapActive = false
+    this._resetTapTimeout()
     this._touchMoveStartCoordinate = null
     this._cancelTap = true
     // A cancelled pinch leaves the middle coordinate armed — the next

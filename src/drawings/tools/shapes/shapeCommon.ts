@@ -324,7 +324,9 @@ export function shapeTextFigure (
       color: spec.color ?? fallbackColor,
       size: spec.fontSize,
       weight: spec.bold ? 'bold' : '600',
-      style: spec.italic ? 'italic' : 'normal',
+      // `style` on a text figure is the fill/stroke draw mode — italic goes
+      // through fontStyle or the font string is never italicized.
+      fontStyle: spec.italic ? 'italic' : undefined,
       backgroundColor: 'transparent'
     },
     ignoreEvent: true

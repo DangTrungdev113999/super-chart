@@ -162,12 +162,21 @@ function serializeOverlay (overlay: Overlay): OverlayCreate {
     name: overlay.name,
     lock: overlay.lock,
     visible: overlay.visible,
-    zLevel: overlay.zLevel,
+    // Persisted zLevel must not be the hover bump — same restore-target
+    // rule as serialize.ts.
+    zLevel: (overlay as { getPrevZLevel?: () => number | null }).getPrevZLevel?.() ?? overlay.zLevel,
     needDefaultPointFigure: overlay.needDefaultPointFigure,
     needDefaultXAxisFigure: overlay.needDefaultXAxisFigure,
     needDefaultYAxisFigure: overlay.needDefaultYAxisFigure,
     mode: overlay.mode,
     modeSensitivity: overlay.modeSensitivity,
+    // Unlimited-step tools (brush/polyline/path/measure — totalStep =
+    // MAX_SAFE_INTEGER) can never satisfy the points-length finish test in
+    // override(); without completed:true the finished mirror wedges into
+    // the peer's progress slot, gets displaced by the peer's next draw,
+    // and its 'remove' propagates back to delete the canonical overlay
+    // AND its persisted record. Ghosts keep false — they track progress.
+    completed: !overlay.isDrawing(),
     points: overlay.points.map(p => ({ ...p })),
     // Deep-copy so the mirror never shares mutable objects with the source.
     extendData: isValid(overlay.extendData) ? clone(overlay.extendData) : overlay.extendData,
@@ -590,6 +599,14 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
               if (!tickersMatch) {
                 break
               }
+              // id-only targeting must not clobber a peer's own overlay that
+              // shares the id under a different tool (host-specified ids or
+              // diverged shared-store records) — the syncApplied write would
+              // persist the corruption.
+              const target = chart.getOverlays({ id: overlay.id })[0] as Overlay | undefined
+              if (isValid(target) && !target.ghost && !target.synced && target.name !== overlay.name) {
+                break
+              }
               // A ghost mirror whose source already finished must be promoted —
               // overrideOverlay would update it in place but leave it locked
               // and non-interactive forever. Scan only once the source stopped
@@ -667,6 +684,11 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
             case 'remove': {
               const target = chart.getOverlays({ id: overlay.id })[0]
               if (!isValid(target)) {
+                break
+              }
+              // Same id-name guard as update — a same-id different-tool
+              // overlay on the peer is its own drawing, not the mirror.
+              if (!target.ghost && !target.synced && target.name !== overlay.name) {
                 break
               }
               // Provenance gate: a peer wiping ITS ghost copy (symbol switch,

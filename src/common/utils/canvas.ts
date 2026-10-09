@@ -26,8 +26,9 @@ export function getPixelRatio (canvas: HTMLCanvasElement): number {
   return canvas.ownerDocument.defaultView?.devicePixelRatio ?? 1
 }
 
-export function createFont (size?: number, weight?: string | number, family?: string): string {
-  return `${weight ?? 'normal'} ${size ?? 12}px ${family ?? 'Helvetica Neue'}`
+export function createFont (size?: number, weight?: string | number, family?: string, fontStyle?: string): string {
+  const style = isValid(fontStyle) && fontStyle !== 'normal' ? `${fontStyle} ` : ''
+  return `${style}${weight ?? 'normal'} ${size ?? 12}px ${family ?? 'Helvetica Neue'}`
 }
 
 /**

@@ -33,9 +33,11 @@ import type { TextToolExtendData } from '../text'
  * The floating toolbar and settings dialog write a GENERIC
  * `styles.text.{color,size,weight,style,align}` namespace, while tools keep
  * their own flat style bag (`styles.<toolKey>`) and the text tool family
- * shares `styles.textNote`. This resolver merges all three — tool-specific
- * keys win over shared, both win over the generic text.* writes — and
- * translates text.* to the flat names readers actually consume:
+ * shares `styles.textNote`. Precedence: the generic `styles.text.*`
+ * user-override layer WINS (that's where toolbar/schema writes land),
+ * then the tool bag, then `textNote` defaults — bags are template defaults
+ * a user write must be able to override. It translates text.* to the flat
+ * names readers actually consume:
  * size→fontSize, weight→bold, style→italic. `text.style` never lands on a
  * figure (where it would alias the fill/stroke mode field).
  */

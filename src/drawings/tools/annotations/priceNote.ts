@@ -157,6 +157,7 @@ const simpleAnnotation: OverlayTemplate<PriceNoteExtendData> = {
           size: getNoteStyles(overlay).fontSize,
           family: getNoteStyles(overlay).fontFamily,
           weight: getNoteStyles(overlay).bold === true ? 'bold' : 'normal',
+          fontStyle: getNoteStyles(overlay).italic === true ? 'italic' : undefined,
           style: 'fill'
         },
         bounds: {

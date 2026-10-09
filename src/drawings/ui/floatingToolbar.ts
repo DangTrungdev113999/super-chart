@@ -21,7 +21,7 @@ import type { Overlay } from '../../component/Overlay'
 import type { PaneDomLayer } from '../dom/domLayer'
 import { getPaneDomLayer } from '../dom/domLayer'
 import type { DrawingManager } from '../manager'
-import { findCatalogItemByOverlay, type ToolbarControl } from '../catalog'
+import { findCatalogItemByOverlay, type DrawingStylePaths, type StylePath, type ToolbarControl } from '../catalog'
 import { getDrawingIcon } from '../icons'
 import { isAlign45Enabled, setAlign45Enabled } from '../interaction/snap45'
 import { serializeOverlay, serializedToOverlayCreate } from '../serialize'
@@ -141,10 +141,14 @@ export function attachFloatingToolbar (
     const menu = createDom('div')
     menu.className = 'sc-drw-menu'
     build(menu)
-    // Position below the toolbar, aligned to the anchor button.
+    // Position below the toolbar, aligned to the anchor button. Clamp the
+    // right edge — a menu anchored near the pane's right side would clip
+    // out of the (overflow:hidden) layer and be unreachable.
     const tbRect = element.getBoundingClientRect()
     const bRect = anchorEl.getBoundingClientRect()
-    menu.style.transform = `translate3d(${bRect.left - tbRect.left}px, ${element.offsetHeight + 6}px, 0)`
+    const maxX = Math.max(0, element.clientWidth - menu.offsetWidth - 2)
+    const mx = Math.min(bRect.left - tbRect.left, maxX)
+    menu.style.transform = `translate3d(${Math.max(0, mx)}px, ${element.offsetHeight + 6}px, 0)`
     menuEl = menu
     element.appendChild(menu)
     menuUnmount = () => {
@@ -178,25 +182,75 @@ export function attachFloatingToolbar (
 
   // ── control renderers ───────────────────────────────────────────────────
 
-  function patchStyles (path: string[], value: unknown): void {
+  /**
+   * Default role→styles path for controls without an explicit `path` and no
+   * matching entry in the item's stylePaths — the styles.line/polygon/text
+   * convention shared by line-drawn and text tools.
+   */
+  const DEFAULT_ROLE_PATHS: Record<string, StylePath> = {
+    line: ['styles', 'line', 'color'],
+    fill: ['styles', 'polygon', 'color'],
+    text: ['styles', 'text', 'color'],
+    background: ['styles', 'rect', 'color']
+  }
+
+  /** Role → stylePaths slot key. Partial so a lookup miss stays truthy-
+   * checkable (Record<string, K> claims every key exists). */
+  const ROLE_PATH_KEYS: Partial<Record<string, keyof DrawingStylePaths>> = {
+    'color:line': 'lineColor',
+    'color:fill': 'fillColor',
+    'color:text': 'textColor',
+    'color:background': 'backgroundColor',
+    'style:line': 'lineStyle',
+    width: 'lineWidth',
+    text: 'textSize',
+    textAlign: 'textAlign'
+  }
+
+  /** Resolve a control's write path: explicit control.path → the item's
+   * stylePaths slot → the role default. */
+  function resolvePath (control: ToolbarControl, role: string): StylePath | undefined {
+    const withPath = control as { path?: StylePath }
+    if (withPath.path !== undefined) {
+      return withPath.path
+    }
+    const item = current !== null ? findCatalogItemByOverlay(current.name) : undefined
+    const slot = ROLE_PATH_KEYS[role !== '' ? `${control.kind}:${role}` : control.kind]
+    const mapped: StylePath | undefined = slot !== undefined ? item?.stylePaths?.[slot] : undefined
+    if (mapped !== undefined) {
+      return mapped
+    }
+    return DEFAULT_ROLE_PATHS[role]
+  }
+
+  /** Write a resolved StylePath — routes to extendData when the path's
+   * root says so (measure/position tools style through extendData). */
+  function patchPath (sp: StylePath, value: unknown): void {
     if (current === null) {
       return
     }
-    const styles: Record<string, unknown> = {}
-    let node = styles
-    path.slice(0, -1).forEach(key => {
+    const [target, ...keys] = sp
+    const root: Record<string, unknown> = {}
+    let node = root
+    keys.slice(0, -1).forEach(key => {
       const next: Record<string, unknown> = {}
       node[key] = next
       node = next
     })
-    node[path[path.length - 1]] = value
-    manager.update(current.id, { styles: styles as Overlay['styles'] })
+    node[keys[keys.length - 1]] = value
+    if (target === 'extendData') {
+      const ext = current.extendData as Record<string, unknown> | null | undefined
+      manager.update(current.id, { extendData: { ...(ext ?? {}), ...root } })
+    } else {
+      manager.update(current.id, { styles: root as Overlay['styles'] })
+    }
   }
 
-  function currentStyleValue (path: string[]): unknown {
-    const styles = current?.styles as Record<string, unknown> | undefined
-    let node: unknown = styles
-    for (const key of path) {
+  function currentPathValue (sp: StylePath): unknown {
+    const [target, ...keys] = sp
+    const root = target === 'extendData' ? current?.extendData : current?.styles
+    let node: unknown = root
+    for (const key of keys) {
       if (node === null || typeof node !== 'object') {
         return undefined
       }
@@ -205,18 +259,11 @@ export function attachFloatingToolbar (
     return node
   }
 
-  function colorControl (role: 'line' | 'fill' | 'text' | 'background'): HTMLElement {
-    const paths: Record<typeof role, string[]> = {
-      line: ['line', 'color'],
-      fill: ['polygon', 'color'],
-      text: ['text', 'color'],
-      background: ['rect', 'color']
-    }
-    const path = paths[role]
+  function colorControl (role: 'line' | 'fill' | 'text' | 'background', path: StylePath): HTMLElement {
     const swatch = createDom('span')
     swatch.className = 'sc-drw-swatch'
     const paint = (): void => {
-      const v = currentStyleValue(path)
+      const v = currentPathValue(path)
       swatch.style.background = typeof v === 'string' ? v : '#2962ff'
     }
     paint()
@@ -237,7 +284,7 @@ export function attachFloatingToolbar (
           cell.addEventListener('click', ev => {
             ev.stopPropagation()
             closeMenu()
-            patchStyles(path, color)
+            patchPath(path, color)
           })
           grid.appendChild(cell)
         })
@@ -258,52 +305,56 @@ export function attachFloatingToolbar (
     return b
   }
 
-  function lineStyleControl (): HTMLElement {
+  function lineStyleControl (path: StylePath): HTMLElement {
     return dropdownButton('trendLine', 'Line style', LINE_STYLES.map(s => ({
       title: s.title,
-      active: currentStyleValue(['line', 'style']) === s.value,
+      active: currentPathValue(path) === s.value,
       onClick: () => {
-        patchStyles(['line', 'style'], s.value)
+        patchPath(path, s.value)
       }
     })))
   }
 
-  function widthControl (): HTMLElement {
+  function widthControl (path: StylePath): HTMLElement {
     return dropdownButton('trendLine', 'Line width', LINE_WIDTHS.map(w => ({
       title: `${w}px`,
-      active: currentStyleValue(['line', 'size']) === w,
+      active: currentPathValue(path) === w,
       onClick: () => {
-        patchStyles(['line', 'size'], w)
+        patchPath(path, w)
       }
     })))
   }
 
-  function fontSizeControl (): HTMLElement {
+  function fontSizeControl (path: StylePath): HTMLElement {
     return dropdownButton('text', 'Text size', FONT_SIZES.map(s => ({
       title: `${s}px`,
-      active: currentStyleValue(['text', 'size']) === s,
+      active: currentPathValue(path) === s,
       onClick: () => {
-        patchStyles(['text', 'size'], s)
+        patchPath(path, s)
       }
     })))
   }
 
   function textStyleControl (): HTMLElement {
+    const item = current !== null ? findCatalogItemByOverlay(current.name) : undefined
+    const weightPath = item?.stylePaths?.textWeight ?? (['styles', 'text', 'weight'] as StylePath)
+    const stylePath2 = item?.stylePaths?.textStyle ?? (['styles', 'text', 'style'] as StylePath)
+    const sizePath = item?.stylePaths?.textSize ?? (['styles', 'text', 'size'] as StylePath)
     const b = btn('text', 'Text style', () => {
       openMenu(b, menu => {
-        const bold = currentStyleValue(['text', 'weight']) === 'bold'
-        const italic = currentStyleValue(['text', 'style']) === 'italic'
+        const bold = currentPathValue(weightPath) === 'bold'
+        const italic = currentPathValue(stylePath2) === 'italic'
         menu.appendChild(styleMenuItem('Bold', bold, () => {
-          patchStyles(['text', 'weight'], bold ? 'normal' : 'bold')
+          patchPath(weightPath, bold ? 'normal' : 'bold')
         }))
         menu.appendChild(styleMenuItem('Italic', italic, () => {
-          patchStyles(['text', 'style'], italic ? 'normal' : 'italic')
+          patchPath(stylePath2, italic ? 'normal' : 'italic')
         }))
         menu.appendChild(styleMenuItem('Size…', false, () => {
           openMenu(b, sub => {
             FONT_SIZES.forEach(s => {
-              sub.appendChild(styleMenuItem(`${s}px`, currentStyleValue(['text', 'size']) === s, () => {
-                patchStyles(['text', 'size'], s)
+              sub.appendChild(styleMenuItem(`${s}px`, currentPathValue(sizePath) === s, () => {
+                patchPath(sizePath, s)
               }))
             })
           })
@@ -313,16 +364,16 @@ export function attachFloatingToolbar (
     return b
   }
 
-  function textAlignControl (): HTMLElement {
+  function textAlignControl (path: StylePath): HTMLElement {
     const currentAlign = (): string => {
-      const v = currentStyleValue(['text', 'align'])
+      const v = currentPathValue(path)
       return typeof v === 'string' ? v : 'center'
     }
     return btn('text', 'Text align', () => {
       const order = TEXT_ALIGNS.map(a => a.value)
       const idx = order.indexOf(currentAlign())
       const next = order[(idx + 1) % order.length]
-      patchStyles(['text', 'align'], next)
+      patchPath(path, next)
     })
   }
 
@@ -391,6 +442,10 @@ export function attachFloatingToolbar (
     }
     const create = serializedToOverlayCreate(serialized)
     delete (create as { id?: string }).id
+    // A clone is a fresh user drawing — locked/hidden state doesn't carry
+    // (TV clones always land unlocked + visible).
+    create.lock = false
+    create.visible = true
     // Nudge the clone so it doesn't z-fight the original.
     const bars = chart.getDataList()
     const oneBar = bars.length > 1 ? bars[1].timestamp - bars[0].timestamp : 0
@@ -412,16 +467,30 @@ export function attachFloatingToolbar (
     }
     const overlay = current
     switch (control.kind) {
-      case 'color':
-        return colorControl(control.role)
-      case 'style':
-        return control.role === 'line' ? lineStyleControl() : textStyleControl()
-      case 'width':
-        return widthControl()
-      case 'text':
-        return fontSizeControl()
-      case 'textAlign':
-        return textAlignControl()
+      case 'color': {
+        const path = resolvePath(control, control.role)
+        return path !== undefined ? colorControl(control.role, path) : null
+      }
+      case 'style': {
+        if (control.role !== 'line') {
+          return textStyleControl()
+        }
+        const path = resolvePath(control, 'line')
+        return path !== undefined ? lineStyleControl(path) : null
+      }
+      case 'width': {
+        const path = resolvePath(control, '')
+        return path !== undefined ? widthControl(path) : null
+      }
+      case 'text': {
+        const path = resolvePath(control, '')
+        return path !== undefined ? fontSizeControl(path) : null
+      }
+      case 'textAlign': {
+        const catItem = findCatalogItemByOverlay(overlay.name)
+        const path = control.path ?? catItem?.stylePaths?.textAlign ?? (['styles', 'text', 'align'] as StylePath)
+        return textAlignControl(path)
+      }
       case 'geometry':
         return geometryControl(control.options)
       case 'levels':
@@ -480,6 +549,11 @@ export function attachFloatingToolbar (
     // In-progress freehand: only a Cancel control (TV swaps Remove for it).
     if (overlay.isDrawing()) {
       return [{ kind: 'remove' }]
+    }
+    // A locked drawing is read-only — suppress mutation controls but keep
+    // unlock/visibility/remove reachable (same as TV's locked state).
+    if (overlay.lock) {
+      return [{ kind: 'lock' }, { kind: 'visibility' }, { kind: 'remove' }]
     }
     return findCatalogItemByOverlay(overlay.name)?.toolbarRecipe ?? DEFAULT_RECIPE
   }
@@ -587,6 +661,12 @@ export function attachFloatingToolbar (
     x = Math.max(4, Math.min(x, Math.max(4, pw - tw - 4)))
     y = Math.max(4, Math.min(y, Math.max(4, ph - th - 4)))
     pos = { x: Math.round(x), y: Math.round(y) }
+    // A recipe wider than the pane (mobile-width panes + 10-control
+    // recipes) clips its tail inside the overflow:hidden layer — make the
+    // toolbar scrollable so Remove/Settings stay reachable.
+    const maxW = Math.max(0, pw - 8)
+    element.style.maxWidth = `${maxW}px`
+    element.style.overflowX = tw > maxW ? 'auto' : 'visible'
     element.style.transform = `translate3d(${pos.x}px, ${pos.y}px, 0)`
   }
 
@@ -669,23 +749,41 @@ export function attachFloatingToolbar (
   let selectedId: string | null = null
   const onSelect = (payload: { overlay?: Overlay }): void => {
     if (payload.overlay !== undefined) {
-      selectedId = payload.overlay.id
-      show(payload.overlay)
+      // Only the drawings group gets a style toolbar — kernel selects for
+      // ghosts/mirrors/foreign-group overlays must not bind controls that
+      // would write styles onto e.g. indicator overlays.
+      const o = payload.overlay
+      if (o.groupId !== 'drawings' || o.ghost || o.synced || o.isDrawing()) {
+        return
+      }
+      selectedId = o.id
+      show(o)
     }
   }
   const onDeselect = (): void => {
     selectedId = null
     hide()
   }
-  const onEditStart = (): void => {
-    hide()
+  const onEditStart = (payload: { overlay?: Overlay }): void => {
+    // editStart fires for the PRESSED overlay, not the selected one — only
+    // hide when the gesture is actually on our tracked overlay, otherwise
+    // dragging a different drawing's figure would strand the toolbar.
+    if (payload.overlay === undefined || payload.overlay.id === selectedId) {
+      hide()
+    }
   }
   const onEditEnd = (payload: { overlay?: Overlay }): void => {
-    // A figure drag on a NON-selected overlay also fires editEnd — binding
-    // the toolbar to it would attach controls to an overlay the selection
-    // model doesn't own.
-    if (payload.overlay !== undefined && payload.overlay.id === selectedId) {
-      show(payload.overlay)
+    // Re-show whenever the tracked selection still resolves — covers the
+    // case where a drag on a non-selected overlay hid nothing but the
+    // tracked overlay's own gesture ends with a mismatched payload.
+    if (selectedId === null) {
+      return
+    }
+    if (payload.overlay === undefined || payload.overlay.id === selectedId) {
+      const o = chart.getOverlayById(selectedId)
+      if (o !== null) {
+        show(o)
+      }
     }
   }
   const onChange = (payload: { overlay?: Overlay }): void => {
@@ -716,6 +814,17 @@ export function attachFloatingToolbar (
   chart.subscribeAction('onZoom', onPanOrZoom)
   chart.subscribeAction('onScroll', onPanOrZoom)
   chart.subscribeAction('onVisibleRangeChange', onPanOrZoom)
+  // Kernel-level remove reaches paths the manager suppresses its own
+  // 'change' for (remote removes, scope wipes, bulk applies) — a selected
+  // overlay deleted on a peer must not leave the toolbar on a dead id.
+  const onKernelOverlayChange = (data?: unknown): void => {
+    const evt = data as { type?: string, overlay?: Overlay } | undefined
+    if (evt?.type === 'remove' && evt.overlay?.id === selectedId) {
+      selectedId = null
+      hide()
+    }
+  }
+  chart.subscribeAction('onOverlayChange', onKernelOverlayChange)
 
   if (typeof document !== 'undefined') {
     // Capture phase — the drag keeps the element under the cursor, so a

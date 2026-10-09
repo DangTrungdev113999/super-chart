@@ -68,7 +68,7 @@ const dateAndPriceRange: OverlayTemplate<DateAndPriceRangeExtendData> = {
     const startPrice = overlay.points[0]?.value ?? 0
     const endPrice = overlay.points[1]?.value ?? 0
     const priceDiff = endPrice - startPrice
-    const pricePct = startPrice !== 0 ? (priceDiff / startPrice) * 100 : 0
+    const pricePct = startPrice !== 0 ? (priceDiff / Math.abs(startPrice)) * 100 : 0
     const pips = Math.round(priceDiff * 100)
 
     const stats = windowStats(chart.getDataList(), overlay.points[0], overlay.points[1])

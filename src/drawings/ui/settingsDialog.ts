@@ -110,7 +110,14 @@ export function attachSettingsDialog (chart: Chart, manager: DrawingManager): Se
           patch.points = next
         }
         if (Object.keys(patch).length > 0) {
-          manager.update(current.id, patch)
+          // Mark self-originated writes — the 'change' echo must not trigger
+          // a full re-render or the active input loses focus mid-typing.
+          committing = true
+          try {
+            manager.update(current.id, patch)
+          } finally {
+            committing = false
+          }
         }
         // DELETE the draft keys — assigning undefined keeps them enumerable,
         // so the next commit emits {key: undefined} and merge() writes
@@ -156,11 +163,25 @@ export function attachSettingsDialog (chart: Chart, manager: DrawingManager): Se
     const v = field.get?.()
     input.value = isNumber(v) ? String(v) : ''
     input.addEventListener('change', () => {
-      const parsed = Number(input.value)
-      if (!Number.isNaN(parsed)) {
-        field.set?.(parsed)
-        draft.commit()
+      // '' parses to 0 via Number('') — clearing a field must not write 0
+      // (invisible stroke / teleported anchor). min/max attributes don't
+      // block typed values, so clamp here too.
+      if (input.value.trim() === '') {
+        return
       }
+      let parsed = Number(input.value)
+      if (!Number.isFinite(parsed)) {
+        return
+      }
+      if (field.min !== undefined) {
+        parsed = Math.max(field.min, parsed)
+      }
+      if (field.max !== undefined) {
+        parsed = Math.min(field.max, parsed)
+      }
+      input.value = String(parsed)
+      field.set?.(parsed)
+      draft.commit()
     })
     control.appendChild(input)
     return row
@@ -302,7 +323,11 @@ export function attachSettingsDialog (chart: Chart, manager: DrawingManager): Se
         const color = createDom('input')
         color.type = 'color'
         color.className = 'sc-drw-color'
-        color.value = typeof level.color === 'string' ? level.color : '#2962ff'
+        // <input type=color> requires #rrggbb — rgba()/named colors from
+        // synced or host-injected records would silently render black and
+        // a picker touch would drop the alpha channel.
+        const raw = level.color
+        color.value = typeof raw === 'string' && /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#2962ff'
         color.addEventListener('change', () => { writeRow(index, { color: color.value }) })
         row.appendChild(color)
       }
@@ -447,11 +472,34 @@ export function attachSettingsDialog (chart: Chart, manager: DrawingManager): Se
     dragState = null
   }
 
-  const onOverlayChange = (): void => {
+  const onOverlayChange = (payload?: { overlay?: Overlay }): void => {
+    if (current === null) {
+      return
+    }
     // 'change' covers remove/update/create/undo/redo/restore — close
     // whenever the open overlay is gone, regardless of which path removed
     // it (undo and scope wipes carry no overlay in the payload).
-    if (current !== null && chart.getOverlayById(current.id) === null) {
+    if (chart.getOverlayById(current.id) === null) {
+      close()
+      return
+    }
+    // External updates (toolbar color pick, sync, undo/redo) used to leave
+    // every input stale until a tab switch — re-render unless the change
+    // came from our own commit (focus must survive typing).
+    if (payload?.overlay?.id === current.id && !committing) {
+      renderBody()
+    }
+  }
+
+  // Self-originated commits shouldn't trigger a full re-render — the input
+  // would lose focus mid-typing.
+  let committing = false
+
+  // Kernel remove events reach paths the manager suppresses its 'change'
+  // for (remote removes, scope wipes) — close on a dead id either way.
+  const onKernelRemove = (data?: unknown): void => {
+    const evt = data as { type?: string, overlay?: Overlay } | undefined
+    if (current !== null && evt?.type === 'remove' && evt.overlay?.id === current.id) {
       close()
     }
   }
@@ -474,6 +522,7 @@ export function attachSettingsDialog (chart: Chart, manager: DrawingManager): Se
     // Mouseup outside the window never dispatches — blur ends the drag.
     window.addEventListener('blur', onDragEnd)
     unsubRemove = manager.on('change', onOverlayChange)
+    chart.subscribeAction('onOverlayChange', onKernelRemove)
   }
 
   function unbindDocListeners (): void {
@@ -488,10 +537,14 @@ export function attachSettingsDialog (chart: Chart, manager: DrawingManager): Se
     window.removeEventListener('blur', onDragEnd)
     unsubRemove?.()
     unsubRemove = null
+    chart.unsubscribeAction('onOverlayChange', onKernelRemove)
   }
 
   function open (overlay: Overlay): void {
-    if (destroyed) {
+    // Defense-in-depth — api.openSettings already gates these, but a host
+    // calling open() directly on an in-progress/ghost/mirror overlay would
+    // get a Coordinates tab whose commits recompute currentStep mid-draw.
+    if (destroyed || overlay.isDrawing() || overlay.ghost || overlay.synced) {
       return
     }
     close()

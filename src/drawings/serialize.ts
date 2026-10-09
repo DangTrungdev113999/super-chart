@@ -59,34 +59,68 @@ export interface SerializedDrawing<E = unknown> {
   updatedAt: number
 }
 
+/** Boundary normalization for a stored point — accepts object form and the
+ * tuple form `[timestamp, value, dataIndex]` older writers emitted, drops
+ * entries anchoring to neither time nor index (a pure `{value}` point
+ * renders at garbage x). */
+function normalizePoint (p: unknown): SerializedDrawingPoint | null {
+  let point: SerializedDrawingPoint | null = null
+  if (Array.isArray(p)) {
+    const t = p as Array<number | undefined>
+    point = { timestamp: t[0], value: t[1], dataIndex: t[2] }
+  } else if (p !== null && typeof p === 'object') {
+    const raw = p as SerializedDrawingPoint
+    point = { timestamp: raw.timestamp, value: raw.value, dataIndex: raw.dataIndex }
+    if (raw.interval !== undefined) {
+      point.interval = raw.interval
+    }
+    if (raw.offset !== undefined) {
+      point.offset = raw.offset
+    }
+  }
+  if (point === null || (typeof point.timestamp !== 'number' && typeof point.dataIndex !== 'number')) {
+    return null
+  }
+  return point
+}
+
 /** Fields a restore writes back through createOverlay. */
 export function serializedToOverlayCreate (d: SerializedDrawing): OverlayCreate {
   return {
-    id: d.id,
-    name: d.name,
+    id: typeof d.id === 'string' ? d.id : undefined,
+    name: typeof d.name === 'string' ? d.name : '',
     paneId: d.paneId,
     groupId: d.groupId ?? 'drawings',
-    points: d.points.map(p => {
-      const point: SerializedDrawingPoint = { timestamp: p.timestamp, value: p.value, dataIndex: p.dataIndex }
-      if (p.interval !== undefined) {
-        point.interval = p.interval
-      }
-      if (p.offset !== undefined) {
-        point.offset = p.offset
-      }
-      return point
-    }),
+    points: (Array.isArray(d.points) ? d.points : [])
+      .map(normalizePoint)
+      .filter((p): p is SerializedDrawingPoint => p !== null),
     styles: clone(d.styles ?? null),
-    lock: d.lock ?? false,
-    visible: d.visible ?? true,
-    mode: d.mode,
-    modeSensitivity: d.modeSensitivity,
-    zLevel: d.zLevel,
-    extendData: clone(d.extendData ?? null),
+    // Boundary truthiness — a foreign record's lock:'yes' or visible:0 must
+    // not freeze the drawing or block keyboard delete.
+    lock: d.lock === true,
+    visible: d.visible !== false,
+    // Bogus mode values fall into 'normal' — OverlayView treats anything
+    // non-'normal' as magnet and would snap every drag. Accept the
+    // camelCase spellings older foreign records may carry.
+    mode: ((): Overlay['mode'] => {
+      const m = d.mode as unknown
+      if (m === 'weakMagnet' || m === 'weak_magnet') {
+        return 'weak_magnet'
+      }
+      if (m === 'strongMagnet' || m === 'strong_magnet') {
+        return 'strong_magnet'
+      }
+      return 'normal'
+    })(),
+    modeSensitivity: typeof d.modeSensitivity === 'number' ? d.modeSensitivity : undefined,
+    zLevel: typeof d.zLevel === 'number' ? d.zLevel : undefined,
+    // Restore sanitizes too — records written by older/foreign builds may
+    // carry isEditing or _-keys that would resurrect mid-edit state.
+    extendData: sanitizeExtendData(d.extendData),
     // Restored drawings are finished — never let them occupy the
     // drawing-progress slot (unlimited-step tools could never satisfy
     // points >= totalStep - 1 and would displace siblings).
-    completed: d.completed,
+    completed: Boolean(d.completed),
     // Restored points are already normalized — replaying the draw hooks
     // would re-run templates' per-point transforms (e.g. flatTopBottom
     // pins P2's dataIndex to P1's) and silently mutate stored geometry.
@@ -173,7 +207,10 @@ export function serializeOverlay<E> (overlay: Overlay<E>, options?: { now?: numb
     visible: overlay.visible,
     mode: overlay.mode,
     modeSensitivity: overlay.modeSensitivity,
-    zLevel: overlay.zLevel,
+    // During a hover bump zLevel reads MAX_SAFE_INTEGER — persist the
+    // restore target instead so a mid-hover save doesn't pin the drawing
+    // at the top of the stack forever.
+    zLevel: (overlay as { getPrevZLevel?: () => number | null }).getPrevZLevel?.() ?? overlay.zLevel,
     extendData: sanitizeExtendData(overlay.extendData) as E | undefined,
     completed: true,
     positionPercents,
@@ -218,12 +255,11 @@ export function migrateDrawingV1toV2 (legacy: LegacyDrawingV1, fallbackNow?: num
     id: legacy.id,
     name: legacy.name,
     groupId: legacy.groupId ?? 'drawings',
+    // Same boundary normalization as restore — v1 points may be tuples or
+    // carry interval/offset extras the old rebuild used to strip.
     points: (Array.isArray(legacy.points) ? (legacy.points as unknown[]) : [])
-      .filter(p => p !== null && typeof p === 'object')
-      .map(p => {
-        const point = p as SerializedDrawingPoint
-        return { timestamp: point.timestamp, value: point.value, dataIndex: point.dataIndex }
-      }),
+      .map(normalizePoint)
+      .filter((p): p is SerializedDrawingPoint => p !== null),
     styles: clone(legacy.styles ?? null) ?? undefined,
     lock: legacy.lock,
     visible: legacy.visible,

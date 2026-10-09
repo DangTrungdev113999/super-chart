@@ -223,6 +223,13 @@ class TextEditorSessionImp implements TextEditorSession {
       this._syncCaret()
     }
     const onKeyDown = (e: KeyboardEvent): void => {
+      // IME composition (CJK input) — Enter/Escape during composition
+      // select/abort candidates; acting on them would commit+close the
+      // editor mid-word. keyCode 229 covers browsers that don't set
+      // isComposing on the keydown itself.
+      if (e.isComposing || e.keyCode === 229) {
+        return
+      }
       // Escape commits (approved TV behavior — never cancels).
       if (e.key === 'Escape' || (this._options.forbidLineBreaks === true && e.key === 'Enter')) {
         e.preventDefault()

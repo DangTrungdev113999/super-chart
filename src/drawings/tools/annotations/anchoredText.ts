@@ -209,12 +209,13 @@ const anchoredText: OverlayTemplate<AnchoredTextExtendData> = {
         }
       }
     ]
-    // The draggable handle sits on the rendered box at its ORIGIN (top-left)
-    // — point writes map cursor → box origin, so a handle anywhere else
-    // would teleport the box by the handle↔origin offset on the first move.
+    // The draggable handle sits at the ANCHOR coordinate — point writes map
+    // cursor → position (attrs.x/y), so a handle anywhere else (e.g. the
+    // box's top-left corner under non-default horz/vert align or rotation)
+    // teleports the box by the handle↔anchor offset on the first move.
     const handle: Coordinate = {
-      x: layout.boxLeft,
-      y: layout.boxTop
+      x: position.x,
+      y: position.y
     }
     figures.push(...createAnchorFigures({
       coordinates: [handle],

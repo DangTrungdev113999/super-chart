@@ -601,6 +601,9 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
       freehandMinDistance: _fmd,
       groupId: _gid,
       cullable: _cu,
+      // zLevel is handled below — while a hover bump is active it must fold
+      // into _prevZLevel (the restore target) instead of overwriting it.
+      zLevel,
       ...others
     } = overlay as Partial<Overlay<E>> & {
       completed?: boolean
@@ -611,6 +614,17 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
     }
 
     merge(this, others)
+
+    if (isValid(zLevel)) {
+      if (this._prevZLevel !== null) {
+        // Mid-hover: the visible zLevel is the temporary bump — fold the
+        // explicit write into the restore target so mouse-leave applies the
+        // new level instead of resurrecting the pre-hover one.
+        this._prevZLevel = zLevel
+      } else {
+        this.zLevel = zLevel
+      }
+    }
 
     // Handle extendData separately — always produce a mutable merged result
     // (frozen objects from Immer/store and their sub-objects cannot be mutated)
@@ -648,7 +662,11 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
 
     if (isArray(points)) {
       let repeatTotalStep = 0
-      this.points = [...points]
+      // Deep-copy the point objects — the array spread alone leaves host-
+      // owned objects in place, and a later mutation of the caller's array
+      // items would silently drift the drawing (and beat shouldUpdate's
+      // field-wise diff since _prevOverlay holds the same references).
+      this.points = points.map(p => ({ ...p }))
       if (points.length === 0) {
         // Explicit empty write — reset to the start step so sync/undo can
         // clear a drawing's points instead of the change being ignored.
@@ -747,6 +765,12 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
   }
 
   nextStep (): void {
+    // A finished overlay must stay finished — a stray nextStep (stale event
+    // slot, replay edge) would otherwise re-enter isDrawing() and resurrect
+    // the zombie-outside-progress-slot state the point-write path guards.
+    if (this.currentStep === OVERLAY_DRAW_STEP_FINISHED) {
+      return
+    }
     if (this.currentStep === this.totalStep - 1) {
       this.currentStep = OVERLAY_DRAW_STEP_FINISHED
     } else {

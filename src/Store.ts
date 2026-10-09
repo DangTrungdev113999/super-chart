@@ -1508,7 +1508,12 @@ export default class StoreImp implements Store {
       this._chart.updatePane(UpdateLevel.Overlay, PaneIdConstants.X_AXIS)
     }
     createdOverlays.forEach(overlay => {
-      this.executeAction('onOverlayChange', { type: 'create', overlay })
+      // An onDrawStart hook may have removed its own overlay — emitting
+      // 'create' for it would invert the event order (create after remove)
+      // and leave listeners holding a phantom id.
+      if (this._overlayById.get(overlay.id) === overlay) {
+        this.executeAction('onOverlayChange', { type: 'create', overlay })
+      }
     })
     return ids
   }
@@ -1526,14 +1531,21 @@ export default class StoreImp implements Store {
     }
     // A mid-drag removal must also drop the pressed state — otherwise the
     // next mousemove keeps emitting progress events for a dead overlay and
-    // sync mirrors would materialize it back as a zombie.
+    // sync mirrors would materialize it back as a zombie. A figure press
+    // (figureType !== 'none') already emitted 'editStart' — close the
+    // bracket so the manager releases its pendingEdit instead of leaking
+    // the before-image into the next gesture.
     if (this._pressedOverlayInfo.overlay === overlay) {
+      const editWasArmed = this._pressedOverlayInfo.figureType !== 'none'
       this._pressedOverlayInfo = {
         paneId: '',
         overlay: null,
         figureType: 'none',
         figureIndex: -1,
         figure: null
+      }
+      if (editWasArmed) {
+        this.executeAction('onOverlayChange', { type: 'editEnd', overlay })
       }
     }
     // Hover/select slots must not keep pointing at a dead overlay — the
@@ -1603,6 +1615,12 @@ export default class StoreImp implements Store {
       const oldPaneId = overlay.paneId
       overlay.override(override)
       const newPaneId = overlay.paneId
+      // The progress slot keys its pane separately — an in-progress overlay
+      // migrated across panes via override must drag the slot along or
+      // progressOverlayComplete writes the stale pane.
+      if (this._progressOverlayInfo?.overlay === overlay) {
+        this._progressOverlayInfo.paneId = newPaneId
+      }
       if (newPaneId !== oldPaneId && this._overlays.has(oldPaneId)) {
         const list = this._overlays.get(oldPaneId)
         const index = list?.indexOf(overlay) ?? -1
@@ -1661,6 +1679,13 @@ export default class StoreImp implements Store {
     const updatePaneIds: string[] = []
     const filterOverlays = this.getOverlaysByFilter(filter)
     filterOverlays.forEach(overlay => {
+      // Idempotence: a re-entrant removeOverlay (cascading remove from an
+      // onRemoved hook mid-loop) already unregistered this overlay — the
+      // filter snapshot is stale and a second pass would double-fire
+      // onRemoved/'remove'.
+      if (this._overlayById.get(overlay.id) !== overlay) {
+        return
+      }
       const paneId = overlay.paneId
       const paneOverlays = this.getOverlaysByPaneId(overlay.paneId)
       if (!updatePaneIds.includes(paneId)) {
@@ -1888,7 +1913,22 @@ export default class StoreImp implements Store {
     this._progressOverlayInfo = null
     if (progressInfo?.overlay.isDrawing() === true) {
       try {
+        progressInfo.overlay.onRemoved?.({ overlay: progressInfo.overlay, chart: this._chart })
+      } catch {}
+      try {
         this.executeAction('onOverlayChange', { type: 'remove', overlay: progressInfo.overlay })
+      } catch {}
+    }
+    // Emit for completed overlays too — silently clearing the maps used to
+    // leak sync mirrors and skip every onRemoved hook. The drawings manager
+    // is destroyed before the store (Chart.destroy order), so its 'remove'
+    // handler is already inert — no stray persistRemove reaches the adapter.
+    for (const overlay of this._overlayById.values()) {
+      try {
+        overlay.onRemoved?.({ overlay, chart: this._chart })
+      } catch {}
+      try {
+        this.executeAction('onOverlayChange', { type: 'remove', overlay })
       } catch {}
     }
     // Drop the remaining interaction slots — a pressed/hovered/selected

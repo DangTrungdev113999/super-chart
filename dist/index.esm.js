@@ -55,13 +55,24 @@ function merge(target, source) {
         return;
     }
     for (var key in source) {
+        // Never write dunder/prototype keys — extendData merge of a hostile or
+        // snapshot payload would otherwise reassign the target's prototype.
+        if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+            continue;
+        }
         if (Object.prototype.hasOwnProperty.call(source, key)) {
             // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- ignore
             var targetProp = target[key];
             // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- ignore
             var sourceProp = source[key];
+            // Arrays merge index-wise if treated as objects — a shorter source
+            // leaves stale tail elements behind (unchecking a visibleIntervals
+            // entry duplicated/retained rows). Arrays are atomic values here:
+            // the incoming array replaces the target wholesale.
             if (isObject(sourceProp) &&
-                isObject(targetProp)) {
+                isObject(targetProp) &&
+                !isArray(sourceProp) &&
+                !isArray(targetProp)) {
                 merge(targetProp, sourceProp);
             }
             else {
@@ -290,8 +301,9 @@ function getPixelRatio(canvas) {
     var _a, _b;
     return (_b = (_a = canvas.ownerDocument.defaultView) === null || _a === void 0 ? void 0 : _a.devicePixelRatio) !== null && _b !== void 0 ? _b : 1;
 }
-function createFont(size, weight, family) {
-    return "".concat(weight !== null && weight !== void 0 ? weight : 'normal', " ").concat(size !== null && size !== void 0 ? size : 12, "px ").concat(family !== null && family !== void 0 ? family : 'Helvetica Neue');
+function createFont(size, weight, family, fontStyle) {
+    var style = isValid(fontStyle) && fontStyle !== 'normal' ? "".concat(fontStyle, " ") : '';
+    return "".concat(style).concat(weight !== null && weight !== void 0 ? weight : 'normal', " ").concat(size !== null && size !== void 0 ? size : 12, "px ").concat(family !== null && family !== void 0 ? family : 'Helvetica Neue');
 }
 /**
  * Measure the width of text
@@ -482,6 +494,7 @@ var OVERLAY_ID_PREFIX = 'overlay_';
 var OVERLAY_FIGURE_KEY_PREFIX = 'overlay_figure_';
 var OverlayImp = /** @class */ (function () {
     function OverlayImp(overlay) {
+        var _a;
         this.groupId = '';
         this.totalStep = 1;
         this.currentStep = OVERLAY_DRAW_STEP_START;
@@ -536,6 +549,17 @@ var OverlayImp = /** @class */ (function () {
         this._prevPressedPoint = null;
         this._prevPressedPoints = [];
         this.override(overlay);
+        // override() strips kernel-owned fields so runtime patches (sync
+        // overrides, host edits) can't clobber them — but the TEMPLATE is the
+        // one place they must land. Without this every tool runs with the
+        // defaults: totalStep=1 strands multi-step drawings mid-draw forever,
+        // freehand/cullable flags silently drop.
+        this.totalStep = (_a = overlay.totalStep) !== null && _a !== void 0 ? _a : 1;
+        this.freehand = overlay.freehand === true;
+        if (overlay.freehandMinDistance !== undefined) {
+            this.freehandMinDistance = overlay.freehandMinDistance;
+        }
+        this.cullable = overlay.cullable;
     }
     OverlayImp.prototype.invalidateFigures = function () { this.figuresRev++; };
     OverlayImp.prototype.override = function (overlay) {
@@ -565,8 +589,22 @@ var OverlayImp = /** @class */ (function () {
         _b.figuresRev; _b.invalidateFigures; _b.isDrawing; _b.isStart; _b.forceComplete; _b._prevOverlay; _b._prevPressedPoint; _b._prevPressedPoints; _b._prevZLevel; 
         // Template/immutables — a host JS patch naming these would silently
         // corrupt step boundaries, gesture routing, and cull classification.
-        _b.totalStep; _b.freehand; _b.freehandMinDistance; _b.groupId; _b.cullable; var others = __rest(_b, ["id", "name", "currentStep", "points", "styles", "extendData", "skipDrawReplay", "completed", "figuresRev", "invalidateFigures", "isDrawing", "isStart", "forceComplete", "_prevOverlay", "_prevPressedPoint", "_prevPressedPoints", "_prevZLevel", "totalStep", "freehand", "freehandMinDistance", "groupId", "cullable"]);
+        _b.totalStep; _b.freehand; _b.freehandMinDistance; _b.groupId; _b.cullable; 
+        var // zLevel is handled below — while a hover bump is active it must fold
+        // into _prevZLevel (the restore target) instead of overwriting it.
+        zLevel = _b.zLevel, others = __rest(_b, ["id", "name", "currentStep", "points", "styles", "extendData", "skipDrawReplay", "completed", "figuresRev", "invalidateFigures", "isDrawing", "isStart", "forceComplete", "_prevOverlay", "_prevPressedPoint", "_prevPressedPoints", "_prevZLevel", "totalStep", "freehand", "freehandMinDistance", "groupId", "cullable", "zLevel"]);
         merge(this, others);
+        if (isValid(zLevel)) {
+            if (this._prevZLevel !== null) {
+                // Mid-hover: the visible zLevel is the temporary bump — fold the
+                // explicit write into the restore target so mouse-leave applies the
+                // new level instead of resurrecting the pre-hover one.
+                this._prevZLevel = zLevel;
+            }
+            else {
+                this.zLevel = zLevel;
+            }
+        }
         // Handle extendData separately — always produce a mutable merged result
         // (frozen objects from Immer/store and their sub-objects cannot be mutated)
         if (isValid(extendData)) {
@@ -601,7 +639,11 @@ var OverlayImp = /** @class */ (function () {
         }
         if (isArray(points)) {
             var repeatTotalStep = 0;
-            this.points = __spreadArray([], __read(points), false);
+            // Deep-copy the point objects — the array spread alone leaves host-
+            // owned objects in place, and a later mutation of the caller's array
+            // items would silently drift the drawing (and beat shouldUpdate's
+            // field-wise diff since _prevOverlay holds the same references).
+            this.points = points.map(function (p) { return (__assign({}, p)); });
             if (points.length === 0) {
                 // Explicit empty write — reset to the start step so sync/undo can
                 // clear a drawing's points instead of the change being ignored.
@@ -693,6 +735,12 @@ var OverlayImp = /** @class */ (function () {
         return { sort: sort, draw: draw };
     };
     OverlayImp.prototype.nextStep = function () {
+        // A finished overlay must stay finished — a stray nextStep (stale event
+        // slot, replay edge) would otherwise re-enter isDrawing() and resurrect
+        // the zombie-outside-progress-slot state the point-write path guards.
+        if (this.currentStep === OVERLAY_DRAW_STEP_FINISHED) {
+            return;
+        }
         if (this.currentStep === this.totalStep - 1) {
             this.currentStep = OVERLAY_DRAW_STEP_FINISHED;
         }
@@ -9074,35 +9122,69 @@ function getOverlayTemplate(name) {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+/** Boundary normalization for a stored point — accepts object form and the
+ * tuple form `[timestamp, value, dataIndex]` older writers emitted, drops
+ * entries anchoring to neither time nor index (a pure `{value}` point
+ * renders at garbage x). */
+function normalizePoint(p) {
+    var point = null;
+    if (Array.isArray(p)) {
+        var t = p;
+        point = { timestamp: t[0], value: t[1], dataIndex: t[2] };
+    }
+    else if (p !== null && typeof p === 'object') {
+        var raw = p;
+        point = { timestamp: raw.timestamp, value: raw.value, dataIndex: raw.dataIndex };
+        if (raw.interval !== undefined) {
+            point.interval = raw.interval;
+        }
+        if (raw.offset !== undefined) {
+            point.offset = raw.offset;
+        }
+    }
+    if (point === null || (typeof point.timestamp !== 'number' && typeof point.dataIndex !== 'number')) {
+        return null;
+    }
+    return point;
+}
 /** Fields a restore writes back through createOverlay. */
 function serializedToOverlayCreate(d) {
-    var _a, _b, _c, _d, _e;
+    var _a, _b;
     return {
-        id: d.id,
-        name: d.name,
+        id: typeof d.id === 'string' ? d.id : undefined,
+        name: typeof d.name === 'string' ? d.name : '',
         paneId: d.paneId,
         groupId: (_a = d.groupId) !== null && _a !== void 0 ? _a : 'drawings',
-        points: d.points.map(function (p) {
-            var point = { timestamp: p.timestamp, value: p.value, dataIndex: p.dataIndex };
-            if (p.interval !== undefined) {
-                point.interval = p.interval;
-            }
-            if (p.offset !== undefined) {
-                point.offset = p.offset;
-            }
-            return point;
-        }),
+        points: (Array.isArray(d.points) ? d.points : [])
+            .map(normalizePoint)
+            .filter(function (p) { return p !== null; }),
         styles: clone((_b = d.styles) !== null && _b !== void 0 ? _b : null),
-        lock: (_c = d.lock) !== null && _c !== void 0 ? _c : false,
-        visible: (_d = d.visible) !== null && _d !== void 0 ? _d : true,
-        mode: d.mode,
-        modeSensitivity: d.modeSensitivity,
-        zLevel: d.zLevel,
-        extendData: clone((_e = d.extendData) !== null && _e !== void 0 ? _e : null),
+        // Boundary truthiness — a foreign record's lock:'yes' or visible:0 must
+        // not freeze the drawing or block keyboard delete.
+        lock: d.lock === true,
+        visible: d.visible !== false,
+        // Bogus mode values fall into 'normal' — OverlayView treats anything
+        // non-'normal' as magnet and would snap every drag. Accept the
+        // camelCase spellings older foreign records may carry.
+        mode: (function () {
+            var m = d.mode;
+            if (m === 'weakMagnet' || m === 'weak_magnet') {
+                return 'weak_magnet';
+            }
+            if (m === 'strongMagnet' || m === 'strong_magnet') {
+                return 'strong_magnet';
+            }
+            return 'normal';
+        })(),
+        modeSensitivity: typeof d.modeSensitivity === 'number' ? d.modeSensitivity : undefined,
+        zLevel: typeof d.zLevel === 'number' ? d.zLevel : undefined,
+        // Restore sanitizes too — records written by older/foreign builds may
+        // carry isEditing or _-keys that would resurrect mid-edit state.
+        extendData: sanitizeExtendData(d.extendData),
         // Restored drawings are finished — never let them occupy the
         // drawing-progress slot (unlimited-step tools could never satisfy
         // points >= totalStep - 1 and would displace siblings).
-        completed: d.completed,
+        completed: Boolean(d.completed),
         // Restored points are already normalized — replaying the draw hooks
         // would re-run templates' per-point transforms (e.g. flatTopBottom
         // pins P2's dataIndex to P1's) and silently mutate stored geometry.
@@ -9165,7 +9247,7 @@ function stableStringify(value) {
  * transient helpers.
  */
 function serializeOverlay$1(overlay, options) {
-    var _a, _b, _c, _d, _e;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     if (overlay.ghost || overlay.synced || overlay.isDrawing() || overlay.transient === true) {
         return null;
     }
@@ -9197,13 +9279,16 @@ function serializeOverlay$1(overlay, options) {
         visible: overlay.visible,
         mode: overlay.mode,
         modeSensitivity: overlay.modeSensitivity,
-        zLevel: overlay.zLevel,
+        // During a hover bump zLevel reads MAX_SAFE_INTEGER — persist the
+        // restore target instead so a mid-hover save doesn't pin the drawing
+        // at the top of the stack forever.
+        zLevel: (_g = (_f = (_e = overlay).getPrevZLevel) === null || _f === void 0 ? void 0 : _f.call(_e)) !== null && _g !== void 0 ? _g : overlay.zLevel,
         extendData: sanitizeExtendData(overlay.extendData),
         completed: true,
         positionPercents: positionPercents,
         // createdAt sticks to the first serialization — re-stamping it on every
         // edit would erase the real creation time from storage.
-        createdAt: (_e = options === null || options === void 0 ? void 0 : options.createdAt) !== null && _e !== void 0 ? _e : now,
+        createdAt: (_h = options === null || options === void 0 ? void 0 : options.createdAt) !== null && _h !== void 0 ? _h : now,
         updatedAt: now
     };
 }
@@ -9337,6 +9422,9 @@ function createDrawingHistory(options) {
  */
 var DRAWINGS_GROUP_ID = 'drawings';
 var SAVE_DEBOUNCE_MS = 300;
+// Failed store writes requeue and retry — capped so a permanently-broken
+// adapter (HTTP 4xx, closed IDB) doesn't spin writes ~3x/sec forever.
+var MAX_STORE_RETRIES = 5;
 function createDrawingManager(chart, options) {
     var _a, _b;
     var history = createDrawingHistory({ maxHistory: options === null || options === void 0 ? void 0 : options.maxHistory });
@@ -9411,14 +9499,14 @@ function createDrawingManager(chart, options) {
         var key = scopeKey(s);
         var bucket = pendingByScope.get(key);
         if (bucket === undefined) {
-            bucket = { scope: s, upsert: new Map(), remove: new Set() };
+            bucket = { scope: s, upsert: new Map(), remove: new Set(), retries: 0 };
             pendingByScope.set(key, bucket);
         }
         return bucket;
     }
     function scheduleSave() {
         var _a;
-        if (store === null || saveTimer !== null) {
+        if (destroyed || store === null || saveTimer !== null) {
             return;
         }
         saveTimer = setTimeout(function () {
@@ -9468,11 +9556,25 @@ function createDrawingManager(chart, options) {
                                                     case 3:
                                                         _d.sent();
                                                         live_1 = pendingBucket(bucket.scope);
-                                                        upsert.forEach(function (d) { return live_1.upsert.set(d.id, d); });
-                                                        remove.forEach(function (id) { return live_1.remove.add(id); });
-                                                        // Don't leave the retry hostage to the next user commit —
-                                                        // reschedule the debounce so a transient failure self-heals.
-                                                        scheduleSave();
+                                                        live_1.retries = Math.max(live_1.retries, bucket.retries + 1);
+                                                        if (live_1.retries <= MAX_STORE_RETRIES) {
+                                                            upsert.forEach(function (d) {
+                                                                if (!live_1.upsert.has(d.id)) {
+                                                                    live_1.upsert.set(d.id, d);
+                                                                }
+                                                            });
+                                                            remove.forEach(function (id) {
+                                                                if (!live_1.upsert.has(id)) {
+                                                                    live_1.remove.add(id);
+                                                                }
+                                                            });
+                                                            // Don't leave the retry hostage to the next user commit —
+                                                            // reschedule the debounce so a transient failure self-heals.
+                                                            scheduleSave();
+                                                        }
+                                                        else {
+                                                            logWarn('manager', 'flushStore', "store.apply failed ".concat(live_1.retries, "x for scope ").concat(scopeKey(bucket.scope), " \u2014 dropping ").concat(upsert.length, " upserts, ").concat(remove.length, " removes"));
+                                                        }
                                                         return [3 /*break*/, 4];
                                                     case 4: return [2 /*return*/];
                                                 }
@@ -9540,7 +9642,6 @@ function createDrawingManager(chart, options) {
         emit('change', { overlay: overlay });
     }
     var onOverlayChange = function (data) {
-        var _a;
         if (destroyed) {
             return;
         }
@@ -9612,6 +9713,14 @@ function createDrawingManager(chart, options) {
                     trackShadow(overlay);
                     return;
                 }
+                // An armed overlay finished via host overrideOverlay (final points
+                // written programmatically) never saw a drawEnd — run it through
+                // the create commit so the finished drawing actually persists and
+                // armed clears (also covers ghost→mirror promotion).
+                if (armed.has(overlay.id) && !overlay.isDrawing()) {
+                    commitCreate(overlay);
+                    break;
+                }
                 // syncApplied: a peer's edit applied onto the canonical overlay —
                 // persist it (the owner is the only persister of peer edits) but
                 // never mint a local undo entry for someone else's gesture.
@@ -9641,10 +9750,18 @@ function createDrawingManager(chart, options) {
                 break;
             }
             case 'remove': {
-                armed.delete(overlay.id);
+                var wasArmed = armed.delete(overlay.id);
                 pendingEdit.delete(overlay.id);
-                var before = (_a = shadow.get(overlay.id)) !== null && _a !== void 0 ? _a : serializeOverlay$1(overlay);
+                var shadowed = shadow.get(overlay.id);
+                var before = shadowed !== null && shadowed !== void 0 ? shadowed : serializeOverlay$1(overlay);
                 shadow.delete(overlay.id);
+                // Never committed — killed mid-draw or dropped by its own onDrawEnd
+                // (degenerate polyline etc.). Nothing was persisted, so no
+                // tombstone is needed, and an undo entry would resurrect a drawing
+                // the template deliberately discarded.
+                if (wasArmed && shadowed === undefined) {
+                    return;
+                }
                 // Epoch-tagged drop: an overlay stamped before the current scope
                 // epoch is an old-scope wipe — never persist a delete into the new
                 // scope's bucket, no matter when the wipe actually runs.
@@ -9807,6 +9924,30 @@ function createDrawingManager(chart, options) {
         remoteApplying = true;
         applyingInternal = true;
         try {
+            // Unflushed local writes — a remote apply must not clobber a local
+            // edit still sitting in the debounce window (it would revert on
+            // canvas, then the stale pending flush would flap the store back).
+            // Last-writer-wins on updatedAt; when the remote record is newer the
+            // stale local pending write is dropped so the flush converges.
+            var pendingUpserts_1 = new Map();
+            var pendingRemoves_1 = new Set();
+            pendingByScope.forEach(function (bucket) {
+                bucket.upsert.forEach(function (d, id) { return pendingUpserts_1.set(id, d); });
+                bucket.remove.forEach(function (id) { return pendingRemoves_1.add(id); });
+            });
+            var remoteWinsOrStale_1 = function (d) {
+                var localPending = pendingUpserts_1.get(d.id);
+                if (localPending === undefined) {
+                    return true;
+                }
+                if (Number(localPending.updatedAt) >= Number(d.updatedAt)) {
+                    return false;
+                }
+                // Remote is newer — drop the stale local write so it can't flap.
+                pendingByScope.forEach(function (b) { b.upsert.delete(d.id); });
+                pendingUpserts_1.delete(d.id);
+                return true;
+            };
             if (event.type === 'snapshot') {
                 // Full remote state — reconcile: remove ids not present remotely.
                 var remoteIds_1 = new Set(event.drawings.map(function (d) { return d.id; }));
@@ -9814,15 +9955,9 @@ function createDrawingManager(chart, options) {
                 // reconcile — the peer can't know about them yet. Pending REMOVE
                 // tombstones win the other direction: a drawing the user deleted
                 // locally must not resurrect when the peer's snapshot still has it.
-                var pendingIds_1 = new Set();
-                var pendingRemoves_1 = new Set();
-                pendingByScope.forEach(function (bucket) {
-                    bucket.upsert.forEach(function (d) { return pendingIds_1.add(d.id); });
-                    bucket.remove.forEach(function (id) { return pendingRemoves_1.add(id); });
-                });
                 chart.getOverlays({ groupId: DRAWINGS_GROUP_ID }).forEach(function (o) {
                     if (!remoteIds_1.has(o.id) && !o.ghost && !o.synced && !o.isDrawing() &&
-                        !pendingIds_1.has(o.id) && persistable(o)) {
+                        !pendingUpserts_1.has(o.id) && persistable(o)) {
                         // Drop undo commands for remotely-deleted drawings — otherwise
                         // undo would resurrect them AND re-persist into the peer's store.
                         history.invalidateOverlay(o.id);
@@ -9831,6 +9966,9 @@ function createDrawingManager(chart, options) {
                 });
                 event.drawings.forEach(function (d) {
                     try {
+                        if (!remoteWinsOrStale_1(d)) {
+                            return;
+                        }
                         var existing = chart.getOverlayById(d.id);
                         // d.completed guards BOTH branches — a half-formed remote
                         // record must not clobber a finished local overlay.
@@ -9850,11 +9988,17 @@ function createDrawingManager(chart, options) {
             else {
                 event.drawings.forEach(function (d) {
                     try {
+                        if (!remoteWinsOrStale_1(d)) {
+                            return;
+                        }
                         var existing = chart.getOverlayById(d.id);
+                        // Pending-removal tombstones apply to upserts too — a peer's
+                        // stale upsert arriving after the user's local delete must not
+                        // resurrect the drawing before the remove reaches the store.
                         if (existing !== null && !existing.isDrawing() && d.completed) {
                             chart.overrideOverlay(serializedToOverlayCreate(d));
                         }
-                        else if (d.completed && existing === null) {
+                        else if (d.completed && existing === null && !pendingRemoves_1.has(d.id)) {
                             shadow.set(d.id, d);
                             chart.createOverlay(serializedToOverlayCreate(d));
                         }
@@ -9865,6 +10009,13 @@ function createDrawingManager(chart, options) {
                 });
                 (_a = event.removedIds) === null || _a === void 0 ? void 0 : _a.forEach(function (id) {
                     history.invalidateOverlay(id);
+                    // Clear unflushed ops for the deleted id — a pending local
+                    // upsert would otherwise resurrect the drawing in the shared
+                    // store on the next flush (zombie loop across every peer).
+                    pendingByScope.forEach(function (b) {
+                        b.upsert.delete(id);
+                        b.remove.delete(id);
+                    });
                     chart.removeOverlay({ id: id });
                 });
             }
@@ -9903,7 +10054,7 @@ function createDrawingManager(chart, options) {
             // Guard empty/unregistered tool names — activating '' emits a phantom
             // toolChange and leaves activeTool() reporting an armed tool that
             // createOverlay can never instantiate.
-            if (typeof name !== 'string' || name === '') {
+            if (typeof name !== 'string' || name === '' || getOverlayTemplate(name) === null) {
                 return null;
             }
             activeToolName = name;
@@ -9918,6 +10069,7 @@ function createDrawingManager(chart, options) {
             return typeof id === 'string' ? id : null;
         },
         deactivate: function () {
+            var _a;
             if (activeToolName === null) {
                 return;
             }
@@ -9925,7 +10077,13 @@ function createDrawingManager(chart, options) {
             continuousTool = null;
             // Disarm means disarm — an in-progress overlay still in the progress
             // slot would keep collecting clicks while activeTool() reports null.
-            var inProgress = chart.getOverlays().find(function (o) { return o.isDrawing(); });
+            // Target the progress slot, not an isDrawing scan: ghost mirrors are
+            // isDrawing() too and could win the find() before the real overlay.
+            // (The scan fallback stays for pre-registry edge states.)
+            var slot = (_a = chart.getChartStore().getProgressOverlayInfo()) === null || _a === void 0 ? void 0 : _a.overlay;
+            var inProgress = slot !== undefined && !slot.ghost && !slot.synced
+                ? slot
+                : chart.getOverlays().find(function (o) { return o.isDrawing() && !o.ghost && !o.synced; });
             if (inProgress !== undefined) {
                 chart.removeOverlay({ id: inProgress.id });
             }
@@ -10138,31 +10296,113 @@ var BASE = {
 function caps(partial) {
     return __assign(__assign({ freehand: false, hasText: false, multiline: false }, BASE), partial);
 }
-var LINE_RECIPE = [
-    { kind: 'color', role: 'line' }, { kind: 'style', role: 'line' }, { kind: 'width' },
-    { kind: 'snap45' }, { kind: 'lock' }, { kind: 'visibility' }, { kind: 'clone' },
+var TAIL = [
+    { kind: 'lock' }, { kind: 'visibility' }, { kind: 'clone' },
     { kind: 'settings' }, { kind: 'remove' }, { kind: 'more' }
 ];
-var FIB_RECIPE = [
+var LINE_RECIPE = __spreadArray([
+    { kind: 'color', role: 'line' }, { kind: 'style', role: 'line' }, { kind: 'width' },
+    { kind: 'snap45' }
+], __read(TAIL), false);
+var FIB_RECIPE = __spreadArray([
     { kind: 'color', role: 'line' }, { kind: 'levels' }, { kind: 'style', role: 'line' },
-    { kind: 'lock' }, { kind: 'visibility' }, { kind: 'clone' }, { kind: 'settings' },
-    { kind: 'remove' }, { kind: 'more' }
-];
-var SHAPE_RECIPE = [
-    { kind: 'color', role: 'line' }, { kind: 'color', role: 'fill' }, { kind: 'style', role: 'line' },
-    { kind: 'lock' }, { kind: 'visibility' }, { kind: 'clone' }, { kind: 'settings' },
-    { kind: 'remove' }, { kind: 'more' }
-];
+    { kind: 'width' }
+], __read(TAIL), false);
+/**
+ * Stroke/fill live under `styles.<channel>.border*` / `.color` — the channel
+ * is per-tool (rect | circle | polygon | arc), so the recipe is a factory.
+ */
+function shapeRecipe(channel, fill) {
+    if (fill === void 0) { fill = channel; }
+    return __spreadArray([
+        { kind: 'color', role: 'line', path: ['styles', channel, 'borderColor'] },
+        { kind: 'color', role: 'fill', path: ['styles', fill, 'color'] },
+        { kind: 'style', role: 'line', path: ['styles', channel, 'borderStyle'] },
+        { kind: 'width', path: ['styles', channel, 'borderSize'] }
+    ], __read(TAIL), false);
+}
+/** Line-drawn freehand/curve tools read styles.line.* — same surface as
+ * LINE_RECIPE minus the 45° snap control. */
+var PATH_RECIPE = __spreadArray([
+    { kind: 'color', role: 'line' }, { kind: 'style', role: 'line' }, { kind: 'width' }
+], __read(TAIL), false);
 var TEXT_RECIPE = [
     { kind: 'color', role: 'text' }, { kind: 'style', role: 'text' }, { kind: 'text' },
     { kind: 'textAlign' }, { kind: 'lock' }, { kind: 'visibility' }, { kind: 'clone' },
     { kind: 'settings' }, { kind: 'remove' }, { kind: 'more' }
 ];
+/** Measure/range tools style via extendData — generic roles resolve through
+ * each item's stylePaths, so the recipe stays family-shaped. */
 var MEASURE_RECIPE = [
     { kind: 'color', role: 'line' }, { kind: 'color', role: 'background' }, { kind: 'text' },
     { kind: 'lock' }, { kind: 'visibility' }, { kind: 'clone' }, { kind: 'settings' },
     { kind: 'remove' }, { kind: 'more' }
 ];
+var RANGE_RECIPE = __spreadArray([
+    { kind: 'color', role: 'line' }, { kind: 'style', role: 'line' }, { kind: 'width' }
+], __read(TAIL), false);
+var POSITION_RECIPE = __spreadArray([
+    { kind: 'color', role: 'line' }, { kind: 'color', role: 'fill' },
+    { kind: 'color', role: 'background' }, { kind: 'color', role: 'text' },
+    { kind: 'text' }
+], __read(TAIL), false);
+/** ExtendData style-path maps for tools whose renderers never read
+ * styles.line.* — writing the default paths used to be dead code. */
+var RANGE_STYLE_PATHS = {
+    lineColor: ['extendData', 'color'],
+    lineStyle: ['extendData', 'lineStyle'],
+    lineWidth: ['extendData', 'lineWidth']
+};
+var MARK_STYLE_PATHS = {
+    lineColor: ['extendData', 'color']
+};
+var HIGHLIGHTER_STYLE_PATHS = {
+    lineColor: ['extendData', 'color'],
+    lineWidth: ['extendData', 'lineWidth']
+};
+var BARS_PATTERN_STYLE_PATHS = {
+    lineColor: ['extendData', 'color']
+};
+var GHOST_FEED_STYLE_PATHS = {
+    fillColor: ['extendData', 'upColor'],
+    backgroundColor: ['extendData', 'downColor']
+};
+var POSITION_STYLE_PATHS = {
+    lineColor: ['extendData', 'lineColor'],
+    fillColor: ['extendData', 'profitBackground'],
+    backgroundColor: ['extendData', 'stopBackground'],
+    textColor: ['extendData', 'textColor'],
+    textSize: ['extendData', 'fontSize']
+};
+var FORECAST_STYLE_PATHS = {
+    lineColor: ['extendData', 'lineColor'],
+    backgroundColor: ['extendData', 'sourceBgColor'],
+    textColor: ['extendData', 'targetTextColor']
+};
+var PROJECTION_STYLE_PATHS = {
+    lineColor: ['extendData', 'lineColor'],
+    lineWidth: ['extendData', 'lineWidth'],
+    fillColor: ['extendData', 'color1'],
+    backgroundColor: ['extendData', 'color2']
+};
+var PROJECTION_RECIPE = __spreadArray([
+    { kind: 'color', role: 'line' }, { kind: 'width' },
+    { kind: 'color', role: 'fill' }, { kind: 'color', role: 'background' }
+], __read(TAIL), false);
+var COLOR_ONLY_RECIPE = __spreadArray([
+    { kind: 'color', role: 'line' }
+], __read(TAIL), false);
+var HIGHLIGHTER_RECIPE = __spreadArray([
+    { kind: 'color', role: 'line' }, { kind: 'width' }
+], __read(TAIL), false);
+var ZONE_COLORS_RECIPE = __spreadArray([
+    { kind: 'color', role: 'fill' }, { kind: 'color', role: 'background' }
+], __read(TAIL), false);
+var MEASURE_STYLE_PATHS = {
+    lineColor: ['extendData', 'color'],
+    fillColor: ['extendData', 'upColor'],
+    backgroundColor: ['extendData', 'downColor']
+};
 function item(id, overlayName, title, iconId, capabilities, toolbarRecipe, extra) {
     return __assign({ id: id, overlayName: overlayName, title: title, iconId: iconId, capabilities: capabilities, toolbarRecipe: toolbarRecipe, available: true }, extra);
 }
@@ -10300,21 +10540,21 @@ function buildCatalog() {
                 {
                     id: 'forecast',
                     items: [
-                        item('forecast', 'forecast', 'Forecast', 'forecast', caps({ anchorCount: 2 }), MEASURE_RECIPE),
-                        item('projection', 'projection', 'Projection', 'forecast', caps({ anchorCount: 3 }), MEASURE_RECIPE),
-                        item('barsPattern', 'barsPattern', 'Bars Pattern', 'path', caps({ anchorCount: 2 }), MEASURE_RECIPE),
-                        item('ghostFeed', 'ghostFeed', 'Ghost Feed', 'path', caps({ anchorCount: 2 }), MEASURE_RECIPE)
+                        item('forecast', 'forecast', 'Forecast', 'forecast', caps({ anchorCount: 2 }), MEASURE_RECIPE, { stylePaths: FORECAST_STYLE_PATHS }),
+                        item('projection', 'projection', 'Projection', 'forecast', caps({ anchorCount: 3 }), PROJECTION_RECIPE, { stylePaths: PROJECTION_STYLE_PATHS }),
+                        item('barsPattern', 'barsPattern', 'Bars Pattern', 'path', caps({ anchorCount: 2 }), COLOR_ONLY_RECIPE, { stylePaths: BARS_PATTERN_STYLE_PATHS }),
+                        item('ghostFeed', 'ghostFeed', 'Ghost Feed', 'path', caps({ anchorCount: 2 }), ZONE_COLORS_RECIPE, { stylePaths: GHOST_FEED_STYLE_PATHS })
                     ]
                 },
                 {
                     id: 'measurers',
                     items: [
-                        item('measure', 'measure', 'Measure', 'measure', caps({ anchorCount: 0, freehand: true, snap45: false }), MEASURE_RECIPE),
-                        item('dateRange', 'dateRange', 'Date Range', 'dateRange', caps({ anchorCount: 2 }), MEASURE_RECIPE),
-                        item('priceRange', 'priceRange', 'Price Range', 'priceRange', caps({ anchorCount: 2 }), MEASURE_RECIPE),
-                        item('dateAndPriceRange', 'dateAndPriceRange', 'Date and Price Range', 'dateRange', caps({ anchorCount: 2 }), MEASURE_RECIPE),
-                        item('longPosition', 'longPosition', 'Long Position', 'longPosition', caps({ anchorCount: 1 }), MEASURE_RECIPE),
-                        item('shortPosition', 'shortPosition', 'Short Position', 'shortPosition', caps({ anchorCount: 1 }), MEASURE_RECIPE)
+                        item('measure', 'measure', 'Measure', 'measure', caps({ anchorCount: 0, freehand: true, snap45: false }), ZONE_COLORS_RECIPE, { stylePaths: MEASURE_STYLE_PATHS }),
+                        item('dateRange', 'dateRange', 'Date Range', 'dateRange', caps({ anchorCount: 2 }), RANGE_RECIPE, { stylePaths: RANGE_STYLE_PATHS }),
+                        item('priceRange', 'priceRange', 'Price Range', 'priceRange', caps({ anchorCount: 2 }), RANGE_RECIPE, { stylePaths: RANGE_STYLE_PATHS }),
+                        item('dateAndPriceRange', 'dateAndPriceRange', 'Date and Price Range', 'dateRange', caps({ anchorCount: 2 }), RANGE_RECIPE, { stylePaths: RANGE_STYLE_PATHS }),
+                        item('longPosition', 'longPosition', 'Long Position', 'longPosition', caps({ anchorCount: 1 }), POSITION_RECIPE, { stylePaths: POSITION_STYLE_PATHS }),
+                        item('shortPosition', 'shortPosition', 'Short Position', 'shortPosition', caps({ anchorCount: 1 }), POSITION_RECIPE, { stylePaths: POSITION_STYLE_PATHS })
                     ]
                 }
             ]
@@ -10326,34 +10566,34 @@ function buildCatalog() {
                 {
                     id: 'brushes',
                     items: [
-                        item('brush', 'brush', 'Brush', 'brush', caps({ anchorCount: 0, freehand: true, snap45: false }), SHAPE_RECIPE),
-                        item('highlighter', 'highlighter', 'Highlighter', 'highlighter', caps({ anchorCount: 0, freehand: true, snap45: false }), SHAPE_RECIPE),
-                        item('path', 'path', 'Path', 'path', caps({ anchorCount: -1, snap45: false }), SHAPE_RECIPE)
+                        item('brush', 'brush', 'Brush', 'brush', caps({ anchorCount: 0, freehand: true, snap45: false }), PATH_RECIPE),
+                        item('highlighter', 'highlighter', 'Highlighter', 'highlighter', caps({ anchorCount: 0, freehand: true, snap45: false }), HIGHLIGHTER_RECIPE, { stylePaths: HIGHLIGHTER_STYLE_PATHS }),
+                        item('path', 'path', 'Path', 'path', caps({ anchorCount: -1, snap45: false }), PATH_RECIPE)
                     ]
                 },
                 {
                     id: 'arrows',
                     items: [
-                        item('arrowMarkUp', 'arrowMarkUp', 'Arrow Mark Up', 'arrow', caps({ anchorCount: 1, snap45: false }), SHAPE_RECIPE),
-                        item('arrowMarkDown', 'arrowMarkDown', 'Arrow Mark Down', 'arrow', caps({ anchorCount: 1, snap45: false }), SHAPE_RECIPE),
-                        item('arrowMarkLeft', 'arrowMarkLeft', 'Arrow Mark Left', 'arrow', caps({ anchorCount: 1, snap45: false }), SHAPE_RECIPE),
-                        item('arrowMarkRight', 'arrowMarkRight', 'Arrow Mark Right', 'arrow', caps({ anchorCount: 1, snap45: false }), SHAPE_RECIPE),
-                        item('arrowMarker', 'arrowMarker', 'Arrow Marker', 'arrow', caps({ anchorCount: 2, snap45: false }), SHAPE_RECIPE)
+                        item('arrowMarkUp', 'arrowMarkUp', 'Arrow Mark Up', 'arrow', caps({ anchorCount: 1, snap45: false }), COLOR_ONLY_RECIPE, { stylePaths: MARK_STYLE_PATHS }),
+                        item('arrowMarkDown', 'arrowMarkDown', 'Arrow Mark Down', 'arrow', caps({ anchorCount: 1, snap45: false }), COLOR_ONLY_RECIPE, { stylePaths: MARK_STYLE_PATHS }),
+                        item('arrowMarkLeft', 'arrowMarkLeft', 'Arrow Mark Left', 'arrow', caps({ anchorCount: 1, snap45: false }), COLOR_ONLY_RECIPE, { stylePaths: MARK_STYLE_PATHS }),
+                        item('arrowMarkRight', 'arrowMarkRight', 'Arrow Mark Right', 'arrow', caps({ anchorCount: 1, snap45: false }), COLOR_ONLY_RECIPE, { stylePaths: MARK_STYLE_PATHS }),
+                        item('arrowMarker', 'arrowMarker', 'Arrow Marker', 'arrow', caps({ anchorCount: 2, snap45: false }), COLOR_ONLY_RECIPE, { stylePaths: MARK_STYLE_PATHS })
                     ]
                 },
                 {
                     id: 'shapes',
                     items: [
-                        item('rect', 'rect', 'Rectangle', 'rect', caps({ anchorCount: 2 }), SHAPE_RECIPE),
-                        item('rotatedRect', 'rotatedRect', 'Rotated Rectangle', 'rotatedRect', caps({ anchorCount: 3 }), SHAPE_RECIPE),
-                        item('parallelogram', 'parallelogram', 'Parallelogram', 'rect', caps({ anchorCount: 3 }), SHAPE_RECIPE),
-                        item('circle', 'circle', 'Circle', 'circle', caps({ anchorCount: 2 }), SHAPE_RECIPE),
-                        item('ellipse', 'ellipse', 'Ellipse', 'ellipse', caps({ anchorCount: 2 }), SHAPE_RECIPE),
-                        item('triangle', 'triangle', 'Triangle', 'triangle', caps({ anchorCount: 3 }), SHAPE_RECIPE),
-                        item('arc', 'arc', 'Arc', 'arc', caps({ anchorCount: 3 }), SHAPE_RECIPE),
-                        item('curve', 'curve', 'Curve', 'curve', caps({ anchorCount: 2 }), SHAPE_RECIPE),
-                        item('doubleCurve', 'doubleCurve', 'Double Curve', 'curve', caps({ anchorCount: 2 }), SHAPE_RECIPE),
-                        item('polyline', 'polyline', 'Polyline', 'polyline', caps({ anchorCount: -1 }), SHAPE_RECIPE)
+                        item('rect', 'rect', 'Rectangle', 'rect', caps({ anchorCount: 2 }), shapeRecipe('rect')),
+                        item('rotatedRect', 'rotatedRect', 'Rotated Rectangle', 'rotatedRect', caps({ anchorCount: 3 }), shapeRecipe('polygon')),
+                        item('parallelogram', 'parallelogram', 'Parallelogram', 'rect', caps({ anchorCount: 3 }), shapeRecipe('polygon')),
+                        item('circle', 'circle', 'Circle', 'circle', caps({ anchorCount: 2 }), shapeRecipe('circle')),
+                        item('ellipse', 'ellipse', 'Ellipse', 'ellipse', caps({ anchorCount: 2 }), shapeRecipe('circle')),
+                        item('triangle', 'triangle', 'Triangle', 'triangle', caps({ anchorCount: 3 }), shapeRecipe('polygon')),
+                        item('arc', 'arc', 'Arc', 'arc', caps({ anchorCount: 3 }), shapeRecipe('arc', 'polygon')),
+                        item('curve', 'curve', 'Curve', 'curve', caps({ anchorCount: 2 }), PATH_RECIPE),
+                        item('doubleCurve', 'doubleCurve', 'Double Curve', 'curve', caps({ anchorCount: 2 }), PATH_RECIPE),
+                        item('polyline', 'polyline', 'Polyline', 'polyline', caps({ anchorCount: -1 }), shapeRecipe('polygon'))
                     ]
                 }
             ]
@@ -10379,8 +10619,10 @@ function buildCatalog() {
                         item('callout', 'callout', 'Callout', 'callout', caps({ anchorCount: 2, hasText: true, multiline: true, snap45: false }), TEXT_RECIPE),
                         item('priceLabel', 'priceLabel', 'Price Label', 'priceLabel', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE),
                         item('priceNote', 'simpleAnnotation', 'Price Note', 'priceLabel', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE),
-                        item('flag', 'flagMark', 'Flag Mark', 'flag', caps({ anchorCount: 1, snap45: false }), TEXT_RECIPE),
-                        item('table', 'table', 'Table', 'note', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE)
+                        // flagMark styles live under styles.flagMark (flagColor/poleColor)
+                        // — the generic text recipe wrote dead styles.text.* paths.
+                        item('flag', 'flagMark', 'Flag Mark', 'flag', caps({ anchorCount: 1, snap45: false }), ZONE_COLORS_RECIPE, { stylePaths: { fillColor: ['styles', 'flagMark', 'flagColor'], backgroundColor: ['styles', 'flagMark', 'poleColor'] } }),
+                        item('table', 'table', 'Table', 'note', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE, { stylePaths: { textAlign: ['styles', 'table', 'textAlign'] } })
                     ]
                 }
             ]
@@ -10915,10 +11157,14 @@ function attachFloatingToolbar(chart, manager, hooks) {
         var menu = createDom('div');
         menu.className = 'sc-drw-menu';
         build(menu);
-        // Position below the toolbar, aligned to the anchor button.
+        // Position below the toolbar, aligned to the anchor button. Clamp the
+        // right edge — a menu anchored near the pane's right side would clip
+        // out of the (overflow:hidden) layer and be unreachable.
         var tbRect = element.getBoundingClientRect();
         var bRect = anchorEl.getBoundingClientRect();
-        menu.style.transform = "translate3d(".concat(bRect.left - tbRect.left, "px, ").concat(element.offsetHeight + 6, "px, 0)");
+        var maxX = Math.max(0, element.clientWidth - menu.offsetWidth - 2);
+        var mx = Math.min(bRect.left - tbRect.left, maxX);
+        menu.style.transform = "translate3d(".concat(Math.max(0, mx), "px, ").concat(element.offsetHeight + 6, "px, 0)");
         menuEl = menu;
         element.appendChild(menu);
         menuUnmount = function () {
@@ -10951,27 +11197,76 @@ function attachFloatingToolbar(chart, manager, hooks) {
         return b;
     }
     // ── control renderers ───────────────────────────────────────────────────
-    function patchStyles(path, value) {
+    /**
+     * Default role→styles path for controls without an explicit `path` and no
+     * matching entry in the item's stylePaths — the styles.line/polygon/text
+     * convention shared by line-drawn and text tools.
+     */
+    var DEFAULT_ROLE_PATHS = {
+        line: ['styles', 'line', 'color'],
+        fill: ['styles', 'polygon', 'color'],
+        text: ['styles', 'text', 'color'],
+        background: ['styles', 'rect', 'color']
+    };
+    /** Role → stylePaths slot key. Partial so a lookup miss stays truthy-
+     * checkable (Record<string, K> claims every key exists). */
+    var ROLE_PATH_KEYS = {
+        'color:line': 'lineColor',
+        'color:fill': 'fillColor',
+        'color:text': 'textColor',
+        'color:background': 'backgroundColor',
+        'style:line': 'lineStyle',
+        width: 'lineWidth',
+        text: 'textSize',
+        textAlign: 'textAlign'
+    };
+    /** Resolve a control's write path: explicit control.path → the item's
+     * stylePaths slot → the role default. */
+    function resolvePath(control, role) {
+        var _a;
+        var withPath = control;
+        if (withPath.path !== undefined) {
+            return withPath.path;
+        }
+        var item = current !== null ? findCatalogItemByOverlay(current.name) : undefined;
+        var slot = ROLE_PATH_KEYS[role !== '' ? "".concat(control.kind, ":").concat(role) : control.kind];
+        var mapped = slot !== undefined ? (_a = item === null || item === void 0 ? void 0 : item.stylePaths) === null || _a === void 0 ? void 0 : _a[slot] : undefined;
+        if (mapped !== undefined) {
+            return mapped;
+        }
+        return DEFAULT_ROLE_PATHS[role];
+    }
+    /** Write a resolved StylePath — routes to extendData when the path's
+     * root says so (measure/position tools style through extendData). */
+    function patchPath(sp, value) {
         if (current === null) {
             return;
         }
-        var styles = {};
-        var node = styles;
-        path.slice(0, -1).forEach(function (key) {
+        var _a = __read(sp), target = _a[0], keys = _a.slice(1);
+        var root = {};
+        var node = root;
+        keys.slice(0, -1).forEach(function (key) {
             var next = {};
             node[key] = next;
             node = next;
         });
-        node[path[path.length - 1]] = value;
-        manager.update(current.id, { styles: styles });
+        node[keys[keys.length - 1]] = value;
+        if (target === 'extendData') {
+            var ext = current.extendData;
+            manager.update(current.id, { extendData: __assign(__assign({}, (ext !== null && ext !== void 0 ? ext : {})), root) });
+        }
+        else {
+            manager.update(current.id, { styles: root });
+        }
     }
-    function currentStyleValue(path) {
+    function currentPathValue(sp) {
         var e_1, _a;
-        var styles = current === null || current === void 0 ? void 0 : current.styles;
-        var node = styles;
+        var _b = __read(sp), target = _b[0], keys = _b.slice(1);
+        var root = target === 'extendData' ? current === null || current === void 0 ? void 0 : current.extendData : current === null || current === void 0 ? void 0 : current.styles;
+        var node = root;
         try {
-            for (var path_1 = __values(path), path_1_1 = path_1.next(); !path_1_1.done; path_1_1 = path_1.next()) {
-                var key = path_1_1.value;
+            for (var keys_1 = __values(keys), keys_1_1 = keys_1.next(); !keys_1_1.done; keys_1_1 = keys_1.next()) {
+                var key = keys_1_1.value;
                 if (node === null || typeof node !== 'object') {
                     return undefined;
                 }
@@ -10981,24 +11276,17 @@ function attachFloatingToolbar(chart, manager, hooks) {
         catch (e_1_1) { e_1 = { error: e_1_1 }; }
         finally {
             try {
-                if (path_1_1 && !path_1_1.done && (_a = path_1.return)) _a.call(path_1);
+                if (keys_1_1 && !keys_1_1.done && (_a = keys_1.return)) _a.call(keys_1);
             }
             finally { if (e_1) throw e_1.error; }
         }
         return node;
     }
-    function colorControl(role) {
-        var paths = {
-            line: ['line', 'color'],
-            fill: ['polygon', 'color'],
-            text: ['text', 'color'],
-            background: ['rect', 'color']
-        };
-        var path = paths[role];
+    function colorControl(role, path) {
         var swatch = createDom('span');
         swatch.className = 'sc-drw-swatch';
         var paint = function () {
-            var v = currentStyleValue(path);
+            var v = currentPathValue(path);
             swatch.style.background = typeof v === 'string' ? v : '#2962ff';
         };
         paint();
@@ -11019,7 +11307,7 @@ function attachFloatingToolbar(chart, manager, hooks) {
                     cell.addEventListener('click', function (ev) {
                         ev.stopPropagation();
                         closeMenu();
-                        patchStyles(path, color);
+                        patchPath(path, color);
                     });
                     grid.appendChild(cell);
                 });
@@ -11038,49 +11326,54 @@ function attachFloatingToolbar(chart, manager, hooks) {
         });
         return b;
     }
-    function lineStyleControl() {
+    function lineStyleControl(path) {
         return dropdownButton('trendLine', 'Line style', LINE_STYLES.map(function (s) { return ({
             title: s.title,
-            active: currentStyleValue(['line', 'style']) === s.value,
+            active: currentPathValue(path) === s.value,
             onClick: function () {
-                patchStyles(['line', 'style'], s.value);
+                patchPath(path, s.value);
             }
         }); }));
     }
-    function widthControl() {
+    function widthControl(path) {
         return dropdownButton('trendLine', 'Line width', LINE_WIDTHS.map(function (w) { return ({
             title: "".concat(w, "px"),
-            active: currentStyleValue(['line', 'size']) === w,
+            active: currentPathValue(path) === w,
             onClick: function () {
-                patchStyles(['line', 'size'], w);
+                patchPath(path, w);
             }
         }); }));
     }
-    function fontSizeControl() {
+    function fontSizeControl(path) {
         return dropdownButton('text', 'Text size', FONT_SIZES.map(function (s) { return ({
             title: "".concat(s, "px"),
-            active: currentStyleValue(['text', 'size']) === s,
+            active: currentPathValue(path) === s,
             onClick: function () {
-                patchStyles(['text', 'size'], s);
+                patchPath(path, s);
             }
         }); }));
     }
     function textStyleControl() {
+        var _a, _b, _c, _d, _e, _f;
+        var item = current !== null ? findCatalogItemByOverlay(current.name) : undefined;
+        var weightPath = (_b = (_a = item === null || item === void 0 ? void 0 : item.stylePaths) === null || _a === void 0 ? void 0 : _a.textWeight) !== null && _b !== void 0 ? _b : ['styles', 'text', 'weight'];
+        var stylePath2 = (_d = (_c = item === null || item === void 0 ? void 0 : item.stylePaths) === null || _c === void 0 ? void 0 : _c.textStyle) !== null && _d !== void 0 ? _d : ['styles', 'text', 'style'];
+        var sizePath = (_f = (_e = item === null || item === void 0 ? void 0 : item.stylePaths) === null || _e === void 0 ? void 0 : _e.textSize) !== null && _f !== void 0 ? _f : ['styles', 'text', 'size'];
         var b = btn('text', 'Text style', function () {
             openMenu(b, function (menu) {
-                var bold = currentStyleValue(['text', 'weight']) === 'bold';
-                var italic = currentStyleValue(['text', 'style']) === 'italic';
+                var bold = currentPathValue(weightPath) === 'bold';
+                var italic = currentPathValue(stylePath2) === 'italic';
                 menu.appendChild(styleMenuItem('Bold', bold, function () {
-                    patchStyles(['text', 'weight'], bold ? 'normal' : 'bold');
+                    patchPath(weightPath, bold ? 'normal' : 'bold');
                 }));
                 menu.appendChild(styleMenuItem('Italic', italic, function () {
-                    patchStyles(['text', 'style'], italic ? 'normal' : 'italic');
+                    patchPath(stylePath2, italic ? 'normal' : 'italic');
                 }));
                 menu.appendChild(styleMenuItem('Size…', false, function () {
                     openMenu(b, function (sub) {
                         FONT_SIZES.forEach(function (s) {
-                            sub.appendChild(styleMenuItem("".concat(s, "px"), currentStyleValue(['text', 'size']) === s, function () {
-                                patchStyles(['text', 'size'], s);
+                            sub.appendChild(styleMenuItem("".concat(s, "px"), currentPathValue(sizePath) === s, function () {
+                                patchPath(sizePath, s);
                             }));
                         });
                     });
@@ -11089,16 +11382,16 @@ function attachFloatingToolbar(chart, manager, hooks) {
         });
         return b;
     }
-    function textAlignControl() {
+    function textAlignControl(path) {
         var currentAlign = function () {
-            var v = currentStyleValue(['text', 'align']);
+            var v = currentPathValue(path);
             return typeof v === 'string' ? v : 'center';
         };
         return btn('text', 'Text align', function () {
             var order = TEXT_ALIGNS.map(function (a) { return a.value; });
             var idx = order.indexOf(currentAlign());
             var next = order[(idx + 1) % order.length];
-            patchStyles(['text', 'align'], next);
+            patchPath(path, next);
         });
     }
     function geometryControl(options) {
@@ -11165,6 +11458,10 @@ function attachFloatingToolbar(chart, manager, hooks) {
         }
         var create = serializedToOverlayCreate(serialized);
         delete create.id;
+        // A clone is a fresh user drawing — locked/hidden state doesn't carry
+        // (TV clones always land unlocked + visible).
+        create.lock = false;
+        create.visible = true;
         // Nudge the clone so it doesn't z-fight the original.
         var bars = chart.getDataList();
         var oneBar = bars.length > 1 ? bars[1].timestamp - bars[0].timestamp : 0;
@@ -11175,21 +11472,36 @@ function attachFloatingToolbar(chart, manager, hooks) {
     }
     // ── toolbar build ───────────────────────────────────────────────────────
     function controlEl(control) {
+        var _a, _b, _c;
         if (current === null) {
             return null;
         }
         var overlay = current;
         switch (control.kind) {
-            case 'color':
-                return colorControl(control.role);
-            case 'style':
-                return control.role === 'line' ? lineStyleControl() : textStyleControl();
-            case 'width':
-                return widthControl();
-            case 'text':
-                return fontSizeControl();
-            case 'textAlign':
-                return textAlignControl();
+            case 'color': {
+                var path = resolvePath(control, control.role);
+                return path !== undefined ? colorControl(control.role, path) : null;
+            }
+            case 'style': {
+                if (control.role !== 'line') {
+                    return textStyleControl();
+                }
+                var path = resolvePath(control, 'line');
+                return path !== undefined ? lineStyleControl(path) : null;
+            }
+            case 'width': {
+                var path = resolvePath(control, '');
+                return path !== undefined ? widthControl(path) : null;
+            }
+            case 'text': {
+                var path = resolvePath(control, '');
+                return path !== undefined ? fontSizeControl(path) : null;
+            }
+            case 'textAlign': {
+                var catItem = findCatalogItemByOverlay(overlay.name);
+                var path = (_c = (_a = control.path) !== null && _a !== void 0 ? _a : (_b = catItem === null || catItem === void 0 ? void 0 : catItem.stylePaths) === null || _b === void 0 ? void 0 : _b.textAlign) !== null && _c !== void 0 ? _c : ['styles', 'text', 'align'];
+                return textAlignControl(path);
+            }
             case 'geometry':
                 return geometryControl(control.options);
             case 'levels':
@@ -11251,6 +11563,11 @@ function attachFloatingToolbar(chart, manager, hooks) {
         // In-progress freehand: only a Cancel control (TV swaps Remove for it).
         if (overlay.isDrawing()) {
             return [{ kind: 'remove' }];
+        }
+        // A locked drawing is read-only — suppress mutation controls but keep
+        // unlock/visibility/remove reachable (same as TV's locked state).
+        if (overlay.lock) {
+            return [{ kind: 'lock' }, { kind: 'visibility' }, { kind: 'remove' }];
         }
         return (_b = (_a = findCatalogItemByOverlay(overlay.name)) === null || _a === void 0 ? void 0 : _a.toolbarRecipe) !== null && _b !== void 0 ? _b : DEFAULT_RECIPE;
     }
@@ -11355,6 +11672,12 @@ function attachFloatingToolbar(chart, manager, hooks) {
         x = Math.max(4, Math.min(x, Math.max(4, pw - tw - 4)));
         y = Math.max(4, Math.min(y, Math.max(4, ph - th - 4)));
         pos = { x: Math.round(x), y: Math.round(y) };
+        // A recipe wider than the pane (mobile-width panes + 10-control
+        // recipes) clips its tail inside the overflow:hidden layer — make the
+        // toolbar scrollable so Remove/Settings stay reachable.
+        var maxW = Math.max(0, pw - 8);
+        element.style.maxWidth = "".concat(maxW, "px");
+        element.style.overflowX = tw > maxW ? 'auto' : 'visible';
         element.style.transform = "translate3d(".concat(pos.x, "px, ").concat(pos.y, "px, 0)");
     }
     function clampPos(x, y) {
@@ -11429,23 +11752,41 @@ function attachFloatingToolbar(chart, manager, hooks) {
     var selectedId = null;
     var onSelect = function (payload) {
         if (payload.overlay !== undefined) {
-            selectedId = payload.overlay.id;
-            show(payload.overlay);
+            // Only the drawings group gets a style toolbar — kernel selects for
+            // ghosts/mirrors/foreign-group overlays must not bind controls that
+            // would write styles onto e.g. indicator overlays.
+            var o = payload.overlay;
+            if (o.groupId !== 'drawings' || o.ghost || o.synced || o.isDrawing()) {
+                return;
+            }
+            selectedId = o.id;
+            show(o);
         }
     };
     var onDeselect = function () {
         selectedId = null;
         hide();
     };
-    var onEditStart = function () {
-        hide();
+    var onEditStart = function (payload) {
+        // editStart fires for the PRESSED overlay, not the selected one — only
+        // hide when the gesture is actually on our tracked overlay, otherwise
+        // dragging a different drawing's figure would strand the toolbar.
+        if (payload.overlay === undefined || payload.overlay.id === selectedId) {
+            hide();
+        }
     };
     var onEditEnd = function (payload) {
-        // A figure drag on a NON-selected overlay also fires editEnd — binding
-        // the toolbar to it would attach controls to an overlay the selection
-        // model doesn't own.
-        if (payload.overlay !== undefined && payload.overlay.id === selectedId) {
-            show(payload.overlay);
+        // Re-show whenever the tracked selection still resolves — covers the
+        // case where a drag on a non-selected overlay hid nothing but the
+        // tracked overlay's own gesture ends with a mismatched payload.
+        if (selectedId === null) {
+            return;
+        }
+        if (payload.overlay === undefined || payload.overlay.id === selectedId) {
+            var o = chart.getOverlayById(selectedId);
+            if (o !== null) {
+                show(o);
+            }
         }
     };
     var onChange = function (payload) {
@@ -11477,6 +11818,18 @@ function attachFloatingToolbar(chart, manager, hooks) {
     chart.subscribeAction('onZoom', onPanOrZoom);
     chart.subscribeAction('onScroll', onPanOrZoom);
     chart.subscribeAction('onVisibleRangeChange', onPanOrZoom);
+    // Kernel-level remove reaches paths the manager suppresses its own
+    // 'change' for (remote removes, scope wipes, bulk applies) — a selected
+    // overlay deleted on a peer must not leave the toolbar on a dead id.
+    var onKernelOverlayChange = function (data) {
+        var _a;
+        var evt = data;
+        if ((evt === null || evt === void 0 ? void 0 : evt.type) === 'remove' && ((_a = evt.overlay) === null || _a === void 0 ? void 0 : _a.id) === selectedId) {
+            selectedId = null;
+            hide();
+        }
+    };
+    chart.subscribeAction('onOverlayChange', onKernelOverlayChange);
     if (typeof document !== 'undefined') {
         // Capture phase — the drag keeps the element under the cursor, so a
         // release lands on it and the layer's stopPropagation would swallow a
@@ -12448,6 +12801,13 @@ var TextEditorSessionImp = /** @class */ (function () {
             _this._syncCaret();
         };
         var onKeyDown = function (e) {
+            // IME composition (CJK input) — Enter/Escape during composition
+            // select/abort candidates; acting on them would commit+close the
+            // editor mid-word. keyCode 229 covers browsers that don't set
+            // isComposing on the keydown itself.
+            if (e.isComposing || e.keyCode === 229) {
+                return;
+            }
             // Escape commits (approved TV behavior — never cancels).
             if (e.key === 'Escape' || (_this._options.forbidLineBreaks === true && e.key === 'Enter')) {
                 e.preventDefault();
@@ -12901,97 +13261,95 @@ function findLevelsPath(extendData) {
     return null;
 }
 function styleFields(overlay, item, draft) {
-    var _a;
+    var _a, _b;
     var styles = ((_a = overlay.styles) !== null && _a !== void 0 ? _a : {});
-    var liveStyles = function () { var _a; return ((_a = overlay.styles) !== null && _a !== void 0 ? _a : {}); };
+    var paths = (_b = item === null || item === void 0 ? void 0 : item.stylePaths) !== null && _b !== void 0 ? _b : {};
     var fields = [];
+    // Resolve a stylePaths entry against its styles.* default, then bind
+    // get/set to the right draft channel (extendData-targeted paths write
+    // through draft.extendData — measure/position tools never read styles.*).
+    var resolve = function (slot, fallback) {
+        var sp = paths[slot];
+        if (sp !== undefined) {
+            return sp;
+        }
+        return __spreadArray(['styles'], __read(fallback), false);
+    };
+    var liveRoot = function (sp) {
+        return sp[0] === 'extendData' ? overlay.extendData : liveStyles();
+    };
+    var liveStyles = function () { var _a; return ((_a = overlay.styles) !== null && _a !== void 0 ? _a : {}); };
+    var bind = function (sp) { return ({
+        get: function () { return readPath(liveRoot(sp), sp.slice(1)); },
+        set: function (v) {
+            if (sp[0] === 'extendData') {
+                draft.extendData(sp.slice(1), v);
+            }
+            else {
+                draft.style(sp.slice(1), v);
+            }
+        }
+    }); };
     var hasLine = styles.line !== undefined || hasRecipeControl(item, 'color', 'line') || hasRecipeControl(item, 'style', 'line');
     var hasText = (item === null || item === void 0 ? void 0 : item.capabilities.hasText) === true || styles.text !== undefined;
     var hasFill = hasRecipeControl(item, 'color', 'fill') || styles.polygon !== undefined;
     if (hasLine) {
-        fields.push({
-            id: 'lineColor',
-            kind: 'color',
-            label: 'Line color',
-            get: function () { return readPath(liveStyles(), ['line', 'color']); },
-            set: function (v) { draft.style(['line', 'color'], v); }
-        }, {
-            id: 'lineWidth',
-            kind: 'number',
-            label: 'Width',
-            min: 1,
-            max: 8,
-            step: 1,
-            get: function () { return readPath(liveStyles(), ['line', 'size']); },
-            set: function (v) { draft.style(['line', 'size'], v); }
-        }, {
-            id: 'lineStyle',
-            kind: 'select',
-            label: 'Style',
-            options: LINE_STYLE_OPTIONS,
-            get: function () { var _a; return (_a = readPath(liveStyles(), ['line', 'style'])) !== null && _a !== void 0 ? _a : 'solid'; },
-            set: function (v) {
-                draft.style(['line', 'style'], v);
-                if (typeof v === 'string' && v in DASHED_VALUE) {
-                    draft.style(['line', 'dashedValue'], DASHED_VALUE[v]);
+        var lineColor = resolve('lineColor', ['line', 'color']);
+        var lineWidth = resolve('lineWidth', ['line', 'size']);
+        var lineStyle_1 = resolve('lineStyle', ['line', 'style']);
+        fields.push(__assign({ id: 'lineColor', kind: 'color', label: 'Line color' }, bind(lineColor)), __assign({ id: 'lineWidth', kind: 'number', label: 'Width', min: 1, max: 8, step: 1 }, bind(lineWidth)), __assign(__assign({ id: 'lineStyle', kind: 'select', label: 'Style', options: LINE_STYLE_OPTIONS }, bind(lineStyle_1)), { get: function () { var _a; return (_a = readPath(liveRoot(lineStyle_1), lineStyle_1.slice(1))) !== null && _a !== void 0 ? _a : 'solid'; }, set: function (v) {
+                if (lineStyle_1[0] === 'extendData') {
+                    draft.extendData(lineStyle_1.slice(1), v);
                 }
-            }
-        });
+                else {
+                    draft.style(lineStyle_1.slice(1), v);
+                    if (typeof v === 'string' && v in DASHED_VALUE) {
+                        draft.style(['line', 'dashedValue'], DASHED_VALUE[v]);
+                    }
+                }
+            } }));
     }
     if (hasFill) {
-        fields.push({
-            id: 'fillColor',
-            kind: 'color',
-            label: 'Fill color',
-            get: function () { return readPath(liveStyles(), ['polygon', 'color']); },
-            set: function (v) { draft.style(['polygon', 'color'], v); }
-        });
+        var fillColor = resolve('fillColor', ['polygon', 'color']);
+        fields.push(__assign({ id: 'fillColor', kind: 'color', label: 'Fill color' }, bind(fillColor)));
     }
     if (hasRecipeControl(item, 'color', 'background')) {
-        fields.push({
-            id: 'backgroundColor',
-            kind: 'color',
-            label: 'Background',
-            get: function () { return readPath(liveStyles(), ['rect', 'color']); },
-            set: function (v) { draft.style(['rect', 'color'], v); }
-        });
+        var backgroundColor = resolve('backgroundColor', ['rect', 'color']);
+        fields.push(__assign({ id: 'backgroundColor', kind: 'color', label: 'Background' }, bind(backgroundColor)));
     }
     if (hasText) {
-        fields.push({
-            id: 'textColor',
-            kind: 'color',
-            label: 'Text color',
-            get: function () { return readPath(liveStyles(), ['text', 'color']); },
-            set: function (v) { draft.style(['text', 'color'], v); }
-        }, {
-            id: 'textSize',
-            kind: 'number',
-            label: 'Font size',
-            min: 8,
-            max: 64,
-            step: 1,
-            get: function () { return readPath(liveStyles(), ['text', 'size']); },
-            set: function (v) { draft.style(['text', 'size'], v); }
-        }, {
+        var textColor = resolve('textColor', ['text', 'color']);
+        var textSize = resolve('textSize', ['text', 'size']);
+        var textWeight_1 = resolve('textWeight', ['text', 'weight']);
+        var textStyle_1 = resolve('textStyle', ['text', 'style']);
+        var textAlign = resolve('textAlign', ['text', 'align']);
+        fields.push(__assign({ id: 'textColor', kind: 'color', label: 'Text color' }, bind(textColor)), __assign({ id: 'textSize', kind: 'number', label: 'Font size', min: 8, max: 64, step: 1 }, bind(textSize)), {
             id: 'textBold',
             kind: 'checkbox',
             label: 'Bold',
-            get: function () { return readPath(liveStyles(), ['text', 'weight']) === 'bold'; },
-            set: function (v) { draft.style(['text', 'weight'], v === true ? 'bold' : 'normal'); }
+            get: function () { return readPath(liveRoot(textWeight_1), textWeight_1.slice(1)) === 'bold'; },
+            set: function (v) {
+                if (textWeight_1[0] === 'extendData') {
+                    draft.extendData(textWeight_1.slice(1), v === true ? 'bold' : 'normal');
+                }
+                else {
+                    draft.style(textWeight_1.slice(1), v === true ? 'bold' : 'normal');
+                }
+            }
         }, {
             id: 'textItalic',
             kind: 'checkbox',
             label: 'Italic',
-            get: function () { return readPath(liveStyles(), ['text', 'style']) === 'italic'; },
-            set: function (v) { draft.style(['text', 'style'], v === true ? 'italic' : 'normal'); }
-        }, {
-            id: 'textAlign',
-            kind: 'select',
-            label: 'Align',
-            options: TEXT_ALIGN_OPTIONS,
-            get: function () { var _a; return (_a = readPath(liveStyles(), ['text', 'align'])) !== null && _a !== void 0 ? _a : 'center'; },
-            set: function (v) { draft.style(['text', 'align'], v); }
-        });
+            get: function () { return readPath(liveRoot(textStyle_1), textStyle_1.slice(1)) === 'italic'; },
+            set: function (v) {
+                if (textStyle_1[0] === 'extendData') {
+                    draft.extendData(textStyle_1.slice(1), v === true ? 'italic' : 'normal');
+                }
+                else {
+                    draft.style(textStyle_1.slice(1), v === true ? 'italic' : 'normal');
+                }
+            }
+        }, __assign({ id: 'textAlign', kind: 'select', label: 'Align', options: TEXT_ALIGN_OPTIONS }, bind(textAlign)));
     }
     return fields;
 }
@@ -13004,7 +13362,9 @@ function optionFields(overlay, draft) {
     }
     var record = ed;
     return Object.keys(record)
-        .filter(function (key) { return key !== 'common' && key !== 'data' && isBoolean(record[key]); })
+        // `_`-prefixed runtime keys and `isEditing` are transient state —
+        // serialize strips them; surfacing them as toggles corrupts the strip.
+        .filter(function (key) { return key !== 'common' && key !== 'data' && !key.startsWith('_') && key !== 'isEditing' && isBoolean(record[key]); })
         .map(function (key) { return ({
         id: "flag_".concat(key),
         kind: 'checkbox',
@@ -13048,7 +13408,9 @@ function coordinateFields(overlay, draft) {
                 id: "point_".concat(index, "_time"),
                 kind: 'datetime',
                 label: 'Time',
-                get: function () { return overlay.points[index].timestamp; },
+                // points can shrink (undo/remote) while the dialog is open —
+                // a stale index must not throw mid-render.
+                get: function () { var _a; return (_a = overlay.points[index]) === null || _a === void 0 ? void 0 : _a.timestamp; },
                 set: function (v) { draft.point(index, { timestamp: v }); }
             });
         }
@@ -13058,7 +13420,7 @@ function coordinateFields(overlay, draft) {
                 kind: 'number',
                 label: 'Price',
                 step: 0,
-                get: function () { return overlay.points[index].value; },
+                get: function () { var _a; return (_a = overlay.points[index]) === null || _a === void 0 ? void 0 : _a.value; },
                 set: function (v) { draft.point(index, { value: v }); }
             });
         }
@@ -13189,7 +13551,15 @@ function attachSettingsDialog(chart, manager) {
                     patch.points = next_1;
                 }
                 if (Object.keys(patch).length > 0) {
-                    manager.update(current.id, patch);
+                    // Mark self-originated writes — the 'change' echo must not trigger
+                    // a full re-render or the active input loses focus mid-typing.
+                    committing = true;
+                    try {
+                        manager.update(current.id, patch);
+                    }
+                    finally {
+                        committing = false;
+                    }
                 }
                 try {
                     // DELETE the draft keys — assigning undefined keeps them enumerable,
@@ -13259,11 +13629,25 @@ function attachSettingsDialog(chart, manager) {
         input.value = isNumber(v) ? String(v) : '';
         input.addEventListener('change', function () {
             var _a;
-            var parsed = Number(input.value);
-            if (!Number.isNaN(parsed)) {
-                (_a = field.set) === null || _a === void 0 ? void 0 : _a.call(field, parsed);
-                draft.commit();
+            // '' parses to 0 via Number('') — clearing a field must not write 0
+            // (invisible stroke / teleported anchor). min/max attributes don't
+            // block typed values, so clamp here too.
+            if (input.value.trim() === '') {
+                return;
             }
+            var parsed = Number(input.value);
+            if (!Number.isFinite(parsed)) {
+                return;
+            }
+            if (field.min !== undefined) {
+                parsed = Math.max(field.min, parsed);
+            }
+            if (field.max !== undefined) {
+                parsed = Math.min(field.max, parsed);
+            }
+            input.value = String(parsed);
+            (_a = field.set) === null || _a === void 0 ? void 0 : _a.call(field, parsed);
+            draft.commit();
         });
         control.appendChild(input);
         return row;
@@ -13409,7 +13793,11 @@ function attachSettingsDialog(chart, manager) {
                 var color_1 = createDom('input');
                 color_1.type = 'color';
                 color_1.className = 'sc-drw-color';
-                color_1.value = typeof level.color === 'string' ? level.color : '#2962ff';
+                // <input type=color> requires #rrggbb — rgba()/named colors from
+                // synced or host-injected records would silently render black and
+                // a picker touch would drop the alpha channel.
+                var raw = level.color;
+                color_1.value = typeof raw === 'string' && /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#2962ff';
                 color_1.addEventListener('change', function () { writeRow(index, { color: color_1.value }); });
                 row.appendChild(color_1);
             }
@@ -13549,11 +13937,34 @@ function attachSettingsDialog(chart, manager) {
     function onDragEnd() {
         dragState = null;
     }
-    var onOverlayChange = function () {
+    var onOverlayChange = function (payload) {
+        var _a;
+        if (current === null) {
+            return;
+        }
         // 'change' covers remove/update/create/undo/redo/restore — close
         // whenever the open overlay is gone, regardless of which path removed
         // it (undo and scope wipes carry no overlay in the payload).
-        if (current !== null && chart.getOverlayById(current.id) === null) {
+        if (chart.getOverlayById(current.id) === null) {
+            close();
+            return;
+        }
+        // External updates (toolbar color pick, sync, undo/redo) used to leave
+        // every input stale until a tab switch — re-render unless the change
+        // came from our own commit (focus must survive typing).
+        if (((_a = payload === null || payload === void 0 ? void 0 : payload.overlay) === null || _a === void 0 ? void 0 : _a.id) === current.id && !committing) {
+            renderBody();
+        }
+    };
+    // Self-originated commits shouldn't trigger a full re-render — the input
+    // would lose focus mid-typing.
+    var committing = false;
+    // Kernel remove events reach paths the manager suppresses its 'change'
+    // for (remote removes, scope wipes) — close on a dead id either way.
+    var onKernelRemove = function (data) {
+        var _a;
+        var evt = data;
+        if (current !== null && (evt === null || evt === void 0 ? void 0 : evt.type) === 'remove' && ((_a = evt.overlay) === null || _a === void 0 ? void 0 : _a.id) === current.id) {
             close();
         }
     };
@@ -13574,6 +13985,7 @@ function attachSettingsDialog(chart, manager) {
         // Mouseup outside the window never dispatches — blur ends the drag.
         window.addEventListener('blur', onDragEnd);
         unsubRemove = manager.on('change', onOverlayChange);
+        chart.subscribeAction('onOverlayChange', onKernelRemove);
     }
     function unbindDocListeners() {
         if (!docListenersBound) {
@@ -13587,9 +13999,13 @@ function attachSettingsDialog(chart, manager) {
         window.removeEventListener('blur', onDragEnd);
         unsubRemove === null || unsubRemove === void 0 ? void 0 : unsubRemove();
         unsubRemove = null;
+        chart.unsubscribeAction('onOverlayChange', onKernelRemove);
     }
     function open(overlay) {
-        if (destroyed) {
+        // Defense-in-depth — api.openSettings already gates these, but a host
+        // calling open() directly on an in-progress/ghost/mirror overlay would
+        // get a Coordinates tab whose commits recompute currentStep mid-draw.
+        if (destroyed || overlay.isDrawing() || overlay.ghost || overlay.synced) {
             return;
         }
         close();
@@ -13842,8 +14258,13 @@ function createDrawingsApi(chart, options) {
         return selectedId !== null ? chart.getOverlayById(selectedId) : null;
     }
     function cancelInProgress() {
-        var _a;
-        var inProgress = chart.getOverlays().find(function (o) { return o.isDrawing(); });
+        var _a, _b;
+        // Target the progress slot first — ghost/synced mirrors report
+        // isDrawing() too and a peer's mid-draw mirror must not eat the Esc.
+        var slot = (_a = chart.getChartStore().getProgressOverlayInfo()) === null || _a === void 0 ? void 0 : _a.overlay;
+        var inProgress = isValid(slot) && !slot.ghost && !slot.synced
+            ? slot
+            : chart.getOverlays().find(function (o) { return o.isDrawing() && !o.ghost && !o.synced; });
         if (inProgress === undefined) {
             return false;
         }
@@ -13857,7 +14278,7 @@ function createDrawingsApi(chart, options) {
             // path: the hook's writes (extendData normalization) must land in the
             // committed snapshot, and a hook that removes the overlay (degenerate
             // polyline) must not produce a create+remove history pair.
-            (_a = inProgress.onDrawEnd) === null || _a === void 0 ? void 0 : _a.call(inProgress, { chart: chart, overlay: inProgress });
+            (_b = inProgress.onDrawEnd) === null || _b === void 0 ? void 0 : _b.call(inProgress, { chart: chart, overlay: inProgress });
             var progressInfo = chartStore.getProgressOverlayInfo();
             if ((progressInfo === null || progressInfo === void 0 ? void 0 : progressInfo.overlay) === inProgress) {
                 chartStore.progressOverlayComplete();
@@ -13895,7 +14316,9 @@ function createDrawingsApi(chart, options) {
                     return false;
                 }
                 clipboard = serializeOverlay$1(selected);
-                return true;
+                // serializeOverlay returns null for synced/ghost/transient picks —
+                // report unconsumed so Ctrl+C still reaches the browser.
+                return clipboard !== null;
             },
             onPaste: function () {
                 if (clipboard === null) {
@@ -14505,7 +14928,9 @@ var Action = /** @class */ (function () {
         }
     };
     Action.prototype.execute = function (data) {
-        this._callbacks.forEach(function (callback) {
+        // Snapshot — a callback that unsubscribes itself (or another callback)
+        // mid-dispatch must not skip/duplicate the remaining subscribers.
+        this._callbacks.slice().forEach(function (callback) {
             // Isolate subscribers — a throwing callback must not starve the ones
             // after it (e.g. a sync mirror missing the ghost-purge 'remove').
             try {
@@ -23735,7 +24160,7 @@ var StoreImp = /** @class */ (function () {
         var updatePaneIds = [];
         var createdOverlays = [];
         var ids = os.map(function (create, index) {
-            var _a, _b, _c, _d, _e, _f, _g, _h;
+            var _a, _b, _c, _d, _e, _f, _g, _h, _j;
             if (isValid(create.id)) {
                 // Dedupe via the id map — also catches the in-progress overlay, which
                 // the previous pane-list scan missed entirely.
@@ -23753,6 +24178,11 @@ var StoreImp = /** @class */ (function () {
                 var zLevel = _this.getOverlaysByPaneId(paneId).length;
                 (_d = create.zLevel) !== null && _d !== void 0 ? _d : (create.zLevel = zLevel);
                 overlay.override(create);
+                // override() strips groupId to protect identity on remote/host
+                // patches — creation is the one place it must land, otherwise every
+                // overlay stays in the '' group and groupId-scoped queries
+                // (manager reconcile, drawings.clear) match nothing.
+                overlay.groupId = (_e = create.groupId) !== null && _e !== void 0 ? _e : id;
                 _this._overlayById.set(id, overlay);
                 if (overlay.ghost) {
                     // Ghost overlays are passive mirrors of drawings on other charts:
@@ -23777,9 +24207,9 @@ var StoreImp = /** @class */ (function () {
                         // move events, hover leave, and phantom selections.
                         _this._clearOverlayInteractionSlots(displaced.overlay);
                         try {
-                            (_f = (_e = displaced.overlay).onRemoved) === null || _f === void 0 ? void 0 : _f.call(_e, { overlay: displaced.overlay, chart: _this._chart });
+                            (_g = (_f = displaced.overlay).onRemoved) === null || _g === void 0 ? void 0 : _g.call(_f, { overlay: displaced.overlay, chart: _this._chart });
                         }
-                        catch (_j) { }
+                        catch (_k) { }
                         _this.executeAction('onOverlayChange', { type: 'remove', overlay: displaced.overlay });
                     }
                 }
@@ -23787,10 +24217,10 @@ var StoreImp = /** @class */ (function () {
                     if (!_this._overlays.has(paneId)) {
                         _this._overlays.set(paneId, []);
                     }
-                    (_g = _this._overlays.get(paneId)) === null || _g === void 0 ? void 0 : _g.push(overlay);
+                    (_h = _this._overlays.get(paneId)) === null || _h === void 0 ? void 0 : _h.push(overlay);
                 }
                 if (overlay.isStart() && !overlay.ghost) {
-                    (_h = overlay.onDrawStart) === null || _h === void 0 ? void 0 : _h.call(overlay, ({ overlay: overlay, chart: _this._chart }));
+                    (_j = overlay.onDrawStart) === null || _j === void 0 ? void 0 : _j.call(overlay, ({ overlay: overlay, chart: _this._chart }));
                 }
                 createdOverlays.push(overlay);
                 return id;
@@ -23805,7 +24235,12 @@ var StoreImp = /** @class */ (function () {
             this._chart.updatePane(1 /* UpdateLevel.Overlay */, PaneIdConstants.X_AXIS);
         }
         createdOverlays.forEach(function (overlay) {
-            _this.executeAction('onOverlayChange', { type: 'create', overlay: overlay });
+            // An onDrawStart hook may have removed its own overlay — emitting
+            // 'create' for it would invert the event order (create after remove)
+            // and leave listeners holding a phantom id.
+            if (_this._overlayById.get(overlay.id) === overlay) {
+                _this.executeAction('onOverlayChange', { type: 'create', overlay: overlay });
+            }
         });
         return ids;
     };
@@ -23822,8 +24257,12 @@ var StoreImp = /** @class */ (function () {
         }
         // A mid-drag removal must also drop the pressed state — otherwise the
         // next mousemove keeps emitting progress events for a dead overlay and
-        // sync mirrors would materialize it back as a zombie.
+        // sync mirrors would materialize it back as a zombie. A figure press
+        // (figureType !== 'none') already emitted 'editStart' — close the
+        // bracket so the manager releases its pendingEdit instead of leaking
+        // the before-image into the next gesture.
         if (this._pressedOverlayInfo.overlay === overlay) {
+            var editWasArmed = this._pressedOverlayInfo.figureType !== 'none';
             this._pressedOverlayInfo = {
                 paneId: '',
                 overlay: null,
@@ -23831,6 +24270,9 @@ var StoreImp = /** @class */ (function () {
                 figureIndex: -1,
                 figure: null
             };
+            if (editWasArmed) {
+                this.executeAction('onOverlayChange', { type: 'editEnd', overlay: overlay });
+            }
         }
         // Hover/select slots must not keep pointing at a dead overlay — the
         // next setHoverOverlayInfo would fire onMouseLeave + zLevel restore on
@@ -23892,7 +24334,7 @@ var StoreImp = /** @class */ (function () {
         var updatePaneIds = [];
         var filterOverlays = this.getOverlaysByFilter(override);
         filterOverlays.forEach(function (overlay) {
-            var _a, _b;
+            var _a, _b, _c;
             // paneId is the map key — capture it before the override merge so a
             // paneId change can migrate the entry between pane lists (otherwise
             // the overlay keeps rendering on the old pane while paneId claims
@@ -23900,9 +24342,15 @@ var StoreImp = /** @class */ (function () {
             var oldPaneId = overlay.paneId;
             overlay.override(override);
             var newPaneId = overlay.paneId;
+            // The progress slot keys its pane separately — an in-progress overlay
+            // migrated across panes via override must drag the slot along or
+            // progressOverlayComplete writes the stale pane.
+            if (((_a = _this._progressOverlayInfo) === null || _a === void 0 ? void 0 : _a.overlay) === overlay) {
+                _this._progressOverlayInfo.paneId = newPaneId;
+            }
             if (newPaneId !== oldPaneId && _this._overlays.has(oldPaneId)) {
                 var list = _this._overlays.get(oldPaneId);
-                var index = (_a = list === null || list === void 0 ? void 0 : list.indexOf(overlay)) !== null && _a !== void 0 ? _a : -1;
+                var index = (_b = list === null || list === void 0 ? void 0 : list.indexOf(overlay)) !== null && _b !== void 0 ? _b : -1;
                 if (index > -1) {
                     list === null || list === void 0 ? void 0 : list.splice(index, 1);
                     if (list !== undefined && list.length === 0) {
@@ -23911,7 +24359,7 @@ var StoreImp = /** @class */ (function () {
                     if (!_this._overlays.has(newPaneId)) {
                         _this._overlays.set(newPaneId, []);
                     }
-                    (_b = _this._overlays.get(newPaneId)) === null || _b === void 0 ? void 0 : _b.push(overlay);
+                    (_c = _this._overlays.get(newPaneId)) === null || _c === void 0 ? void 0 : _c.push(overlay);
                     sortFlag = true;
                     if (!updatePaneIds.includes(oldPaneId)) {
                         updatePaneIds.push(oldPaneId);
@@ -23921,7 +24369,7 @@ var StoreImp = /** @class */ (function () {
                     }
                 }
             }
-            var _c = overlay.shouldUpdate(), sort = _c.sort, draw = _c.draw;
+            var _d = overlay.shouldUpdate(), sort = _d.sort, draw = _d.draw;
             if (sort) {
                 sortFlag = true;
             }
@@ -23959,6 +24407,13 @@ var StoreImp = /** @class */ (function () {
         filterOverlays.forEach(function (overlay) {
             var e_1, _a;
             var _b;
+            // Idempotence: a re-entrant removeOverlay (cascading remove from an
+            // onRemoved hook mid-loop) already unregistered this overlay — the
+            // filter snapshot is stale and a second pass would double-fire
+            // onRemoved/'remove'.
+            if (_this._overlayById.get(overlay.id) !== overlay) {
+                return;
+            }
             var paneId = overlay.paneId;
             var paneOverlays = _this.getOverlaysByPaneId(overlay.paneId);
             if (!updatePaneIds.includes(paneId)) {
@@ -24166,6 +24621,8 @@ var StoreImp = /** @class */ (function () {
         return this._chart;
     };
     StoreImp.prototype.destroy = function () {
+        var e_2, _a;
+        var _b, _c, _d;
         // Tell subscribers (e.g. ChartSyncManager) the in-progress drawing is gone
         // so peers can drop their ghost mirrors instead of leaking them. A throwing
         // subscriber must not abort the rest of teardown.
@@ -24175,9 +24632,37 @@ var StoreImp = /** @class */ (function () {
         this._progressOverlayInfo = null;
         if ((progressInfo === null || progressInfo === void 0 ? void 0 : progressInfo.overlay.isDrawing()) === true) {
             try {
+                (_c = (_b = progressInfo.overlay).onRemoved) === null || _c === void 0 ? void 0 : _c.call(_b, { overlay: progressInfo.overlay, chart: this._chart });
+            }
+            catch (_e) { }
+            try {
                 this.executeAction('onOverlayChange', { type: 'remove', overlay: progressInfo.overlay });
             }
-            catch (_a) { }
+            catch (_f) { }
+        }
+        try {
+            // Emit for completed overlays too — silently clearing the maps used to
+            // leak sync mirrors and skip every onRemoved hook. The drawings manager
+            // is destroyed before the store (Chart.destroy order), so its 'remove'
+            // handler is already inert — no stray persistRemove reaches the adapter.
+            for (var _g = __values(this._overlayById.values()), _h = _g.next(); !_h.done; _h = _g.next()) {
+                var overlay = _h.value;
+                try {
+                    (_d = overlay.onRemoved) === null || _d === void 0 ? void 0 : _d.call(overlay, { overlay: overlay, chart: this._chart });
+                }
+                catch (_j) { }
+                try {
+                    this.executeAction('onOverlayChange', { type: 'remove', overlay: overlay });
+                }
+                catch (_k) { }
+            }
+        }
+        catch (e_2_1) { e_2 = { error: e_2_1 }; }
+        finally {
+            try {
+                if (_h && !_h.done && (_a = _g.return)) _a.call(_g);
+            }
+            finally { if (e_2) throw e_2.error; }
         }
         // Drop the remaining interaction slots — a pressed/hovered/selected
         // overlay referencing a destroyed chart must not linger for the next
@@ -24948,12 +25433,12 @@ function checkCoordinateOnText(coordinate, attrs, styles) {
 function drawText(ctx, attrs, styles) {
     var texts = [];
     texts = texts.concat(attrs);
-    var _a = styles.color, color = _a === void 0 ? 'currentColor' : _a, _b = styles.size, size = _b === void 0 ? 12 : _b, family = styles.family, weight = styles.weight, _c = styles.paddingLeft, paddingLeft = _c === void 0 ? 0 : _c, _d = styles.paddingTop, paddingTop = _d === void 0 ? 0 : _d;
+    var _a = styles.color, color = _a === void 0 ? 'currentColor' : _a, _b = styles.size, size = _b === void 0 ? 12 : _b, family = styles.family, weight = styles.weight, fontStyle = styles.fontStyle, _c = styles.paddingLeft, paddingLeft = _c === void 0 ? 0 : _c, _d = styles.paddingTop, paddingTop = _d === void 0 ? 0 : _d;
     var rects = texts.map(function (text) { return getTextRect(text, styles); });
     drawRect(ctx, rects, __assign(__assign({}, styles), { color: styles.backgroundColor }));
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    ctx.font = createFont(size, weight, family);
+    ctx.font = createFont(size, weight, family, fontStyle);
     ctx.fillStyle = color;
     var lineHeight = size * 1.3;
     texts.forEach(function (text, index) {
@@ -26613,6 +27098,11 @@ var OverlayView = /** @class */ (function (_super) {
                 if (overlay.isDrawing() && progressOverlayPaneId === paneId && _this._canDrawPoints()) {
                     overlay.eventMoveForDrawing(_this._coordinateToPoint(overlay, event), event);
                     (_a = overlay.onDrawing) === null || _a === void 0 ? void 0 : _a.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
+                    // onDrawing may have removed the overlay — stepping/emitting
+                    // 'progress' for a dead id resurrects it on sync mirrors.
+                    if (chartStore.getOverlayById(overlay.id) === null) {
+                        return true;
+                    }
                     overlay.nextStep();
                     chartStore.executeAction('onOverlayChange', { type: 'progress', overlay: overlay });
                     if (!overlay.isDrawing()) {
@@ -26719,6 +27209,11 @@ var OverlayView = /** @class */ (function (_super) {
             }
             overlay.eventMoveForDrawing(_this._coordinateToPoint(overlay, event), event);
             (_b = overlay.onDrawing) === null || _b === void 0 ? void 0 : _b.call(overlay, __assign({ chart: chart, overlay: overlay }, event));
+            // Same dead-overlay guard as the click path — a hook that removed the
+            // overlay must stop this handler before nextStep/'progress'.
+            if (chartStore.getOverlayById(overlay.id) === null) {
+                return true;
+            }
             overlay.nextStep();
             chartStore.executeAction('onOverlayChange', { type: 'progress', overlay: overlay });
             if (!overlay.isDrawing()) {
@@ -31313,6 +31808,15 @@ var EventHandlerImp = /** @class */ (function () {
             if (manhattanDistance < ManhattanDistance.DoubleTap && !this._cancelTap) {
                 this._processEvent(compatEvent, this._handler.doubleTapEvent);
             }
+            else if (!this._cancelTap) {
+                // A second tap INSIDE the window but far from the first is a fresh
+                // tap, not a double-tap — swallowing it wedges multi-point drawing
+                // (fast taps at different anchors would never advance the step).
+                this._processEvent(compatEvent, this._handler.tapEvent);
+                if (isValid(this._handler.tapEvent)) {
+                    this._preventDefault(touchEndEvent);
+                }
+            }
             this._resetTapTimeout();
         }
         else {
@@ -31364,6 +31868,13 @@ var EventHandlerImp = /** @class */ (function () {
             if (manhattanDistance < ManhattanDistance.DoubleClick && !this._cancelClick) {
                 this._processEvent(compatEvent, this._handler.mouseDoubleClickEvent);
             }
+            else if (!this._cancelClick) {
+                // Distant second click inside the window — a real click, not a
+                // double-click. Swallowing it stalls in-progress drawings whose
+                // next anchor was placed fast (the rubber-band preview already
+                // filled the point, so the step silently never advances).
+                this._processEvent(compatEvent, this._handler.mouseClickEvent);
+            }
             this._resetClickTimeout();
         }
         else {
@@ -31402,6 +31913,12 @@ var EventHandlerImp = /** @class */ (function () {
         this._activeTouchId = null;
         this._lastTouchEventTimeStamp = this._eventTimeStamp(touchCancelEvent);
         this._clearLongTapTimeout();
+        // A cancelled gesture must retire the tap chain + long-tap latch too —
+        // otherwise a fast tap after the cancel inherits the dead window and
+        // fires a phantom doubleTap, and _longTapActive would keep blocking
+        // pinch starts until the next completed gesture.
+        this._longTapActive = false;
+        this._resetTapTimeout();
         this._touchMoveStartCoordinate = null;
         this._cancelTap = true;
         // A cancelled pinch leaves the middle coordinate armed — the next
@@ -31808,6 +32325,10 @@ var Event = /** @class */ (function () {
         var _this = this;
         // 惯性滚动开始时间
         this._flingStartTime = new Date().getTime();
+        // True only once the gesture has actually scrolled since the last anchor
+        // — a pinch-end re-anchor must not let the tracked finger's release
+        // compute a fling from the pinch separation distance.
+        this._scrolledSinceAnchor = false;
         // 惯性滚动定时器
         this._flingScrollRequestId = null;
         // 开始滚动时坐标点
@@ -32081,6 +32602,7 @@ var Event = /** @class */ (function () {
             var event_2 = this._makeWidgetEvent(e, widget);
             this._startScrollCoordinate = { x: event_2.x, y: event_2.y };
             this._flingStartTime = new Date().getTime();
+            this._scrolledSinceAnchor = false;
         }
         else {
             this._startScrollCoordinate = null;
@@ -32150,13 +32672,29 @@ var Event = /** @class */ (function () {
         return false;
     };
     Event.prototype.mouseMoveEvent = function (e) {
-        var _a, _b, _c;
-        var _d = this._findWidgetByEvent(e), pane = _d.pane, widget = _d.widget;
+        var _this = this;
+        var _a, _b, _c, _d;
+        var _e = this._findWidgetByEvent(e), pane = _e.pane, widget = _e.widget;
         var event = this._makeWidgetEvent(e, widget);
         if (((_a = this._mouseMoveTriggerWidgetInfo.pane) === null || _a === void 0 ? void 0 : _a.getId()) !== (pane === null || pane === void 0 ? void 0 : pane.getId()) ||
             ((_b = this._mouseMoveTriggerWidgetInfo.widget) === null || _b === void 0 ? void 0 : _b.getName()) !== (widget === null || widget === void 0 ? void 0 : widget.getName())) {
+            // Leaving a MAIN widget for an axis/separator ends overlay + indicator
+            // hover — OverlayView registers no widget-level mouseLeave, so without
+            // this the last-hovered drawing keeps its zLevel bump and onMouseLeave
+            // never fires until re-entry.
+            if (((_c = this._mouseMoveTriggerWidgetInfo.widget) === null || _c === void 0 ? void 0 : _c.getName()) === WidgetNameConstants.MAIN) {
+                var chartStore = this._chart.getChartStore();
+                chartStore.setHoverOverlayInfo({ paneId: '', overlay: null, figureType: 'none', figureIndex: -1, figure: null }, function () { return false; }, function (o, f) {
+                    if (isFunction(o.onMouseLeave) && checkOverlayFigureEvent('onMouseLeave', f)) {
+                        o.onMouseLeave(__assign({ chart: _this._chart, overlay: o, figure: f !== null && f !== void 0 ? f : undefined }, e));
+                        return true;
+                    }
+                    return false;
+                });
+                this._clearIndicatorHover();
+            }
             widget === null || widget === void 0 ? void 0 : widget.dispatchEvent('mouseEnterEvent', event);
-            (_c = this._mouseMoveTriggerWidgetInfo.widget) === null || _c === void 0 ? void 0 : _c.dispatchEvent('mouseLeaveEvent', event);
+            (_d = this._mouseMoveTriggerWidgetInfo.widget) === null || _d === void 0 ? void 0 : _d.dispatchEvent('mouseLeaveEvent', event);
             this._mouseMoveTriggerWidgetInfo = { pane: pane, widget: widget };
         }
         if (widget !== null) {
@@ -32397,6 +32935,7 @@ var Event = /** @class */ (function () {
                     this._startScrollCoordinate = { x: event_9.x, y: event_9.y };
                     chartStore.startScroll();
                     this._touchZoomed = false;
+                    this._scrolledSinceAnchor = false;
                     if (this._touchCoordinate !== null) {
                         var xDif = event_9.x - this._touchCoordinate.x;
                         var yDif = event_9.y - this._touchCoordinate.y;
@@ -32419,16 +32958,22 @@ var Event = /** @class */ (function () {
                 case WidgetNameConstants.Y_AXIS: {
                     return this._processYAxisScaleStartEvent(widget, event_9);
                 }
+                case WidgetNameConstants.SEPARATOR: {
+                    // Without this the separator's touchStartEvent registration never
+                    // fires — _dragFlag/_topPane stay unset and the follow-up
+                    // pressedMouseMoveEvent no-ops: pane resize was dead on touch.
+                    return widget.dispatchEvent('touchStartEvent', event_9);
+                }
             }
         }
         return false;
     };
     Event.prototype.touchMoveEvent = function (e) {
-        var _a, _b, _c, _d, _e;
+        var _a, _b, _c, _d, _e, _f;
         if (this._mouseDownWidget !== null && this._mouseDownWidget.getName() === WidgetNameConstants.SEPARATOR) {
             return this._mouseDownWidget.dispatchEvent('pressedMouseMoveEvent', e);
         }
-        var _f = this._findWidgetByEvent(e), pane = _f.pane, widget = _f.widget;
+        var _g = this._findWidgetByEvent(e), pane = _g.pane, widget = _g.widget;
         // Same identity gate as pressedMouseMoveEvent — a touch gesture is
         // widget-local: without it a freehand stroke sliding across a pane
         // boundary writes points in the wrong pane's coordinate space.
@@ -32451,12 +32996,17 @@ var Event = /** @class */ (function () {
                         chartStore.setCrosshair({ x: event_10.x, y: event_10.y, paneId: pane === null || pane === void 0 ? void 0 : pane.getId() });
                     }
                     else {
+                        // Claim the drag — without preventDefault a vertical-dominant
+                        // scroll-drag lets the browser scroll the page underneath the
+                        // gesture (or cancel it mid-flight) since no touch-action CSS
+                        // is guaranteed by hosts.
+                        (_e = event_10.preventDefault) === null || _e === void 0 ? void 0 : _e.call(event_10);
                         this._processMainScrollingEvent(widget, event_10);
                     }
                     return true;
                 }
                 case WidgetNameConstants.X_AXIS: {
-                    (_e = event_10.preventDefault) === null || _e === void 0 ? void 0 : _e.call(event_10);
+                    (_f = event_10.preventDefault) === null || _f === void 0 ? void 0 : _f.call(event_10);
                     return this._processXAxisScrollingEvent(widget, event_10);
                 }
                 case WidgetNameConstants.Y_AXIS: {
@@ -32483,7 +33033,10 @@ var Event = /** @class */ (function () {
                     if (target.dispatchEvent('mouseUpEvent', event_11)) {
                         this._chart.updatePane(1 /* UpdateLevel.Overlay */);
                     }
-                    if (this._startScrollCoordinate !== null) {
+                    // Only a gesture that actually scrolled may fling — after a pinch
+                    // the tracked finger's release sits ~0ms from the re-anchor and
+                    // the pinch separation reads as a teleport velocity.
+                    if (this._startScrollCoordinate !== null && this._scrolledSinceAnchor) {
                         var time = new Date().getTime() - this._flingStartTime;
                         var distance = event_11.x - this._startScrollCoordinate.x;
                         var v_1 = distance / (time > 0 ? time : 1) * 20;
@@ -32616,6 +33169,9 @@ var Event = /** @class */ (function () {
                 });
             }
             var distance = event.x - this._startScrollCoordinate.x;
+            if (distance !== 0) {
+                this._scrolledSinceAnchor = true;
+            }
             this._chart.getChartStore().scroll(distance);
         }
     };
@@ -32623,7 +33179,11 @@ var Event = /** @class */ (function () {
         var consumed = widget.dispatchEvent('mouseDownEvent', event);
         if (consumed) {
             this._chart.updatePane(1 /* UpdateLevel.Overlay */);
+            return true;
         }
+        // Arm the scale anchor only for an unconsumed press — a consumed
+        // overlay-figure press that loses its slot mid-gesture would otherwise
+        // zoom the axis by the total displacement on the next move.
         this._xAxisStartScaleCoordinate = { x: event.x, y: event.y };
         this._xAxisStartScaleDistance = event.pageX;
         return consumed;
@@ -32685,7 +33245,10 @@ var Event = /** @class */ (function () {
         var consumed = widget.dispatchEvent('mouseDownEvent', event);
         if (consumed) {
             this._chart.updatePane(1 /* UpdateLevel.Overlay */);
+            return true;
         }
+        // Same consumed-press guard as the x-axis — an overlay press must not
+        // arm the scale anchor.
         var range = widget.getPane().getAxisComponent().getRange();
         this._prevYAxisRange = __assign({}, range);
         this._yAxisStartScaleDistance = event.pageY;
@@ -33940,6 +34503,7 @@ function getStore(chart) {
     return chart.getChartStore();
 }
 function serializeOverlay(overlay) {
+    var _a, _b, _c;
     return {
         id: overlay.id,
         groupId: overlay.groupId,
@@ -33947,12 +34511,21 @@ function serializeOverlay(overlay) {
         name: overlay.name,
         lock: overlay.lock,
         visible: overlay.visible,
-        zLevel: overlay.zLevel,
+        // Persisted zLevel must not be the hover bump — same restore-target
+        // rule as serialize.ts.
+        zLevel: (_c = (_b = (_a = overlay).getPrevZLevel) === null || _b === void 0 ? void 0 : _b.call(_a)) !== null && _c !== void 0 ? _c : overlay.zLevel,
         needDefaultPointFigure: overlay.needDefaultPointFigure,
         needDefaultXAxisFigure: overlay.needDefaultXAxisFigure,
         needDefaultYAxisFigure: overlay.needDefaultYAxisFigure,
         mode: overlay.mode,
         modeSensitivity: overlay.modeSensitivity,
+        // Unlimited-step tools (brush/polyline/path/measure — totalStep =
+        // MAX_SAFE_INTEGER) can never satisfy the points-length finish test in
+        // override(); without completed:true the finished mirror wedges into
+        // the peer's progress slot, gets displaced by the peer's next draw,
+        // and its 'remove' propagates back to delete the canonical overlay
+        // AND its persisted record. Ghosts keep false — they track progress.
+        completed: !overlay.isDrawing(),
         points: overlay.points.map(function (p) { return (__assign({}, p)); }),
         // Deep-copy so the mirror never shares mutable objects with the source.
         extendData: isValid(overlay.extendData) ? clone(overlay.extendData) : overlay.extendData,
@@ -34359,6 +34932,14 @@ function createChartSync(options) {
                             if (!tickersMatch) {
                                 break;
                             }
+                            // id-only targeting must not clobber a peer's own overlay that
+                            // shares the id under a different tool (host-specified ids or
+                            // diverged shared-store records) — the syncApplied write would
+                            // persist the corruption.
+                            var target = chart.getOverlays({ id: overlay.id })[0];
+                            if (isValid(target) && !target.ghost && !target.synced && target.name !== overlay.name) {
+                                break;
+                            }
                             // A ghost mirror whose source already finished must be promoted —
                             // overrideOverlay would update it in place but leave it locked
                             // and non-interactive forever. Scan only once the source stopped
@@ -34441,6 +35022,11 @@ function createChartSync(options) {
                         case 'remove': {
                             var target = chart.getOverlays({ id: overlay.id })[0];
                             if (!isValid(target)) {
+                                break;
+                            }
+                            // Same id-name guard as update — a same-id different-tool
+                            // overlay on the peer is its own drawing, not the mirror.
+                            if (!target.ghost && !target.synced && target.name !== overlay.name) {
                                 break;
                             }
                             // Provenance gate: a peer wiping ITS ghost copy (symbol switch,
@@ -35326,7 +35912,7 @@ function createAnchorFigures(params) {
         return [];
     }
     if (lock) {
-        return createSelectionOutlineFigures({ coordinates: coordinates, styles: styles });
+        return createSelectionOutlineFigures({ coordinates: coordinates, styles: styles, isTouch: isTouch, isDrawing: isDrawing });
     }
     var half = isTouch ? ANCHOR_HALF_TOUCH : ANCHOR_HALF_MOUSE;
     var borderColor = (_b = styles === null || styles === void 0 ? void 0 : styles.borderColor) !== null && _b !== void 0 ? _b : '#1592E6';
@@ -35470,9 +36056,11 @@ function computeResizeCursor(from, to) {
  * The floating toolbar and settings dialog write a GENERIC
  * `styles.text.{color,size,weight,style,align}` namespace, while tools keep
  * their own flat style bag (`styles.<toolKey>`) and the text tool family
- * shares `styles.textNote`. This resolver merges all three — tool-specific
- * keys win over shared, both win over the generic text.* writes — and
- * translates text.* to the flat names readers actually consume:
+ * shares `styles.textNote`. Precedence: the generic `styles.text.*`
+ * user-override layer WINS (that's where toolbar/schema writes land),
+ * then the tool bag, then `textNote` defaults — bags are template defaults
+ * a user write must be able to override. It translates text.* to the flat
+ * names readers actually consume:
  * size→fontSize, weight→bold, style→italic. `text.style` never lands on a
  * figure (where it would alias the fill/stroke mode field).
  */
@@ -35978,12 +36566,13 @@ var anchoredText = {
                 }
             }
         ];
-        // The draggable handle sits on the rendered box at its ORIGIN (top-left)
-        // — point writes map cursor → box origin, so a handle anywhere else
-        // would teleport the box by the handle↔origin offset on the first move.
+        // The draggable handle sits at the ANCHOR coordinate — point writes map
+        // cursor → position (attrs.x/y), so a handle anywhere else (e.g. the
+        // box's top-left corner under non-default horz/vert align or rotation)
+        // teleports the box by the handle↔anchor offset on the first move.
         var handle = {
-            x: layout.boxLeft,
-            y: layout.boxTop
+            x: position.x,
+            y: position.y
         };
         figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
             coordinates: [handle],
@@ -36589,6 +37178,7 @@ var simpleAnnotation = {
                     size: getNoteStyles(overlay).fontSize,
                     family: getNoteStyles(overlay).fontFamily,
                     weight: getNoteStyles(overlay).bold === true ? 'bold' : 'normal',
+                    fontStyle: getNoteStyles(overlay).italic === true ? 'italic' : undefined,
                     style: 'fill'
                 },
                 bounds: {
@@ -41012,7 +41602,7 @@ var dateAndPriceRange = {
         var startPrice = (_g = (_f = overlay.points[0]) === null || _f === void 0 ? void 0 : _f.value) !== null && _g !== void 0 ? _g : 0;
         var endPrice = (_j = (_h = overlay.points[1]) === null || _h === void 0 ? void 0 : _h.value) !== null && _j !== void 0 ? _j : 0;
         var priceDiff = endPrice - startPrice;
-        var pricePct = startPrice !== 0 ? (priceDiff / startPrice) * 100 : 0;
+        var pricePct = startPrice !== 0 ? (priceDiff / Math.abs(startPrice)) * 100 : 0;
         var pips = Math.round(priceDiff * 100);
         var stats = windowStats(chart.getDataList(), overlay.points[0], overlay.points[1]);
         var x = Math.min(start.x, end.x);
@@ -42278,13 +42868,14 @@ function buildPositionYAxisFigures(params, direction) {
     var align = isFromZero ? 'left' : 'right';
     var x = isFromZero ? 0 : bounding.width;
     var figures = [];
-    var pillIndex = 0;
-    var pill = function (y, value, bg) {
+    // Semantic keys — positional `pillIndex++` renumbers later pills when an
+    // earlier pill skips (null value / non-finite y) and churns figure diffs.
+    var pill = function (id, y, value, bg) {
         if (value == null || !Number.isFinite(y)) {
             return;
         }
         figures.push({
-            key: "pos_axis_pill_".concat(pillIndex++),
+            key: "pos_axis_pill_".concat(id),
             type: 'text',
             attrs: { x: x, y: y, text: fmtNum(value, precision), align: align, baseline: 'middle' },
             styles: {
@@ -42299,9 +42890,9 @@ function buildPositionYAxisFigures(params, direction) {
             ignoreEvent: true
         });
     };
-    pill(geo.entryY, (_c = (_b = overlay.points[0]) === null || _b === void 0 ? void 0 : _b.value) !== null && _c !== void 0 ? _c : null, ext.lineColor);
-    pill(geo.profitY, geo.profitValue, rgbaToSolid(ext.profitBackground));
-    pill(geo.stopY, geo.stopValue, rgbaToSolid(ext.stopBackground));
+    pill('entry', geo.entryY, (_c = (_b = overlay.points[0]) === null || _b === void 0 ? void 0 : _b.value) !== null && _c !== void 0 ? _c : null, ext.lineColor);
+    pill('profit', geo.profitY, geo.profitValue, rgbaToSolid(ext.profitBackground));
+    pill('stop', geo.stopY, geo.stopValue, rgbaToSolid(ext.stopBackground));
     return figures;
 }
 
@@ -42386,7 +42977,7 @@ var measure = {
         var startPrice = (_b = p1 === null || p1 === void 0 ? void 0 : p1.value) !== null && _b !== void 0 ? _b : 0;
         var endPrice = (_c = p2 === null || p2 === void 0 ? void 0 : p2.value) !== null && _c !== void 0 ? _c : 0;
         var priceDiff = endPrice - startPrice;
-        var pricePct = startPrice !== 0 ? (priceDiff / startPrice) * 100 : 0;
+        var pricePct = startPrice !== 0 ? (priceDiff / Math.abs(startPrice)) * 100 : 0;
         var pips = Math.round(priceDiff * 100);
         var stats = windowStats(chart.getDataList(), p1, p2);
         var ext = isValid(overlay.extendData) ? overlay.extendData : undefined;
@@ -42550,7 +43141,7 @@ var priceRange = {
         var startPrice = (_g = (_f = overlay.points[0]) === null || _f === void 0 ? void 0 : _f.value) !== null && _g !== void 0 ? _g : 0;
         var endPrice = (_j = (_h = overlay.points[1]) === null || _h === void 0 ? void 0 : _h.value) !== null && _j !== void 0 ? _j : 0;
         var priceDiff = endPrice - startPrice;
-        var pricePct = startPrice !== 0 ? (priceDiff / startPrice) * 100 : 0;
+        var pricePct = startPrice !== 0 ? (priceDiff / Math.abs(startPrice)) * 100 : 0;
         var tickSize = Math.pow(10, -precision);
         var ticks = Math.round(priceDiff / tickSize);
         var x = Math.min(start.x, end.x);
@@ -47320,7 +47911,9 @@ function shapeTextFigure(key, spec, box, fallbackColor) {
             color: (_a = spec.color) !== null && _a !== void 0 ? _a : fallbackColor,
             size: spec.fontSize,
             weight: spec.bold ? 'bold' : '600',
-            style: spec.italic ? 'italic' : 'normal',
+            // `style` on a text figure is the fill/stroke draw mode — italic goes
+            // through fontStyle or the font string is never italicized.
+            fontStyle: spec.italic ? 'italic' : undefined,
             backgroundColor: 'transparent'
         },
         ignoreEvent: true

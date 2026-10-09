@@ -69,6 +69,10 @@ export default class Event implements EventHandler {
 
   // 惯性滚动开始时间
   private _flingStartTime = new Date().getTime()
+  // True only once the gesture has actually scrolled since the last anchor
+  // — a pinch-end re-anchor must not let the tracked finger's release
+  // compute a fling from the pinch separation distance.
+  private _scrolledSinceAnchor = false
   // 惯性滚动定时器
   private _flingScrollRequestId: Nullable<number> = null
   // 开始滚动时坐标点
@@ -315,6 +319,7 @@ export default class Event implements EventHandler {
       const event = this._makeWidgetEvent(e, widget)
       this._startScrollCoordinate = { x: event.x, y: event.y }
       this._flingStartTime = new Date().getTime()
+      this._scrolledSinceAnchor = false
     } else {
       this._startScrollCoordinate = null
     }
@@ -393,6 +398,25 @@ export default class Event implements EventHandler {
       this._mouseMoveTriggerWidgetInfo.pane?.getId() !== pane?.getId() ||
       this._mouseMoveTriggerWidgetInfo.widget?.getName() !== widget?.getName()
     ) {
+      // Leaving a MAIN widget for an axis/separator ends overlay + indicator
+      // hover — OverlayView registers no widget-level mouseLeave, so without
+      // this the last-hovered drawing keeps its zLevel bump and onMouseLeave
+      // never fires until re-entry.
+      if (this._mouseMoveTriggerWidgetInfo.widget?.getName() === WidgetNameConstants.MAIN) {
+        const chartStore = this._chart.getChartStore()
+        chartStore.setHoverOverlayInfo(
+          { paneId: '', overlay: null, figureType: 'none', figureIndex: -1, figure: null },
+          () => false,
+          (o, f) => {
+            if (isFunction(o.onMouseLeave) && checkOverlayFigureEvent('onMouseLeave', f)) {
+              o.onMouseLeave({ chart: this._chart, overlay: o, figure: f ?? undefined, ...e })
+              return true
+            }
+            return false
+          }
+        )
+        this._clearIndicatorHover()
+      }
       widget?.dispatchEvent('mouseEnterEvent', event)
       this._mouseMoveTriggerWidgetInfo.widget?.dispatchEvent('mouseLeaveEvent', event)
       this._mouseMoveTriggerWidgetInfo = { pane, widget }
@@ -642,6 +666,7 @@ export default class Event implements EventHandler {
           this._startScrollCoordinate = { x: event.x, y: event.y }
           chartStore.startScroll()
           this._touchZoomed = false
+          this._scrolledSinceAnchor = false
           if (this._touchCoordinate !== null) {
             const xDif = event.x - this._touchCoordinate.x
             const yDif = event.y - this._touchCoordinate.y
@@ -662,6 +687,12 @@ export default class Event implements EventHandler {
         }
         case WidgetNameConstants.Y_AXIS: {
           return this._processYAxisScaleStartEvent(widget as Widget<DrawPane<YAxis>>, event)
+        }
+        case WidgetNameConstants.SEPARATOR: {
+          // Without this the separator's touchStartEvent registration never
+          // fires — _dragFlag/_topPane stay unset and the follow-up
+          // pressedMouseMoveEvent no-ops: pane resize was dead on touch.
+          return widget.dispatchEvent('touchStartEvent', event)
         }
       }
     }
@@ -696,6 +727,11 @@ export default class Event implements EventHandler {
             event.preventDefault?.()
             chartStore.setCrosshair({ x: event.x, y: event.y, paneId: pane?.getId() })
           } else {
+            // Claim the drag — without preventDefault a vertical-dominant
+            // scroll-drag lets the browser scroll the page underneath the
+            // gesture (or cancel it mid-flight) since no touch-action CSS
+            // is guaranteed by hosts.
+            event.preventDefault?.()
             this._processMainScrollingEvent(widget as Widget<DrawPane<YAxis>>, event)
           }
           return true
@@ -728,7 +764,10 @@ export default class Event implements EventHandler {
           if (target.dispatchEvent('mouseUpEvent', event)) {
             this._chart.updatePane(UpdateLevel.Overlay)
           }
-          if (this._startScrollCoordinate !== null) {
+          // Only a gesture that actually scrolled may fling — after a pinch
+          // the tracked finger's release sits ~0ms from the re-anchor and
+          // the pinch separation reads as a teleport velocity.
+          if (this._startScrollCoordinate !== null && this._scrolledSinceAnchor) {
             const time = new Date().getTime() - this._flingStartTime
             const distance = event.x - this._startScrollCoordinate.x
             let v = distance / (time > 0 ? time : 1) * 20
@@ -861,6 +900,9 @@ export default class Event implements EventHandler {
         })
       }
       const distance = event.x - this._startScrollCoordinate.x
+      if (distance !== 0) {
+        this._scrolledSinceAnchor = true
+      }
       this._chart.getChartStore().scroll(distance)
     }
   }
@@ -869,7 +911,11 @@ export default class Event implements EventHandler {
     const consumed = widget.dispatchEvent('mouseDownEvent', event)
     if (consumed) {
       this._chart.updatePane(UpdateLevel.Overlay)
+      return true
     }
+    // Arm the scale anchor only for an unconsumed press — a consumed
+    // overlay-figure press that loses its slot mid-gesture would otherwise
+    // zoom the axis by the total displacement on the next move.
     this._xAxisStartScaleCoordinate = { x: event.x, y: event.y }
     this._xAxisStartScaleDistance = event.pageX
     return consumed
@@ -933,7 +979,10 @@ export default class Event implements EventHandler {
     const consumed = widget.dispatchEvent('mouseDownEvent', event)
     if (consumed) {
       this._chart.updatePane(UpdateLevel.Overlay)
+      return true
     }
+    // Same consumed-press guard as the x-axis — an overlay press must not
+    // arm the scale anchor.
     const range = widget.getPane().getAxisComponent().getRange()
     this._prevYAxisRange = { ...range }
     this._yAxisStartScaleDistance = event.pageY

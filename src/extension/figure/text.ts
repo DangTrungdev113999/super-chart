@@ -141,6 +141,7 @@ export function drawText (ctx: CanvasRenderingContext2D, attrs: TextAttrs | Text
     size = 12,
     family,
     weight,
+    fontStyle,
     paddingLeft = 0,
     paddingTop = 0
   } = styles
@@ -149,7 +150,7 @@ export function drawText (ctx: CanvasRenderingContext2D, attrs: TextAttrs | Text
 
   ctx.textAlign = 'left'
   ctx.textBaseline = 'top'
-  ctx.font = createFont(size, weight, family)
+  ctx.font = createFont(size, weight, family, fontStyle)
   ctx.fillStyle = color
 
   const lineHeight = size * 1.3

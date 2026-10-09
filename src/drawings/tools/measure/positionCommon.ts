@@ -361,13 +361,14 @@ export function buildPositionYAxisFigures (
   const x = isFromZero ? 0 : bounding.width
 
   const figures: OverlayFigure[] = []
-  let pillIndex = 0
-  const pill = (y: number, value: number | null, bg: string): void => {
+  // Semantic keys — positional `pillIndex++` renumbers later pills when an
+  // earlier pill skips (null value / non-finite y) and churns figure diffs.
+  const pill = (id: string, y: number, value: number | null, bg: string): void => {
     if (value == null || !Number.isFinite(y)) {
       return
     }
     figures.push({
-      key: `pos_axis_pill_${pillIndex++}`,
+      key: `pos_axis_pill_${id}`,
       type: 'text',
       attrs: { x, y, text: fmtNum(value, precision), align, baseline: 'middle' as CanvasTextBaseline },
       styles: {
@@ -382,8 +383,8 @@ export function buildPositionYAxisFigures (
       ignoreEvent: true
     })
   }
-  pill(geo.entryY, (overlay.points[0] as Partial<Point> | undefined)?.value ?? null, ext.lineColor)
-  pill(geo.profitY, geo.profitValue, rgbaToSolid(ext.profitBackground))
-  pill(geo.stopY, geo.stopValue, rgbaToSolid(ext.stopBackground))
+  pill('entry', geo.entryY, (overlay.points[0] as Partial<Point> | undefined)?.value ?? null, ext.lineColor)
+  pill('profit', geo.profitY, geo.profitValue, rgbaToSolid(ext.profitBackground))
+  pill('stop', geo.stopY, geo.stopValue, rgbaToSolid(ext.stopBackground))
   return figures
 }

@@ -16,6 +16,7 @@ import type Chart from '../Chart'
 import type Nullable from '../common/Nullable'
 import type { ActionCallback } from '../common/Action'
 import { getOverlayTemplate } from '../extension/overlay/index'
+import { logWarn } from '../common/utils/logger'
 import type { Overlay, OverlayCreate, OverlayChangeEvent } from '../component/Overlay'
 import { serializeOverlay, serializedToOverlayCreate, serializedFingerprint, type SerializedDrawing } from './serialize'
 import { createDrawingHistory, type DrawingHistory } from './history'
@@ -86,6 +87,9 @@ export interface DrawingManager {
 
 const DRAWINGS_GROUP_ID = 'drawings'
 const SAVE_DEBOUNCE_MS = 300
+// Failed store writes requeue and retry — capped so a permanently-broken
+// adapter (HTTP 4xx, closed IDB) doesn't spin writes ~3x/sec forever.
+const MAX_STORE_RETRIES = 5
 
 export function createDrawingManager (chart: Chart, options?: DrawingManagerOptions): DrawingManager {
   const history: DrawingHistory = createDrawingHistory({ maxHistory: options?.maxHistory })
@@ -116,7 +120,7 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
 
   // Pending ops bucketed per scope — a failed requeue can never pin an old
   // scope and contaminate ops enqueued under a later symbol.
-  interface PendingBucket { scope: DrawingScope, upsert: Map<string, SerializedDrawing>, remove: Set<string> }
+  interface PendingBucket { scope: DrawingScope, upsert: Map<string, SerializedDrawing>, remove: Set<string>, retries: number }
   const pendingByScope = new Map<string, PendingBucket>()
   let saveTimer: ReturnType<typeof setTimeout> | null = null
   // Applies must be serialized — whole-bucket read-modify-write adapters
@@ -167,14 +171,14 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
     const key = scopeKey(s)
     let bucket = pendingByScope.get(key)
     if (bucket === undefined) {
-      bucket = { scope: s, upsert: new Map(), remove: new Set() }
+      bucket = { scope: s, upsert: new Map(), remove: new Set(), retries: 0 }
       pendingByScope.set(key, bucket)
     }
     return bucket
   }
 
   function scheduleSave (): void {
-    if (store === null || saveTimer !== null) {
+    if (destroyed || store === null || saveTimer !== null) {
       return
     }
     saveTimer = setTimeout(() => {
@@ -206,13 +210,30 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
           await storeRef.apply(bucket.scope, { upsert, remove })
         } catch {
           // Store failure: requeue under the SAME scope so the next commit
-          // retries instead of silently losing the write.
+          // retries instead of silently losing the write — but only ops
+          // that haven't been superseded. A failed flush must not clobber
+          // a NEWER pending upsert for the same id, and a requeued remove
+          // must not sit next to a recreate (adapters apply upsert-then-
+          // remove and would silently delete the resurrected drawing).
           const live = pendingBucket(bucket.scope)
-          upsert.forEach(d => live.upsert.set(d.id, d))
-          remove.forEach(id => live.remove.add(id))
-          // Don't leave the retry hostage to the next user commit —
-          // reschedule the debounce so a transient failure self-heals.
-          scheduleSave()
+          live.retries = Math.max(live.retries, bucket.retries + 1)
+          if (live.retries <= MAX_STORE_RETRIES) {
+            upsert.forEach(d => {
+              if (!live.upsert.has(d.id)) {
+                live.upsert.set(d.id, d)
+              }
+            })
+            remove.forEach(id => {
+              if (!live.upsert.has(id)) {
+                live.remove.add(id)
+              }
+            })
+            // Don't leave the retry hostage to the next user commit —
+            // reschedule the debounce so a transient failure self-heals.
+            scheduleSave()
+          } else {
+            logWarn('manager', 'flushStore', `store.apply failed ${live.retries}x for scope ${scopeKey(bucket.scope)} — dropping ${upsert.length} upserts, ${remove.length} removes`)
+          }
         }
       }
     })
@@ -316,6 +337,14 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
           trackShadow(overlay)
           return
         }
+        // An armed overlay finished via host overrideOverlay (final points
+        // written programmatically) never saw a drawEnd — run it through
+        // the create commit so the finished drawing actually persists and
+        // armed clears (also covers ghost→mirror promotion).
+        if (armed.has(overlay.id) && !overlay.isDrawing()) {
+          commitCreate(overlay)
+          break
+        }
         // syncApplied: a peer's edit applied onto the canonical overlay —
         // persist it (the owner is the only persister of peer edits) but
         // never mint a local undo entry for someone else's gesture.
@@ -345,10 +374,18 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
         break
       }
       case 'remove': {
-        armed.delete(overlay.id)
+        const wasArmed = armed.delete(overlay.id)
         pendingEdit.delete(overlay.id)
-        const before = shadow.get(overlay.id) ?? serializeOverlay(overlay)
+        const shadowed = shadow.get(overlay.id)
+        const before = shadowed ?? serializeOverlay(overlay)
         shadow.delete(overlay.id)
+        // Never committed — killed mid-draw or dropped by its own onDrawEnd
+        // (degenerate polyline etc.). Nothing was persisted, so no
+        // tombstone is needed, and an undo entry would resurrect a drawing
+        // the template deliberately discarded.
+        if (wasArmed && shadowed === undefined) {
+          return
+        }
         // Epoch-tagged drop: an overlay stamped before the current scope
         // epoch is an old-scope wipe — never persist a delete into the new
         // scope's bucket, no matter when the wipe actually runs.
@@ -496,6 +533,30 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
     remoteApplying = true
     applyingInternal = true
     try {
+      // Unflushed local writes — a remote apply must not clobber a local
+      // edit still sitting in the debounce window (it would revert on
+      // canvas, then the stale pending flush would flap the store back).
+      // Last-writer-wins on updatedAt; when the remote record is newer the
+      // stale local pending write is dropped so the flush converges.
+      const pendingUpserts = new Map<string, SerializedDrawing>()
+      const pendingRemoves = new Set<string>()
+      pendingByScope.forEach(bucket => {
+        bucket.upsert.forEach((d, id) => pendingUpserts.set(id, d))
+        bucket.remove.forEach(id => pendingRemoves.add(id))
+      })
+      const remoteWinsOrStale = (d: SerializedDrawing): boolean => {
+        const localPending = pendingUpserts.get(d.id)
+        if (localPending === undefined) {
+          return true
+        }
+        if (Number(localPending.updatedAt) >= Number(d.updatedAt)) {
+          return false
+        }
+        // Remote is newer — drop the stale local write so it can't flap.
+        pendingByScope.forEach(b => { b.upsert.delete(d.id) })
+        pendingUpserts.delete(d.id)
+        return true
+      }
       if (event.type === 'snapshot') {
         // Full remote state — reconcile: remove ids not present remotely.
         const remoteIds = new Set(event.drawings.map(d => d.id))
@@ -503,15 +564,9 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
         // reconcile — the peer can't know about them yet. Pending REMOVE
         // tombstones win the other direction: a drawing the user deleted
         // locally must not resurrect when the peer's snapshot still has it.
-        const pendingIds = new Set<string>()
-        const pendingRemoves = new Set<string>()
-        pendingByScope.forEach(bucket => {
-          bucket.upsert.forEach(d => pendingIds.add(d.id))
-          bucket.remove.forEach(id => pendingRemoves.add(id))
-        })
         chart.getOverlays({ groupId: DRAWINGS_GROUP_ID }).forEach(o => {
           if (!remoteIds.has(o.id) && !o.ghost && !o.synced && !o.isDrawing() &&
-              !pendingIds.has(o.id) && persistable(o)) {
+              !pendingUpserts.has(o.id) && persistable(o)) {
             // Drop undo commands for remotely-deleted drawings — otherwise
             // undo would resurrect them AND re-persist into the peer's store.
             history.invalidateOverlay(o.id)
@@ -520,6 +575,9 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
         })
         event.drawings.forEach(d => {
           try {
+            if (!remoteWinsOrStale(d)) {
+              return
+            }
             const existing = chart.getOverlayById(d.id)
             // d.completed guards BOTH branches — a half-formed remote
             // record must not clobber a finished local overlay.
@@ -534,16 +592,15 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
           }
         })
       } else {
-        // Pending-removal tombstones apply to upserts too — a peer's stale
-        // upsert arriving after the user's local delete must not resurrect
-        // the drawing before the remove reaches the store.
-        const pendingRemoves = new Set<string>()
-        pendingByScope.forEach(bucket => {
-          bucket.remove.forEach(id => pendingRemoves.add(id))
-        })
         event.drawings.forEach(d => {
           try {
+            if (!remoteWinsOrStale(d)) {
+              return
+            }
             const existing = chart.getOverlayById(d.id)
+            // Pending-removal tombstones apply to upserts too — a peer's
+            // stale upsert arriving after the user's local delete must not
+            // resurrect the drawing before the remove reaches the store.
             if (existing !== null && !existing.isDrawing() && d.completed) {
               chart.overrideOverlay(serializedToOverlayCreate(d))
             } else if (d.completed && existing === null && !pendingRemoves.has(d.id)) {
@@ -556,6 +613,13 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
         })
         event.removedIds?.forEach(id => {
           history.invalidateOverlay(id)
+          // Clear unflushed ops for the deleted id — a pending local
+          // upsert would otherwise resurrect the drawing in the shared
+          // store on the next flush (zombie loop across every peer).
+          pendingByScope.forEach(b => {
+            b.upsert.delete(id)
+            b.remove.delete(id)
+          })
           chart.removeOverlay({ id })
         })
       }
@@ -596,7 +660,7 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
       // Guard empty/unregistered tool names — activating '' emits a phantom
       // toolChange and leaves activeTool() reporting an armed tool that
       // createOverlay can never instantiate.
-      if (typeof name !== 'string' || name === '') {
+      if (typeof name !== 'string' || name === '' || getOverlayTemplate(name) === null) {
         return null
       }
       activeToolName = name
@@ -619,7 +683,13 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
       continuousTool = null
       // Disarm means disarm — an in-progress overlay still in the progress
       // slot would keep collecting clicks while activeTool() reports null.
-      const inProgress = chart.getOverlays().find(o => o.isDrawing())
+      // Target the progress slot, not an isDrawing scan: ghost mirrors are
+      // isDrawing() too and could win the find() before the real overlay.
+      // (The scan fallback stays for pre-registry edge states.)
+      const slot = chart.getChartStore().getProgressOverlayInfo()?.overlay
+      const inProgress = slot !== undefined && !slot.ghost && !slot.synced
+        ? slot
+        : chart.getOverlays().find(o => o.isDrawing() && !o.ghost && !o.synced)
       if (inProgress !== undefined) {
         chart.removeOverlay({ id: inProgress.id })
       }

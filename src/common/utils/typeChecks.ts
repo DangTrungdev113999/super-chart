@@ -18,14 +18,25 @@ export function merge (target: any, source: any): void {
     return
   }
   for (const key in source) {
+    // Never write dunder/prototype keys — extendData merge of a hostile or
+    // snapshot payload would otherwise reassign the target's prototype.
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      continue
+    }
     if (Object.prototype.hasOwnProperty.call(source, key) as boolean) {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- ignore
       const targetProp = target[key]
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- ignore
       const sourceProp = source[key]
+      // Arrays merge index-wise if treated as objects — a shorter source
+      // leaves stale tail elements behind (unchecking a visibleIntervals
+      // entry duplicated/retained rows). Arrays are atomic values here:
+      // the incoming array replaces the target wholesale.
       if (
         isObject(sourceProp) &&
-        isObject(targetProp)
+        isObject(targetProp) &&
+        !isArray(sourceProp) &&
+        !isArray(targetProp)
       ) {
         merge(targetProp, sourceProp)
       } else {

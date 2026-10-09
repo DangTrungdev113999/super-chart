@@ -86,6 +86,8 @@ export interface TextStyle extends Padding {
 	size: number;
 	family: string;
 	weight: number | string;
+	/** CSS font-style — `style` is the fill/stroke draw mode, not italic. */
+	fontStyle?: "normal" | "italic" | "oblique";
 	borderStyle: LineType;
 	borderDashedValue: number[];
 	borderSize: number;
@@ -1275,20 +1277,51 @@ export interface DrawingToolCapabilities {
  * renders controls in this order; each control is a self-describing slot
  * so no consumer hard-codes button wiring.
  */
+/**
+ * A style write target: `[root, ...keys]` where root selects the overlay
+ * property (`styles` or `extendData`) the path is applied under. Recipes
+ * MUST name a path the tool's renderer actually reads — the role→path
+ * defaults only cover the `styles.line/polygon/rect/text` convention.
+ */
+export type StylePath = [
+	target: "styles" | "extendData",
+	...keys: string[]
+];
+/**
+ * Per-tool override map for the toolbar/schema style surface — keys are
+ * semantic slots, values the live read/write path for that tool.
+ */
+export interface DrawingStylePaths {
+	lineColor?: StylePath;
+	lineWidth?: StylePath;
+	lineStyle?: StylePath;
+	fillColor?: StylePath;
+	backgroundColor?: StylePath;
+	textColor?: StylePath;
+	textSize?: StylePath;
+	textWeight?: StylePath;
+	textStyle?: StylePath;
+	textAlign?: StylePath;
+}
 export type ToolbarControl = {
 	kind: "color";
 	role: "line" | "fill" | "text" | "background";
+	path?: StylePath;
 } | {
 	kind: "style";
 	role: "line" | "text";
+	path?: StylePath;
 } | {
 	kind: "width";
+	path?: StylePath;
 } | {
 	kind: "levels";
 } | {
 	kind: "text";
+	path?: StylePath;
 } | {
 	kind: "textAlign";
+	path?: StylePath;
 } | {
 	kind: "geometry";
 	options: Array<"rect" | "rotated" | "ellipse">;
@@ -1322,6 +1355,9 @@ export interface DrawingToolItem {
 	hotkey?: string;
 	capabilities: DrawingToolCapabilities;
 	toolbarRecipe: ToolbarControl[];
+	/** Live read/write path overrides for the recipe's style controls — the
+	 * toolbar and settings schema both resolve through this map. */
+	stylePaths?: DrawingStylePaths;
 	/** False while a tool is planned but not yet shipped — hosts dim it. */
 	available: boolean;
 	/**
