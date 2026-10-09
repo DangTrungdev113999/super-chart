@@ -230,20 +230,6 @@ function computeRegression (
   }
 }
 
-/**
- * Cheap data signature for the figure cache — catches appends, prepends
- * and realtime close updates without rescanning the range.
- */
-function regressionDataKey (chart: Chart): string {
-  const dataList = chart.getDataList()
-  if (dataList.length === 0) {
-    return '0'
-  }
-  const first = dataList[0]
-  const last = dataList[dataList.length - 1]
-  return `${dataList.length}|${first.timestamp}|${last.timestamp}|${last.close}`
-}
-
 function toPixelPoints (
   chart: Chart,
   paneId: string,
@@ -495,7 +481,10 @@ const regressionTrend: OverlayTemplate<RegressionTrendExtendData> = {
     // ─── Anchors sit ON the fitted line (TradingView _updateAnchorsPrice
     // keeps the stored prices snapped after every recompute). ───
     figures.push(...createAnchorFigures({
-      coordinates: [regS, regE],
+      // Anchor N sits on the stored point's OWN side — for R→L draws
+      // (fit.i1 > fit.i2) points[0] is the fit END, so swap order or the
+      // left handle would silently write the right-side point.
+      coordinates: fit.i1 <= fit.i2 ? [regS, regE] : [regE, regS],
       isSelected,
       isHovered,
       isDrawing: false,
@@ -504,10 +493,7 @@ const regressionTrend: OverlayTemplate<RegressionTrendExtendData> = {
       cursors: ['move', 'move']
     }))
     return figures
-  }, {
-    slot: 'point',
-    extraKey: ({ chart }) => regressionDataKey(chart)
-  }),
+  }, { slot: 'point' }),
 
   createXAxisFigures: ({ chart, overlay, coordinates }) => {
     rememberLineChart(overlay, chart)
@@ -570,10 +556,7 @@ const regressionTrend: OverlayTemplate<RegressionTrendExtendData> = {
       }
     }
     return figures
-  }, {
-    slot: 'y',
-    extraKey: ({ chart }) => regressionDataKey(chart)
-  }),
+  }, { slot: 'y' }),
 
   performEventPressedMove: function (this: Overlay<RegressionTrendExtendData>, params) {
     snapAnchorsToFit(this, params.points)

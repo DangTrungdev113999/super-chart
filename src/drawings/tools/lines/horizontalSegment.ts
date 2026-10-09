@@ -204,6 +204,10 @@ const horizontalSegment: OverlayTemplate<HorizSegmentExtendData> = {
   },
 
   performEventPressedMove: function (this: Overlay<HorizSegmentExtendData>, params) {
+    // A truncated point-array write (sync/API) must not crash the hook.
+    if (params.points.length < 2) {
+      return
+    }
     // Anchor drags re-level the whole segment (both endpoints share y).
     params.points[0].value = params.performPoint.value
     params.points[1].value = params.performPoint.value
