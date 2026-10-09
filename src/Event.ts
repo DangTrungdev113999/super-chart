@@ -701,6 +701,9 @@ export default class Event implements EventHandler {
 
   touchMoveEvent (e: MouseTouchEvent): boolean {
     if (this._mouseDownWidget !== null && this._mouseDownWidget.getName() === WidgetNameConstants.SEPARATOR) {
+      // Same claim as the main/axis branches — without preventDefault the
+      // browser may scroll the page (or cancel the touch) mid-resize.
+      e.preventDefault?.()
       return this._mouseDownWidget.dispatchEvent('pressedMouseMoveEvent', e)
     }
     const { pane, widget } = this._findWidgetByEvent(e)
@@ -992,9 +995,12 @@ export default class Event implements EventHandler {
   private _processYAxisScalingEvent (widget: Widget<DrawPane<YAxis>>, event: MouseTouchEvent): boolean {
     const consumed = widget.dispatchEvent('pressedMouseMoveEvent', event)
     if (!consumed) {
+      // Claim every Y-axis drag, not just armed-scale drags — otherwise a
+      // touch drag with scrollZoomEnabled=false scrolls the page mid-gesture
+      // (X_AXIS prevents unconditionally).
+      event.preventDefault?.()
       const yAxis = widget.getPane().getAxisComponent()
       if (this._prevYAxisRange !== null && yAxis.scrollZoomEnabled && this._yAxisStartScaleDistance !== 0) {
-        event.preventDefault?.()
         const { from, to, range } = this._prevYAxisRange
         const scale = event.pageY / this._yAxisStartScaleDistance
         // pageY can hit 0 or go negative when the drag leaves the viewport —

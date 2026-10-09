@@ -291,6 +291,10 @@ export default class OverlayView<C extends Axis = YAxis> extends View<C> {
           }
           // Gesture commit boundary — pairs with 'editStart' emitted on press.
           chartStore.executeAction('onOverlayChange', { type: 'editEnd', overlay })
+          // Consumed so the dispatcher repaints — commit writes like
+          // anchoredText's fraction re-capture must paint this frame, not
+          // wait for the next interaction.
+          consumed = true
         }
       }
       freehandLastCoord = null

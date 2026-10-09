@@ -635,11 +635,17 @@ export default class EventHandlerImp {
     // A cancelled pinch leaves the middle coordinate armed — the next
     // touchstart's _checkPinchState would run _stopPinch on a dead pinch
     // and poison the fresh scroll anchor via pinchEndEvent.
+    const wasPinching = this._startPinchMiddleCoordinate !== null
     this._startPinchMiddleCoordinate = null
     this._startPinchDistance = 0
     if (this._unsubscribeRootTouchEvents !== null) {
       this._unsubscribeRootTouchEvents()
       this._unsubscribeRootTouchEvents = null
+    }
+    if (wasPinching && isValid(this._handler.pinchEndEvent)) {
+      // Close the pinch formally — disarms the scroll anchor so the
+      // synthetic touchEnd below can't compute a fling from a pinch delta.
+      this._handler.pinchEndEvent({ x: 0, y: 0, pageX: 0, pageY: 0 }, 0)
     }
     this._processEvent(this._makeCompatEvent(touchCancelEvent, touch), this._handler.touchEndEvent)
   }

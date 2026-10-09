@@ -24518,6 +24518,12 @@ var StoreImp = /** @class */ (function () {
                 updatePaneIds.push(paneId);
             }
             _this._clearOverlayInteractionSlots(overlay);
+            // Slot clearing runs host hooks (deselect) that may cascade into a
+            // nested removeOverlay for this same overlay — the inner pass already
+            // unregistered and emitted, so bail before splicing/firing twice.
+            if (_this._overlayById.get(overlay.id) !== overlay) {
+                return;
+            }
             var index = paneOverlays.findIndex(function (o) { return o.id === overlay.id; });
             if (index === -1) {
                 try {
@@ -24622,7 +24628,9 @@ var StoreImp = /** @class */ (function () {
                 if (sortFlag) {
                     this._sortOverlays();
                 }
-                if (!ignoreUpdateFlag) {
+                // A zLevel restore/bump re-sorted the stack — that repaint must not
+                // be suppressed just because a hover hook claimed the frame.
+                if (!ignoreUpdateFlag || sortFlag) {
                     this._chart.updatePane(1 /* UpdateLevel.Overlay */);
                 }
             }
@@ -27364,6 +27372,10 @@ var OverlayView = /** @class */ (function (_super) {
                     }
                     // Gesture commit boundary — pairs with 'editStart' emitted on press.
                     chartStore.executeAction('onOverlayChange', { type: 'editEnd', overlay: overlay });
+                    // Consumed so the dispatcher repaints — commit writes like
+                    // anchoredText's fraction re-capture must paint this frame, not
+                    // wait for the next interaction.
+                    consumed = true;
                 }
             }
             freehandLastCoord = null;
@@ -32027,11 +32039,17 @@ var EventHandlerImp = /** @class */ (function () {
         // A cancelled pinch leaves the middle coordinate armed — the next
         // touchstart's _checkPinchState would run _stopPinch on a dead pinch
         // and poison the fresh scroll anchor via pinchEndEvent.
+        var wasPinching = this._startPinchMiddleCoordinate !== null;
         this._startPinchMiddleCoordinate = null;
         this._startPinchDistance = 0;
         if (this._unsubscribeRootTouchEvents !== null) {
             this._unsubscribeRootTouchEvents();
             this._unsubscribeRootTouchEvents = null;
+        }
+        if (wasPinching && isValid(this._handler.pinchEndEvent)) {
+            // Close the pinch formally — disarms the scroll anchor so the
+            // synthetic touchEnd below can't compute a fling from a pinch delta.
+            this._handler.pinchEndEvent({ x: 0, y: 0, pageX: 0, pageY: 0 }, 0);
         }
         this._processEvent(this._makeCompatEvent(touchCancelEvent, touch), this._handler.touchEndEvent);
     };
@@ -33072,30 +33090,33 @@ var Event = /** @class */ (function () {
         return false;
     };
     Event.prototype.touchMoveEvent = function (e) {
-        var _a, _b, _c, _d, _e, _f;
+        var _a, _b, _c, _d, _e, _f, _g;
         if (this._mouseDownWidget !== null && this._mouseDownWidget.getName() === WidgetNameConstants.SEPARATOR) {
+            // Same claim as the main/axis branches — without preventDefault the
+            // browser may scroll the page (or cancel the touch) mid-resize.
+            (_a = e.preventDefault) === null || _a === void 0 ? void 0 : _a.call(e);
             return this._mouseDownWidget.dispatchEvent('pressedMouseMoveEvent', e);
         }
-        var _g = this._findWidgetByEvent(e), pane = _g.pane, widget = _g.widget;
+        var _h = this._findWidgetByEvent(e), pane = _h.pane, widget = _h.widget;
         // Same identity gate as pressedMouseMoveEvent — a touch gesture is
         // widget-local: without it a freehand stroke sliding across a pane
         // boundary writes points in the wrong pane's coordinate space.
         if (widget !== null &&
-            ((_a = this._mouseDownWidget) === null || _a === void 0 ? void 0 : _a.getPane().getId()) === (pane === null || pane === void 0 ? void 0 : pane.getId()) &&
-            ((_b = this._mouseDownWidget) === null || _b === void 0 ? void 0 : _b.getName()) === widget.getName()) {
+            ((_b = this._mouseDownWidget) === null || _b === void 0 ? void 0 : _b.getPane().getId()) === (pane === null || pane === void 0 ? void 0 : pane.getId()) &&
+            ((_c = this._mouseDownWidget) === null || _c === void 0 ? void 0 : _c.getName()) === widget.getName()) {
             var event_10 = this._makeWidgetEvent(e, widget);
             var name_8 = widget.getName();
             var chartStore = this._chart.getChartStore();
             switch (name_8) {
                 case WidgetNameConstants.MAIN: {
                     if (widget.dispatchEvent('pressedMouseMoveEvent', event_10)) {
-                        (_c = event_10.preventDefault) === null || _c === void 0 ? void 0 : _c.call(event_10);
+                        (_d = event_10.preventDefault) === null || _d === void 0 ? void 0 : _d.call(event_10);
                         chartStore.setCrosshair(undefined, { notInvalidate: true });
                         this._chart.updatePane(1 /* UpdateLevel.Overlay */);
                         return true;
                     }
                     if (this._touchCoordinate !== null) {
-                        (_d = event_10.preventDefault) === null || _d === void 0 ? void 0 : _d.call(event_10);
+                        (_e = event_10.preventDefault) === null || _e === void 0 ? void 0 : _e.call(event_10);
                         chartStore.setCrosshair({ x: event_10.x, y: event_10.y, paneId: pane === null || pane === void 0 ? void 0 : pane.getId() });
                     }
                     else {
@@ -33103,13 +33124,13 @@ var Event = /** @class */ (function () {
                         // scroll-drag lets the browser scroll the page underneath the
                         // gesture (or cancel it mid-flight) since no touch-action CSS
                         // is guaranteed by hosts.
-                        (_e = event_10.preventDefault) === null || _e === void 0 ? void 0 : _e.call(event_10);
+                        (_f = event_10.preventDefault) === null || _f === void 0 ? void 0 : _f.call(event_10);
                         this._processMainScrollingEvent(widget, event_10);
                     }
                     return true;
                 }
                 case WidgetNameConstants.X_AXIS: {
-                    (_f = event_10.preventDefault) === null || _f === void 0 ? void 0 : _f.call(event_10);
+                    (_g = event_10.preventDefault) === null || _g === void 0 ? void 0 : _g.call(event_10);
                     return this._processXAxisScrollingEvent(widget, event_10);
                 }
                 case WidgetNameConstants.Y_AXIS: {
@@ -33361,9 +33382,12 @@ var Event = /** @class */ (function () {
         var _a;
         var consumed = widget.dispatchEvent('pressedMouseMoveEvent', event);
         if (!consumed) {
+            // Claim every Y-axis drag, not just armed-scale drags — otherwise a
+            // touch drag with scrollZoomEnabled=false scrolls the page mid-gesture
+            // (X_AXIS prevents unconditionally).
+            (_a = event.preventDefault) === null || _a === void 0 ? void 0 : _a.call(event);
             var yAxis = widget.getPane().getAxisComponent();
             if (this._prevYAxisRange !== null && yAxis.scrollZoomEnabled && this._yAxisStartScaleDistance !== 0) {
-                (_a = event.preventDefault) === null || _a === void 0 ? void 0 : _a.call(event);
                 var _b = this._prevYAxisRange, from = _b.from, to = _b.to, range = _b.range;
                 var scale = event.pageY / this._yAxisStartScaleDistance;
                 // pageY can hit 0 or go negative when the drag leaves the viewport —
@@ -44647,6 +44671,10 @@ var horizontalSegment = {
         });
     },
     performEventPressedMove: function (params) {
+        // A truncated point-array write (sync/API) must not crash the hook.
+        if (params.points.length < 2) {
+            return;
+        }
         // Anchor drags re-level the whole segment (both endpoints share y).
         params.points[0].value = params.performPoint.value;
         params.points[1].value = params.performPoint.value;
@@ -47604,19 +47632,6 @@ function computeRegression(chart, overlay, cfg) {
         prices: prices
     };
 }
-/**
- * Cheap data signature for the figure cache — catches appends, prepends
- * and realtime close updates without rescanning the range.
- */
-function regressionDataKey(chart) {
-    var dataList = chart.getDataList();
-    if (dataList.length === 0) {
-        return '0';
-    }
-    var first = dataList[0];
-    var last = dataList[dataList.length - 1];
-    return "".concat(dataList.length, "|").concat(first.timestamp, "|").concat(last.timestamp, "|").concat(last.close);
-}
 function toPixelPoints(chart, paneId, points) {
     var converted = chart.convertToPixel(points, { paneId: paneId });
     return isArray(converted) ? converted : [converted];
@@ -47851,7 +47866,10 @@ var regressionTrend = {
         // ─── Anchors sit ON the fitted line (TradingView _updateAnchorsPrice
         // keeps the stored prices snapped after every recompute). ───
         figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
-            coordinates: [regS, regE],
+            // Anchor N sits on the stored point's OWN side — for R→L draws
+            // (fit.i1 > fit.i2) points[0] is the fit END, so swap order or the
+            // left handle would silently write the right-side point.
+            coordinates: fit.i1 <= fit.i2 ? [regS, regE] : [regE, regS],
             isSelected: isSelected,
             isHovered: isHovered,
             isDrawing: false,
@@ -47860,13 +47878,7 @@ var regressionTrend = {
             cursors: ['move', 'move']
         })), false));
         return figures;
-    }, {
-        slot: 'point',
-        extraKey: function (_a) {
-            var chart = _a.chart;
-            return regressionDataKey(chart);
-        }
-    }),
+    }, { slot: 'point' }),
     createXAxisFigures: function (_a) {
         var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates;
         rememberLineChart(overlay, chart);
@@ -47926,13 +47938,7 @@ var regressionTrend = {
             }
         }
         return figures;
-    }, {
-        slot: 'y',
-        extraKey: function (_a) {
-            var chart = _a.chart;
-            return regressionDataKey(chart);
-        }
-    }),
+    }, { slot: 'y' }),
     performEventPressedMove: function (params) {
         snapAnchorsToFit(this, params.points);
     },

@@ -1722,6 +1722,12 @@ export default class StoreImp implements Store {
         updatePaneIds.push(paneId)
       }
       this._clearOverlayInteractionSlots(overlay)
+      // Slot clearing runs host hooks (deselect) that may cascade into a
+      // nested removeOverlay for this same overlay — the inner pass already
+      // unregistered and emitted, so bail before splicing/firing twice.
+      if (this._overlayById.get(overlay.id) !== overlay) {
+        return
+      }
       let index = paneOverlays.findIndex(o => o.id === overlay.id)
       if (index === -1) {
         // overlay.paneId may have drifted from the map key (host-side field
@@ -1824,7 +1830,9 @@ export default class StoreImp implements Store {
         if (sortFlag) {
           this._sortOverlays()
         }
-        if (!ignoreUpdateFlag) {
+        // A zLevel restore/bump re-sorted the stack — that repaint must not
+        // be suppressed just because a hover hook claimed the frame.
+        if (!ignoreUpdateFlag || sortFlag) {
           this._chart.updatePane(UpdateLevel.Overlay)
         }
       }
