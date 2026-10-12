@@ -1154,7 +1154,69 @@ export interface FloatingToolbarHooks {
 	onTextEdit?: (overlay: Overlay) => void;
 	/** Per-tool action injection (TV's source-actions slot). */
 	additionalActions?: (overlay: Overlay) => ToolbarSourceAction[];
+	/**
+	 * Host veto — return false to keep the floating toolbar hidden for an
+	 * overlay (e.g. a host-owned template whose own settings UI handles it).
+	 * Called on every selection; hiding takes precedence over showing.
+	 */
+	shouldShow?: (overlay: Overlay) => boolean;
 }
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * Shared drawing keyboard layer. One binding feeds the drawings manager;
+ * individual tools never attach their own listeners.
+ *
+ * TradingView key map:
+ *   Esc               — cancel in-progress drawing (unlimited-step tools
+ *                       complete instead); commit open text edits
+ *   Delete/Backspace  — remove the selected drawing
+ *   Ctrl/Cmd+Z        — undo last committed gesture
+ *   Ctrl/Cmd+Shift+Z  — redo
+ *   Ctrl/Cmd+C / V    — copy / paste-clone the selection
+ */
+export interface DrawingKeyboardHandlers {
+	onEscape?: () => void;
+	/** Return true when a drawing was actually removed — only then is the key swallowed. */
+	onDelete?: () => boolean;
+	onUndo?: () => void;
+	onRedo?: () => void;
+	/** Return true when a drawing was copied — only then is the key swallowed. */
+	onCopy?: () => boolean;
+	/** Return true when a drawing was pasted — only then is the key swallowed. */
+	onPaste?: () => boolean;
+	/**
+	 * Unmodified single-key press (letter/digit) — tool hotkeys. The handler
+	 * decides whether the key maps to a tool; returning nothing keeps the
+	 * event unhandled for the browser.
+	 */
+	onHotkey?: (key: string) => void;
+}
+export interface DrawingKeyboardOptions {
+	/**
+	 * Optional gate — return false to skip dispatch (e.g. chart not focused,
+	 * another pane owns the keys). Defaults to always dispatch.
+	 */
+	isActive?: () => boolean;
+	/** Binding target — defaults to `document` (SSR-safe no-op). */
+	target?: Document | HTMLElement;
+}
+/**
+ * Bind the shared keyboard layer. Returns an unbind function.
+ * Guards: editable DOM targets and IME composition never reach handlers.
+ */
+export declare function bindDrawingKeyboard(handlers: DrawingKeyboardHandlers, options?: DrawingKeyboardOptions): () => void;
 export type FormatDateType = "tooltip" | "crosshair" | "xAxis";
 export interface FormatDateParams {
 	dateTimeFormat: Intl.DateTimeFormat;
@@ -1218,8 +1280,13 @@ export interface DrawingsOptions {
 	store?: DrawingStore | null;
 	/** Floating toolbar: `false` disables, object supplies hooks. */
 	toolbar?: boolean | FloatingToolbarHooks;
-	/** Shared drawing keyboard layer — `false` disables (default on). */
-	keyboard?: boolean;
+	/**
+	 * Shared drawing keyboard layer — `false` disables (default on). Object
+	 * form forwards {@link DrawingKeyboardOptions}: `isActive` gates every
+	 * handler (multi-chart hosts gate keys to the focused chart) and `target`
+	 * overrides the document binding target.
+	 */
+	keyboard?: boolean | DrawingKeyboardOptions;
 	/** Persistence partition override — defaults to chart symbol. */
 	scope?: () => DrawingScope;
 	/** Tool names that render but are never listed/persisted/undone. */
@@ -1266,6 +1333,12 @@ export interface Options {
  * generic 'tool' glyph so a tool is never invisible in a toolbar.
  */
 export type DrawingIconId = string;
+/**
+ * Register a host-supplied icon (inline SVG markup) under an id — for
+ * `extraGroups` palette items or custom tool buttons. Later calls with the
+ * same id overwrite.
+ */
+export declare function registerDrawingIcon(iconId: DrawingIconId, svgMarkup: string): void;
 /**
  * Drawing-tool catalog — the single registry a host toolbar/settings UI
  * reads from. Structure mirrors TradingView's `groups → sections → items`
@@ -1379,6 +1452,11 @@ export interface DrawingToolItem {
 	 * interaction state instead of arming an overlay template.
 	 */
 	nonTool?: boolean;
+	/**
+	 * Arm-time extendData forwarded to `api.activate` — extra-group tools
+	 * (host-registered templates) seed their own defaults this way.
+	 */
+	extendData?: unknown;
 }
 export interface DrawingToolSection {
 	id: string;
@@ -1416,6 +1494,31 @@ export interface ToolPaletteOptions {
 	 */
 	groups?: string[];
 	/**
+	 * Host-defined groups appended to the rail — for tools the host
+	 * registers itself (`chart.registerOverlay`) instead of shipping in the
+	 * catalog. Items arm via `api.activate(<overlayName>)`, so `overlayName`
+	 * must be a registered overlay template name.
+	 */
+	extraGroups?: Array<{
+		id: string;
+		/** Rail icon when the group's last-used memory is empty. */
+		iconId?: string;
+		/** Insert before ('start') or after ('end') catalog groups. Default 'end'. */
+		position?: "start" | "end";
+		items: Array<{
+			/** Defaults to `overlayName` — ids only need uniqueness within the rail. */
+			id?: string;
+			overlayName: string;
+			title: string;
+			iconId?: string;
+			hotkey?: string;
+			/** Default true — set false to render a disabled row. */
+			available?: boolean;
+			/** Forwarded to `api.activate(name, { extendData })`. */
+			extendData?: unknown;
+		}>;
+	}>;
+	/**
 	 * Show the chrome footer (magnet / stay-in-drawing / lock / hide /
 	 * remove-all). Default true.
 	 */
@@ -1426,6 +1529,12 @@ export interface ToolPaletteOptions {
 	 * (deactivate the armed tool).
 	 */
 	onNonTool?: (item: DrawingToolItem) => boolean | undefined;
+	/**
+	 * Intercept tool arming. Return true to mark handled — the palette skips
+	 * `api.activate` (the host runs its own input path, e.g. DOM-level
+	 * freehand collection instead of the kernel's armed overlay).
+	 */
+	onArmTool?: (item: DrawingToolItem) => boolean | undefined;
 }
 export interface ToolPalette {
 	destroy: () => void;
@@ -1491,13 +1600,16 @@ export interface DrawingsApi extends DrawingManager {
 	/**
 	 * Arm a tool by catalog id ('trendLine') or kernel name ('segment').
 	 * Catalog ids resolve through the registry; unknown ids fall through to
-	 * the raw overlay name for extension templates.
+	 * the raw overlay name for extension templates. `raw: true` skips catalog
+	 * resolution entirely — for host templates whose name collides with a
+	 * catalog id.
 	 */
 	activate: (tool: string, opts?: {
 		continuous?: boolean;
 		extendData?: unknown;
 		points?: OverlayCreate["points"];
 		mode?: OverlayCreate["mode"];
+		raw?: boolean;
 	}) => Nullable<string>;
 	/**
 	 * Validating programmatic create.
@@ -1546,6 +1658,12 @@ export interface DrawingsApi extends DrawingManager {
 	 * destroyed with the api. Returns a handle for early teardown.
 	 */
 	mountToolbar: (container: HTMLElement, opts?: ToolPaletteOptions) => ToolPalette;
+	/**
+	 * Bind a bare-key shortcut to a raw overlay name (host tools not in the
+	 * catalog — e.g. `extraGroups` items). The tool palette registers its
+	 * extras' hotkeys automatically; hosts can call it directly too.
+	 */
+	registerToolHotkey: (key: string, overlayName: string) => void;
 	configure: (opts: DrawingsConfigureOptions) => void;
 }
 export type DomPosition = "root" | "main" | "yAxis";
@@ -2239,62 +2357,6 @@ export declare function isSnap45Active(chart: Chart, event?: Partial<MouseTouchE
  * Operates in pixel space — convert Point↔Coordinate at the call site.
  */
 export declare function snap45Coordinate(to: Coordinate, from: Coordinate): Coordinate;
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-/**
- * Shared drawing keyboard layer. One binding feeds the drawings manager;
- * individual tools never attach their own listeners.
- *
- * TradingView key map:
- *   Esc               — cancel in-progress drawing (unlimited-step tools
- *                       complete instead); commit open text edits
- *   Delete/Backspace  — remove the selected drawing
- *   Ctrl/Cmd+Z        — undo last committed gesture
- *   Ctrl/Cmd+Shift+Z  — redo
- *   Ctrl/Cmd+C / V    — copy / paste-clone the selection
- */
-export interface DrawingKeyboardHandlers {
-	onEscape?: () => void;
-	/** Return true when a drawing was actually removed — only then is the key swallowed. */
-	onDelete?: () => boolean;
-	onUndo?: () => void;
-	onRedo?: () => void;
-	/** Return true when a drawing was copied — only then is the key swallowed. */
-	onCopy?: () => boolean;
-	/** Return true when a drawing was pasted — only then is the key swallowed. */
-	onPaste?: () => boolean;
-	/**
-	 * Unmodified single-key press (letter/digit) — tool hotkeys. The handler
-	 * decides whether the key maps to a tool; returning nothing keeps the
-	 * event unhandled for the browser.
-	 */
-	onHotkey?: (key: string) => void;
-}
-export interface DrawingKeyboardOptions {
-	/**
-	 * Optional gate — return false to skip dispatch (e.g. chart not focused,
-	 * another pane owns the keys). Defaults to always dispatch.
-	 */
-	isActive?: () => boolean;
-	/** Binding target — defaults to `document` (SSR-safe no-op). */
-	target?: Document | HTMLElement;
-}
-/**
- * Bind the shared keyboard layer. Returns an unbind function.
- * Guards: editable DOM targets and IME composition never reach handlers.
- */
-export declare function bindDrawingKeyboard(handlers: DrawingKeyboardHandlers, options?: DrawingKeyboardOptions): () => void;
 export interface FigureCacheOptions<E> {
 	/**
 	 * Extra signature material — MANDATORY for anything the template reads
