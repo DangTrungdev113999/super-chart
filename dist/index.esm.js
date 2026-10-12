@@ -11125,7 +11125,7 @@ function findCatalogItemByOverlay(overlayName) {
 }
 var DRAWING_CHROME = [
     { id: 'magnet', title: 'Magnet Mode', iconId: 'magnet', kind: 'toggle' },
-    { id: 'stayInDrawing', title: 'Stay in Drawing Mode', iconId: 'cursor', kind: 'toggle' },
+    { id: 'stayInDrawing', title: 'Stay in Drawing Mode', iconId: 'stayDrawing', kind: 'toggle' },
     { id: 'lockAll', title: 'Lock All Drawings', iconId: 'lock', kind: 'toggle' },
     { id: 'hideAll', title: 'Hide All Drawings', iconId: 'hide', kind: 'toggle' },
     { id: 'removeAll', title: 'Remove All Drawings', iconId: 'remove', kind: 'action' }
@@ -11349,6 +11349,15 @@ var ICONS = {
     hide: "".concat(SVG_OPEN, "<path d=\"M4 14s4-6 10-6 10 6 10 6-4 6-10 6S4 14 4 14z\"/><path d=\"M5 5l18 18\"/></svg>"),
     remove: "".concat(SVG_OPEN, "<path d=\"M6 8h16M11 8V5h6v3M9 8l1 14h8l1-14\"/></svg>"),
     settings: "".concat(SVG_OPEN, "<circle cx=\"14\" cy=\"14\" r=\"3\"/><path d=\"M14 4v3M14 21v3M4 14h3M21 14h3M6.9 6.9l2.1 2.1M19 19l2.1 2.1M21.1 6.9L19 9M9 19l-2.1 2.1\"/></svg>"),
+    more: "".concat(SVG_OPEN, "<circle cx=\"6.5\" cy=\"14\" r=\"1.5\" fill=\"currentColor\" stroke=\"none\"/><circle cx=\"14\" cy=\"14\" r=\"1.5\" fill=\"currentColor\" stroke=\"none\"/><circle cx=\"21.5\" cy=\"14\" r=\"1.5\" fill=\"currentColor\" stroke=\"none\"/></svg>"),
+    caretDown: "".concat(SVG_OPEN, "<path d=\"M9 11l5 5 5-5\"/></svg>"),
+    caretRight: "".concat(SVG_OPEN, "<path fill=\"currentColor\" stroke=\"none\" d=\"M9.6 6.4l1.4-1.4 8 8-8 8-1.4-1.4 6.4-6.6z\"/></svg>"),
+    show: "".concat(SVG_OPEN, "<path d=\"M4 14s4-6 10-6 10 6 10 6-4 6-10 6S4 14 4 14z\"/><circle cx=\"14\" cy=\"14\" r=\"2.5\"/></svg>"),
+    clone: "".concat(SVG_OPEN, "<rect x=\"10\" y=\"10\" width=\"14\" height=\"14\" rx=\"2\"/><path d=\"M18 10V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4\"/></svg>"),
+    colorLine: "".concat(SVG_OPEN, "<path d=\"M19.4 4.1a1.9 1.9 0 0 1 2.7 0l1.1 1.1a1.9 1.9 0 0 1 0 2.7l-1.4 1.4-3.8-3.8z\"/><path d=\"M17 8l3.8 3.8L10 22.6l-5.3 1.5L6.2 18.8z\"/></svg>"),
+    fill: "".concat(SVG_OPEN, "<path d=\"M13 3l9.5 9.5-9.5 9.5L3.5 12.5z\"/><path d=\"M22 20c1.5 2 1.5 4 0 5.2-1.5-1.2-1.5-3.2 0-5.2z\" fill=\"currentColor\" stroke=\"none\"/></svg>"),
+    background: "".concat(SVG_OPEN, "<rect x=\"5\" y=\"5\" width=\"18\" height=\"18\" rx=\"2\"/></svg>"),
+    stayDrawing: "".concat(SVG_OPEN, "<path d=\"M4 17l1-4 10-10 3 3-10 10-4 1z\"/><rect x=\"16\" y=\"17\" width=\"9\" height=\"7\" rx=\"1.5\"/><path d=\"M18.5 17v-2a2 2 0 0 1 4 0v2\"/></svg>"),
     tool: "".concat(SVG_OPEN, "<path d=\"M17 4a5 5 0 0 0-6.6 6.6L5 16l6 6 5.4-5.4A5 5 0 0 0 24 11l-4 4-4-1-1-4 4-4a5 5 0 0 0-2-2z\"/></svg>")
 };
 // Own-key set — `in` walks the prototype chain, so ids like 'constructor'
@@ -11397,7 +11406,7 @@ var PALETTE = [
     '#ffeb3b', '#ff9800', '#f23645', '#e91e63',
     '#9c27b0', '#673ab7'
 ];
-var CSS = "\n.sc-drw-toolbar {\n  position: absolute;\n  top: 0;\n  left: 0;\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  padding: 2px 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  line-height: 1;\n  user-select: none;\n  white-space: nowrap;\n  will-change: transform;\n}\n.sc-drw-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 26px;\n  height: 26px;\n  padding: 0;\n  margin: 0;\n  border: none;\n  border-radius: 3px;\n  background: transparent;\n  color: #d1d4dc;\n  cursor: pointer;\n}\n.sc-drw-btn:hover { background: #2a2e39; color: #ffffff; }\n.sc-drw-btn:active { background: #363c4e; }\n.sc-drw-btn[data-on=\"true\"] { color: #2962ff; }\n.sc-drw-btn[data-on=\"true\"]:hover { color: #4c7dff; }\n.sc-drw-btn svg { display: block; width: 16px; height: 16px; }\n.sc-drw-btn--wide { width: auto; padding: 0 6px; font-size: 11px; }\n.sc-drw-grip {\n  cursor: grab;\n  color: #5d6372;\n  width: 14px;\n}\n.sc-drw-grip:active { cursor: grabbing; }\n.sc-drw-sep {\n  width: 1px;\n  height: 18px;\n  margin: 0 2px;\n  background: #2a2e39;\n}\n.sc-drw-swatch {\n  width: 14px;\n  height: 14px;\n  border-radius: 2px;\n  border: 1px solid rgba(255, 255, 255, 0.25);\n}\n.sc-drw-menu {\n  position: absolute;\n  top: 0;\n  left: 0;\n  min-width: 120px;\n  padding: 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  z-index: 10;\n}\n.sc-drw-menu-item {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  width: 100%;\n  padding: 5px 8px;\n  border: none;\n  border-radius: 3px;\n  background: transparent;\n  color: inherit;\n  font: inherit;\n  text-align: left;\n  cursor: pointer;\n}\n.sc-drw-menu-item:hover { background: #2a2e39; }\n.sc-drw-menu-item[data-on=\"true\"] { color: #4c7dff; }\n.sc-drw-menu-item svg { width: 14px; height: 14px; flex: none; }\n.sc-drw-menu-label {\n  padding: 4px 8px 2px;\n  color: #787b86;\n  font-size: 10px;\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n}\n.sc-drw-palette {\n  display: grid;\n  grid-template-columns: repeat(7, 18px);\n  gap: 4px;\n  padding: 4px;\n}\n.sc-drw-palette-cell {\n  width: 18px;\n  height: 18px;\n  padding: 0;\n  border: 1px solid rgba(255, 255, 255, 0.12);\n  border-radius: 2px;\n  cursor: pointer;\n}\n.sc-drw-palette-cell:hover { transform: scale(1.15); border-color: #ffffff; }\n.sc-drw-palette--inline {\n  display: none;\n  position: absolute;\n  top: 100%;\n  left: 0;\n  margin-top: 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);\n  z-index: 5;\n}\n.sc-drw-field:hover .sc-drw-palette--inline { display: grid; }\n.sc-drw-dialog {\n  position: absolute;\n  top: 0;\n  left: 0;\n  width: 240px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 6px;\n  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  user-select: none;\n  will-change: transform;\n  z-index: 20;\n}\n.sc-drw-dialog-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 6px 8px;\n  font-weight: 600;\n  cursor: grab;\n  border-bottom: 1px solid #2a2e39;\n}\n.sc-drw-dialog-header:active { cursor: grabbing; }\n.sc-drw-dialog-tabs {\n  display: flex;\n  gap: 2px;\n  padding: 4px 6px 0;\n  border-bottom: 1px solid #2a2e39;\n}\n.sc-drw-dialog-tab {\n  padding: 4px 8px;\n  border: none;\n  border-radius: 3px 3px 0 0;\n  background: transparent;\n  color: #787b86;\n  font: inherit;\n  cursor: pointer;\n}\n.sc-drw-dialog-tab:hover { color: #d1d4dc; }\n.sc-drw-dialog-tab[data-on=\"true\"] {\n  color: #ffffff;\n  background: #2a2e39;\n}\n.sc-drw-dialog-body {\n  max-height: 320px;\n  overflow-y: auto;\n  padding: 8px;\n}\n.sc-drw-section {\n  padding: 6px 2px 3px;\n  color: #787b86;\n  font-size: 10px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n}\n.sc-drw-field {\n  position: relative;\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  padding: 3px 2px;\n  min-height: 24px;\n}\n.sc-drw-field-label {\n  flex: 1;\n  color: #9aa0ae;\n}\n.sc-drw-field-control {\n  position: relative;\n  display: flex;\n  align-items: center;\n  gap: 6px;\n}\n.sc-drw-input {\n  width: 110px;\n  padding: 3px 6px;\n  border: 1px solid #2a2e39;\n  border-radius: 3px;\n  background: #131722;\n  color: #d1d4dc;\n  font: inherit;\n}\n.sc-drw-input:focus { outline: none; border-color: #2962ff; }\n.sc-drw-input--narrow { width: 64px; }\n.sc-drw-color {\n  width: 26px;\n  height: 22px;\n  padding: 0;\n  border: 1px solid #2a2e39;\n  border-radius: 3px;\n  background: transparent;\n  cursor: pointer;\n}\n.sc-drw-levels {\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n  width: 100%;\n}\n.sc-drw-level-row {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  padding: 2px 0;\n}\n/* \u2500\u2500 Left tool palette (toolPalette.ts) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */\n.sc-drw-tools {\n  position: relative;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 2px;\n  width: 40px;\n  height: 100%;\n  padding: 4px 0;\n  background: #1e222d;\n  border-right: 1px solid #2a2e39;\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  line-height: 1;\n  user-select: none;\n  overflow-y: auto;\n  overflow-x: hidden;\n  scrollbar-width: thin;\n}\n.sc-drw-tools-group {\n  position: relative;\n  display: flex;\n}\n.sc-drw-tools-btn {\n  width: 32px;\n  height: 32px;\n}\n.sc-drw-tools-btn svg { width: 18px; height: 18px; }\n.sc-drw-tools-icon {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n}\n.sc-drw-tools-icon svg { display: block; }\n.sc-drw-tools-caret {\n  position: absolute;\n  right: -1px;\n  bottom: -1px;\n  /* invisible but generous hit area \u2014 the visible triangle stays 4px. */\n  width: 16px;\n  height: 14px;\n  padding: 0;\n  margin: 0;\n  border: none;\n  background: transparent;\n  cursor: pointer;\n}\n.sc-drw-tools-caret::before {\n  content: '';\n  position: absolute;\n  right: 1px;\n  bottom: 1px;\n  border-left: 4px solid transparent;\n  border-bottom: 4px solid #5d6372;\n}\n.sc-drw-tools-caret:hover::before { border-bottom-color: #d1d4dc; }\n.sc-drw-tools-group:hover .sc-drw-tools-caret::before { border-bottom-color: #9598a1; }\n.sc-drw-tools-chrome {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 2px;\n  margin-top: auto;\n  padding-top: 4px;\n  border-top: 1px solid #2a2e39;\n}\n.sc-drw-flyout {\n  /* position:fixed + document.body \u2014 the palette's rail can scroll\n     (overflow-y:auto) so an in-rail flyout would be clipped. */\n  position: fixed;\n  min-width: 190px;\n  max-height: calc(100vh - 16px);\n  overflow-y: auto;\n  padding: 4px;\n  background: #1e222d;\n  border: 1px solid #2a2e39;\n  border-radius: 4px;\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);\n  color: #d1d4dc;\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n  font-size: 11px;\n  z-index: 20;\n}\n.sc-drw-flyout-item {\n  padding: 6px 8px;\n}\n.sc-drw-flyout-item--disabled {\n  opacity: 0.4;\n  cursor: default;\n}\n.sc-drw-flyout-item--disabled:hover { background: transparent; }\n.sc-drw-flyout-icon {\n  display: inline-flex;\n  flex: none;\n  color: #b2b5be;\n}\n.sc-drw-flyout-icon svg { width: 16px; height: 16px; }\n.sc-drw-flyout-title { flex: 1; }\n.sc-drw-flyout-key {\n  color: #787b86;\n  font-size: 10px;\n  text-transform: uppercase;\n}\n";
+var CSS = "\n/* TV-capture tokens \u2014 dark theme measured off the real TradingView rail:\n   rail #0f0f0f, surfaces #1f1f1f, hover #2e2e2e, text #dbdbdb, muted #8c8c8c,\n   active tool = light tile #f0f3fa with dark icon. */\n.sc-drw-toolbar {\n  position: absolute;\n  top: 0;\n  left: 0;\n  display: flex;\n  align-items: center;\n  height: 38px;\n  padding: 0 2px;\n  background: #1f1f1f;\n  border: none;\n  border-radius: 6px;\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);\n  color: #dbdbdb;\n  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;\n  font-size: 12px;\n  line-height: 1;\n  user-select: none;\n  white-space: nowrap;\n  will-change: transform;\n}\n.sc-drw-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 38px;\n  height: 38px;\n  padding: 0;\n  margin: 0;\n  border: none;\n  border-radius: 4px;\n  background: transparent;\n  color: #dbdbdb;\n  cursor: pointer;\n  flex: none;\n}\n.sc-drw-btn:hover { background: #2e2e2e; }\n.sc-drw-btn:active { background: #363636; }\n.sc-drw-btn[data-on=\"true\"] { color: #2962ff; }\n.sc-drw-btn[data-on=\"true\"]:hover { color: #4c7dff; }\n.sc-drw-btn svg { display: block; width: 28px; height: 28px; }\n.sc-drw-btn--wide { width: auto; padding: 0 8px; font-size: 12px; gap: 4px; }\n.sc-drw-btn--wide svg { width: 16px; height: 16px; }\n.sc-drw-grip {\n  cursor: grab;\n  color: #8c8c8c;\n  width: 14px;\n}\n.sc-drw-grip:active { cursor: grabbing; }\n.sc-drw-sep {\n  width: 1px;\n  height: 18px;\n  margin: 0 1px;\n  background: rgba(219, 219, 219, 0.14);\n  flex: none;\n}\n/* Color buttons are icon glyphs with a 3px color bar at the foot \u2014 TV's\n   \"M\u00E0u c\u00F4ng c\u1EE5 \u0111\u01B0\u1EDDng k\u1EBB / M\u00E0u v\u0103n b\u1EA3n\" affordance, not a solid swatch. */\n.sc-drw-colorbtn { position: relative; }\n.sc-drw-colorbtn svg { width: 28px; height: 28px; }\n.sc-drw-colorbar {\n  position: absolute;\n  left: 9px;\n  right: 9px;\n  bottom: 5px;\n  height: 3px;\n  border-radius: 1.5px;\n}\n.sc-drw-widthbtn { width: auto; padding: 0 8px; gap: 5px; font-size: 12px; }\n.sc-drw-widthbtn .sc-drw-width-line { flex: none; }\n.sc-drw-widthbtn .sc-drw-width-caret { display: inline-flex; flex: none; color: #8c8c8c; }\n.sc-drw-widthbtn .sc-drw-width-caret svg { width: 10px; height: 10px; }\n.sc-drw-menu {\n  position: absolute;\n  top: 0;\n  left: 0;\n  min-width: 140px;\n  padding: 4px;\n  background: #1f1f1f;\n  border: none;\n  border-radius: 6px;\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 8px 20px rgba(0, 0, 0, 0.45);\n  color: #dbdbdb;\n  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;\n  font-size: 13px;\n  z-index: 10;\n}\n.sc-drw-menu-item {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  width: 100%;\n  height: 32px;\n  padding: 0 10px;\n  border: none;\n  border-radius: 4px;\n  background: transparent;\n  color: inherit;\n  font: inherit;\n  text-align: left;\n  cursor: pointer;\n}\n.sc-drw-menu-item:hover { background: #2e2e2e; }\n.sc-drw-menu-item[data-on=\"true\"] { color: #4c7dff; }\n.sc-drw-menu-item svg { width: 18px; height: 18px; flex: none; }\n.sc-drw-menu-label {\n  padding: 8px 12px 4px;\n  color: #8c8c8c;\n  font-size: 11px;\n  text-transform: uppercase;\n  letter-spacing: 0.4px;\n}\n.sc-drw-palette {\n  display: grid;\n  grid-template-columns: repeat(7, 20px);\n  gap: 5px;\n  padding: 6px;\n}\n.sc-drw-palette-cell {\n  width: 20px;\n  height: 20px;\n  padding: 0;\n  border: 1px solid rgba(255, 255, 255, 0.12);\n  border-radius: 3px;\n  cursor: pointer;\n}\n.sc-drw-palette-cell:hover { transform: scale(1.15); border-color: #ffffff; }\n.sc-drw-palette--inline {\n  display: none;\n  position: absolute;\n  top: 100%;\n  left: 0;\n  margin-top: 4px;\n  background: #1f1f1f;\n  border: none;\n  border-radius: 6px;\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 8px 20px rgba(0, 0, 0, 0.45);\n  z-index: 5;\n}\n.sc-drw-field:hover .sc-drw-palette--inline { display: grid; }\n.sc-drw-dialog {\n  position: absolute;\n  top: 0;\n  left: 0;\n  width: 250px;\n  background: #1f1f1f;\n  border: none;\n  border-radius: 6px;\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 8px 20px rgba(0, 0, 0, 0.45);\n  color: #dbdbdb;\n  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;\n  font-size: 12px;\n  user-select: none;\n  will-change: transform;\n  z-index: 20;\n}\n.sc-drw-dialog-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 8px 10px;\n  font-weight: 600;\n  cursor: grab;\n  border-bottom: 1px solid rgba(219, 219, 219, 0.08);\n}\n.sc-drw-dialog-header:active { cursor: grabbing; }\n.sc-drw-dialog-tabs {\n  display: flex;\n  gap: 2px;\n  padding: 4px 8px 0;\n  border-bottom: 1px solid rgba(219, 219, 219, 0.08);\n}\n.sc-drw-dialog-tab {\n  padding: 6px 10px;\n  border: none;\n  border-radius: 4px 4px 0 0;\n  background: transparent;\n  color: #8c8c8c;\n  font: inherit;\n  cursor: pointer;\n}\n.sc-drw-dialog-tab:hover { color: #dbdbdb; }\n.sc-drw-dialog-tab[data-on=\"true\"] {\n  color: #ffffff;\n  background: #2e2e2e;\n}\n.sc-drw-dialog-body {\n  max-height: 340px;\n  overflow-y: auto;\n  padding: 10px;\n}\n.sc-drw-section {\n  padding: 8px 2px 4px;\n  color: #8c8c8c;\n  font-size: 11px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: 0.4px;\n}\n.sc-drw-field {\n  position: relative;\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  padding: 4px 2px;\n  min-height: 26px;\n}\n.sc-drw-field-label {\n  flex: 1;\n  color: #9a9a9a;\n}\n.sc-drw-field-control {\n  position: relative;\n  display: flex;\n  align-items: center;\n  gap: 6px;\n}\n.sc-drw-input {\n  width: 112px;\n  padding: 4px 8px;\n  border: 1px solid #2e2e2e;\n  border-radius: 4px;\n  background: #0f0f0f;\n  color: #dbdbdb;\n  font: inherit;\n}\n.sc-drw-input:focus { outline: none; border-color: #2962ff; }\n.sc-drw-input--narrow { width: 64px; }\n.sc-drw-color {\n  width: 30px;\n  height: 24px;\n  padding: 0;\n  border: 1px solid #2e2e2e;\n  border-radius: 4px;\n  background: transparent;\n  cursor: pointer;\n}\n.sc-drw-levels {\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n  width: 100%;\n}\n.sc-drw-level-row {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  padding: 2px 0;\n}\n/* \u2500\u2500 Left tool palette (toolPalette.ts) \u2014 TV rail: 52px, flat #0f0f0f,\n   52\u00D738 buttons, 28px icons, right-edge \u203A carets, light active tile. \u2500\u2500\u2500\u2500 */\n.sc-drw-tools {\n  position: relative;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 0;\n  width: 52px;\n  height: 100%;\n  padding: 2px 0;\n  background: #0f0f0f;\n  border-right: none;\n  color: #dbdbdb;\n  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;\n  font-size: 12px;\n  line-height: 1;\n  user-select: none;\n  overflow-y: auto;\n  overflow-x: hidden;\n  scrollbar-width: none;\n}\n.sc-drw-tools::-webkit-scrollbar { display: none; }\n.sc-drw-tools-group {\n  position: relative;\n  display: flex;\n  width: 52px;\n  flex: none;\n}\n.sc-drw-tools-btn {\n  width: 52px;\n  height: 38px;\n  border-radius: 0;\n}\n.sc-drw-tools-btn:hover { background: transparent; }\n.sc-drw-tools-icon {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 32px;\n  height: 32px;\n  border-radius: 5px;\n}\n.sc-drw-tools-icon svg { display: block; width: 28px; height: 28px; }\n.sc-drw-tools-btn:hover .sc-drw-tools-icon { background: #2e2e2e; }\n.sc-drw-tools-btn[data-on=\"true\"] { color: #0f0f0f; }\n.sc-drw-tools-btn[data-on=\"true\"] .sc-drw-tools-icon {\n  background: #f0f3fa;\n  color: #0f0f0f;\n}\n/* The flyout caret is TV's right-edge \u203A sliver \u2014 a separate narrow button\n   overlaid on the group's right side, vertically centered. */\n.sc-drw-tools-caret {\n  position: absolute;\n  right: 0;\n  top: 50%;\n  transform: translateY(-50%);\n  display: inline-flex;\n  align-items: center;\n  justify-content: flex-start;\n  width: 11px;\n  height: 34px;\n  padding: 0 0 0 1px;\n  margin: 0;\n  border: none;\n  border-radius: 4px 0 0 4px;\n  background: transparent;\n  color: #8c8c8c;\n  cursor: pointer;\n}\n.sc-drw-tools-caret svg { display: block; width: 5px; height: 8px; }\n.sc-drw-tools-caret:hover { background: #2e2e2e; color: #dbdbdb; }\n.sc-drw-tools-chrome {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 0;\n  margin-top: auto;\n  padding-top: 2px;\n  width: 100%;\n  border-top: 1px solid rgba(219, 219, 219, 0.1);\n}\n.sc-drw-flyout {\n  /* position:fixed + document.body \u2014 the palette's rail can scroll\n     (overflow-y:auto) so an in-rail flyout would be clipped. */\n  position: fixed;\n  width: 292px;\n  max-width: calc(100vw - 60px);\n  max-height: calc(100vh - 16px);\n  overflow-y: auto;\n  padding: 4px 0;\n  background: #1f1f1f;\n  border: none;\n  border-radius: 6px;\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);\n  color: #dbdbdb;\n  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;\n  font-size: 14px;\n  z-index: 20;\n  scrollbar-width: thin;\n}\n.sc-drw-flyout-item {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  height: 40px;\n  padding: 6px 10px 6px 8px;\n  border-radius: 0;\n}\n.sc-drw-flyout-item[data-on=\"true\"] { background: #2e2e2e; color: inherit; }\n.sc-drw-flyout-item--disabled {\n  opacity: 0.4;\n  cursor: default;\n}\n.sc-drw-flyout-item--disabled:hover { background: transparent; }\n.sc-drw-flyout-icon {\n  display: inline-flex;\n  flex: none;\n  color: #dbdbdb;\n}\n.sc-drw-flyout-icon svg { width: 28px; height: 28px; }\n.sc-drw-flyout-title { flex: 1; font-size: 14px; }\n.sc-drw-flyout-key {\n  color: #8c8c8c;\n  font-size: 12px;\n  text-transform: uppercase;\n  flex: none;\n}\n.sc-drw-flyout-sep {\n  height: 1px;\n  margin: 4px 0;\n  background: #0f0f0f;\n}\n";
 /** Inject the drawings UI stylesheet — idempotent, SSR-safe. */
 function injectDrawingStyles(doc) {
     if (doc === undefined) {
@@ -11646,18 +11655,27 @@ function attachFloatingToolbar(chart, manager, hooks) {
         }
         return node;
     }
+    /** role → button glyph. TV shows the glyph with a color bar under it. */
+    var COLOR_ROLE_ICONS = {
+        line: 'colorLine',
+        fill: 'fill',
+        text: 'text',
+        background: 'background'
+    };
     function colorControl(role, path) {
-        var swatch = createDom('span');
-        swatch.className = 'sc-drw-swatch';
+        var _a;
+        var bar = createDom('span');
+        bar.className = 'sc-drw-colorbar';
         var paint = function () {
             var v = currentPathValue(path);
-            swatch.style.background = typeof v === 'string' ? v : '#2962ff';
+            bar.style.background = typeof v === 'string' ? v : '#2962ff';
         };
         paint();
         var b = createDom('button');
-        b.className = 'sc-drw-btn';
+        b.className = 'sc-drw-btn sc-drw-colorbtn';
         b.title = "".concat(role, " color");
-        b.appendChild(swatch);
+        b.innerHTML = getDrawingIcon((_a = COLOR_ROLE_ICONS[role]) !== null && _a !== void 0 ? _a : 'colorLine');
+        b.appendChild(bar);
         b.addEventListener('click', function (e) {
             e.stopPropagation();
             openMenu(b, function (menu) {
@@ -11709,23 +11727,59 @@ function attachFloatingToolbar(chart, manager, hooks) {
             }
         }); }));
     }
+    /**
+     * TV's width control face: a stroke-thickness glyph + the numeric value +
+     * a down caret (e.g. "— 2px"), not a bare icon.
+     */
     function widthControl(path) {
-        return dropdownButton('trendLine', 'Line width', LINE_WIDTHS.map(function (w) { return ({
-            title: "".concat(w, "px"),
-            active: currentPathValue(path) === w,
-            onClick: function () {
-                patchPath(path, w);
-            }
-        }); }));
+        var b = createDom('button');
+        b.className = 'sc-drw-btn sc-drw-widthbtn';
+        b.title = 'Line width';
+        b.setAttribute('aria-label', 'Line width');
+        var paint = function () {
+            var v = Number(currentPathValue(path));
+            var w = Number.isFinite(v) && v > 0 ? v : 1;
+            var h = Math.max(1, Math.min(6, w));
+            b.innerHTML = "<svg class=\"sc-drw-width-line\" viewBox=\"0 0 18 10\" width=\"18\" height=\"10\"><rect x=\"1\" y=\"".concat(5 - h / 2, "\" width=\"16\" height=\"").concat(h, "\" rx=\"").concat(h / 2, "\" fill=\"currentColor\"/></svg>") +
+                "<span>".concat(w, "px</span><span class=\"sc-drw-width-caret\">").concat(getDrawingIcon('caretDown'), "</span>");
+        };
+        paint();
+        b.addEventListener('click', function (e) {
+            e.stopPropagation();
+            openMenu(b, function (menu) {
+                LINE_WIDTHS.forEach(function (w) {
+                    menu.appendChild(styleMenuItem("".concat(w, "px"), currentPathValue(path) === w, function () {
+                        patchPath(path, w);
+                        paint();
+                    }));
+                });
+            });
+        });
+        return b;
     }
     function fontSizeControl(path) {
-        return dropdownButton('text', 'Text size', FONT_SIZES.map(function (s) { return ({
-            title: "".concat(s, "px"),
-            active: currentPathValue(path) === s,
-            onClick: function () {
-                patchPath(path, s);
-            }
-        }); }));
+        var b = createDom('button');
+        b.className = 'sc-drw-btn sc-drw-widthbtn';
+        b.title = 'Text size';
+        b.setAttribute('aria-label', 'Text size');
+        var paint = function () {
+            var v = Number(currentPathValue(path));
+            var s = Number.isFinite(v) && v > 0 ? v : 12;
+            b.innerHTML = "<span>".concat(s, "</span><span class=\"sc-drw-width-caret\">").concat(getDrawingIcon('caretDown'), "</span>");
+        };
+        paint();
+        b.addEventListener('click', function (e) {
+            e.stopPropagation();
+            openMenu(b, function (menu) {
+                FONT_SIZES.forEach(function (s) {
+                    menu.appendChild(styleMenuItem("".concat(s, "px"), currentPathValue(path) === s, function () {
+                        patchPath(path, s);
+                        paint();
+                    }));
+                });
+            });
+        });
+        return b;
     }
     function textStyleControl() {
         var _a, _b, _c, _d, _e, _f;
@@ -11786,7 +11840,7 @@ function attachFloatingToolbar(chart, manager, hooks) {
         return b;
     }
     function moreMenu() {
-        var b = btn('settings', 'More', function () {
+        var b = btn('more', 'More', function () {
             openMenu(b, function (menu) {
                 var _a;
                 if (current === null) {
@@ -11911,12 +11965,12 @@ function attachFloatingToolbar(chart, manager, hooks) {
                     rerender();
                 }, overlay.lock);
             case 'visibility':
-                return btn('hide', !overlay.visible ? 'Show' : 'Hide', function () {
+                return btn(overlay.visible ? 'show' : 'hide', !overlay.visible ? 'Show' : 'Hide', function () {
                     manager.update(overlay.id, { visible: !overlay.visible });
                     rerender();
                 }, !overlay.visible);
             case 'clone':
-                return btn('rect', 'Clone', function () {
+                return btn('clone', 'Clone', function () {
                     cloneOverlay(overlay);
                 });
             case 'settings':
@@ -11960,7 +12014,7 @@ function attachFloatingToolbar(chart, manager, hooks) {
         var grip = createDom('div');
         grip.className = 'sc-drw-btn sc-drw-grip';
         grip.title = 'Drag toolbar';
-        grip.innerHTML = '<svg viewBox="0 0 8 20" width="8" height="20" fill="currentColor"><circle cx="2.5" cy="4" r="1.2"/><circle cx="5.5" cy="4" r="1.2"/><circle cx="2.5" cy="10" r="1.2"/><circle cx="5.5" cy="10" r="1.2"/><circle cx="2.5" cy="16" r="1.2"/><circle cx="5.5" cy="16" r="1.2"/></svg>';
+        grip.innerHTML = '<svg viewBox="0 0 8 14" width="8" height="14" fill="currentColor"><circle cx="2" cy="2.3" r="1.3"/><circle cx="6" cy="2.3" r="1.3"/><circle cx="2" cy="7" r="1.3"/><circle cx="6" cy="7" r="1.3"/><circle cx="2" cy="11.7" r="1.3"/><circle cx="6" cy="11.7" r="1.3"/></svg>';
         grip.addEventListener('mousedown', function (e) {
             if (element === null) {
                 return;
@@ -14797,15 +14851,22 @@ function mountToolPalette(container, chart, api, options) {
         menu.className = 'sc-drw-flyout';
         menu.setAttribute('role', 'menu');
         var firstRow = null;
+        var sectionIndex = 0;
         try {
             for (var _f = __values(group.sections), _g = _f.next(); !_g.done; _g = _f.next()) {
                 var section = _g.value;
                 if (group.sections.length > 1) {
+                    if (sectionIndex > 0) {
+                        var sepEl = createDom('div');
+                        sepEl.className = 'sc-drw-flyout-sep';
+                        menu.appendChild(sepEl);
+                    }
                     var head = createDom('div');
                     head.className = 'sc-drw-menu-label';
                     head.textContent = label("section:".concat(section.id), humanize(section.id));
                     menu.appendChild(head);
                 }
+                sectionIndex += 1;
                 var _loop_2 = function (it) {
                     var row = createDom('button');
                     row.type = 'button';
@@ -14925,6 +14986,8 @@ function mountToolPalette(container, chart, api, options) {
             var caret = createDom('button');
             caret.type = 'button';
             caret.className = 'sc-drw-tools-caret';
+            // TV's right-edge › sliver (viewBox 0 0 10 16, rendered ~5×8).
+            caret.innerHTML = '<svg viewBox="0 0 10 16" width="5" height="8"><path fill="currentColor" d="M0.6 1.4L2 0l8 8-8 8-1.4-1.4 6.4-6.6z"/></svg>';
             caret.setAttribute('aria-label', label('moreTools', 'More tools'));
             caret.setAttribute('aria-haspopup', 'menu');
             caret.setAttribute('aria-expanded', 'false');
