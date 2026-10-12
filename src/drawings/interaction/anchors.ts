@@ -65,7 +65,8 @@ export interface AnchorFiguresParams {
    */
   midPoint?: boolean
   /**
-   * Anchor shape. 'square' = resize handles (default), 'circle' = round.
+   * Anchor shape. 'circle' = TradingView round handles (default),
+   * 'square' = resize handles.
    */
   shape?: 'square' | 'circle'
   /**
@@ -109,7 +110,7 @@ export function createAnchorFigures (params: AnchorFiguresParams): OverlayFigure
     isDrawing = false,
     isTouch = false,
     midPoint = false,
-    shape = 'square',
+    shape = 'circle',
     cursors,
     moveDirections,
     styles,

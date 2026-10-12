@@ -36,8 +36,8 @@ import { getDrawingInteractionState } from './interaction/snap45'
  * in-progress tools, and templates flagged `transient` — are tracked for
  * correctness but never persisted or undone.
  */
-export type DrawingsEventType = 'select' | 'deselect' | 'toolChange' | 'change' | 'editStart' | 'editEnd'
-export type DrawingsEventCallback = (payload: { overlay?: Overlay, tool?: string | null }) => void
+export type DrawingsEventType = 'select' | 'deselect' | 'toolChange' | 'change' | 'editStart' | 'editEnd' | 'contextmenu'
+export type DrawingsEventCallback = (payload: { overlay?: Overlay, tool?: string | null, x?: number, y?: number }) => void
 
 export interface DrawingManagerOptions {
   /** Partition override — defaults to {symbol: chart ticker}. */
@@ -107,7 +107,7 @@ const MAX_STORE_RETRIES = 5
 export function createDrawingManager (chart: Chart, options?: DrawingManagerOptions): DrawingManager {
   const history: DrawingHistory = createDrawingHistory({ maxHistory: options?.maxHistory })
   const listeners = new Map<DrawingsEventType, Set<DrawingsEventCallback>>()
-  const emit = (type: DrawingsEventType, payload: { overlay?: Overlay, tool?: string | null }): void => {
+  const emit = (type: DrawingsEventType, payload: { overlay?: Overlay, tool?: string | null, x?: number, y?: number }): void => {
     listeners.get(type)?.forEach(cb => {
       try {
         cb(payload)
@@ -587,6 +587,10 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
       }
       case 'deselect': {
         emit('deselect', { overlay })
+        break
+      }
+      case 'contextmenu': {
+        emit('contextmenu', { overlay, x: event.pageX, y: event.pageY })
         break
       }
       default:

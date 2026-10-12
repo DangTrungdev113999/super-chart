@@ -709,13 +709,15 @@ export function createChartSync (options: ChartSyncOptions = {}): ChartSync {
               chart.removeOverlay({ id: overlay.id })
               break
             }
-            // Local-only lifecycle — selection state and drag-gesture brackets
-            // are per-chart concerns; mirroring them would deselect the peer's
-            // own drawing and corrupt its undo/persistence boundaries.
+            // Local-only lifecycle — selection state, drag-gesture brackets
+            // and the right-click menu signal are per-chart concerns;
+            // mirroring them would deselect the peer's own drawing and
+            // corrupt its undo/persistence boundaries.
             case 'select':
             case 'deselect':
             case 'editStart':
-            case 'editEnd': {
+            case 'editEnd':
+            case 'contextmenu': {
               break
             }
           }

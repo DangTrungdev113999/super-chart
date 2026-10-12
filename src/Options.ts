@@ -20,6 +20,7 @@ import type { IndicatorCreate } from './component/Indicator'
 import type { PaneOptions } from './pane/types'
 import type { DrawingStore, DrawingScope } from './drawings/persistence'
 import type { FloatingToolbarHooks } from './drawings/ui/floatingToolbar'
+import type { ContextMenuOptions } from './drawings/ui/contextMenu'
 import type { DrawingKeyboardOptions } from './drawings/interaction/keyboard'
 
 export type FormatDateType = 'tooltip' | 'crosshair' | 'xAxis'
@@ -100,6 +101,10 @@ export interface DrawingsOptions {
   store?: DrawingStore | null
   /** Floating toolbar: `false` disables, object supplies hooks. */
   toolbar?: boolean | FloatingToolbarHooks
+  /** Right-click context menu: `false` disables (default on), object supplies hooks. */
+  contextMenu?: boolean | Omit<ContextMenuOptions, 'onCopy'>
+  /** Shared i18n hook for library-owned surfaces (context menu, palette). */
+  label?: (id: string, fallback: string) => string
   /**
    * Shared drawing keyboard layer — `false` disables (default on). Object
    * form forwards {@link DrawingKeyboardOptions}: `isActive` gates every

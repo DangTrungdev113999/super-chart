@@ -136,6 +136,23 @@ const CSS = `
 .sc-drw-menu-item:hover { background: #2e2e2e; }
 .sc-drw-menu-item[data-on="true"] { color: #4c7dff; }
 .sc-drw-menu-item svg { width: 18px; height: 18px; flex: none; }
+.sc-drw-ctxmenu {
+  position: fixed;
+  top: 0;
+  left: 0;
+  min-width: 220px;
+  z-index: 1200;
+}
+.sc-drw-menu-sep {
+  height: 1px;
+  margin: 4px -4px;
+  background: #0f0f0f;
+}
+.sc-drw-menu-icon { display: flex; width: 18px; height: 18px; flex: none; align-items: center; justify-content: center; }
+.sc-drw-menu-text { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sc-drw-menu-item--danger { color: #f23645; }
+.sc-drw-menu-item--disabled { color: #8c8c8c; cursor: default; }
+.sc-drw-menu-item--disabled:hover { background: transparent; }
 .sc-drw-menu-label {
   padding: 8px 12px 4px;
   color: #8c8c8c;

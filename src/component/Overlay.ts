@@ -438,11 +438,14 @@ export type OverlayOverride<E = unknown> = Partial<Omit<Overlay<E>, 'currentStep
  *             use the pair as the commit boundary for undo and persistence
  *             (one gesture = one commit, not one commit per progress event).
  */
-export type OverlayChangeEventType = 'create' | 'progress' | 'update' | 'remove' | 'drawEnd' | 'select' | 'deselect' | 'editStart' | 'editEnd'
+export type OverlayChangeEventType = 'create' | 'progress' | 'update' | 'remove' | 'drawEnd' | 'select' | 'deselect' | 'editStart' | 'editEnd' | 'contextmenu'
 
 export interface OverlayChangeEvent<E = unknown> {
   type: OverlayChangeEventType
   overlay: Overlay<E>
+  /** Viewport page coordinates for 'contextmenu' events — menu anchor point. */
+  pageX?: number
+  pageY?: number
 }
 
 export type OverlayFilter<E = unknown> = Partial<Pick<Overlay<E>, 'id' | 'groupId' | 'name' | 'paneId'>>

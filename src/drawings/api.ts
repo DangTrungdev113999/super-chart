@@ -27,6 +27,7 @@ import type { DrawingStore } from './persistence'
 import { serializeOverlay, serializedToOverlayCreate, type SerializedDrawing, type SerializedDrawingPoint } from './serialize'
 import { attachFloatingToolbar, type FloatingToolbar, type FloatingToolbarHooks } from './ui/floatingToolbar'
 import { attachSettingsDialog, type SettingsDialog } from './ui/settingsDialog'
+import { attachContextMenu, type ContextMenuOptions, type DrawingContextMenu } from './ui/contextMenu'
 import { mountToolPalette, type ToolPalette, type ToolPaletteOptions } from './ui/toolPalette'
 import { closeTextEditorSessions } from './editor/overlayTextEditor'
 import { bindDrawingKeyboard } from './interaction/keyboard'
@@ -196,6 +197,12 @@ export type DrawingsApiOptions = Omit<DrawingManagerOptions, 'store'> & {
   store?: DrawingStore | null
   /** Floating toolbar: `false` disables, object supplies hooks (DP-6b). */
   toolbar?: boolean | FloatingToolbarHooks
+  /** Right-click context menu — `false` disables (default on). Object form
+   *  forwards `extraItems`/`shouldShow`/`onSettings` (defaults to the lib
+   *  settings dialog); `onCopy` stays wired to the api clipboard. */
+  contextMenu?: boolean | Omit<ContextMenuOptions, 'onCopy'>
+  /** Label hook shared by library-owned surfaces (context menu today). */
+  label?: (id: string, fallback: string) => string
   /** Shared drawing keyboard layer — `false` disables (default on). Object
    *  form forwards `isActive`/`target` to the binder. */
   keyboard?: boolean | DrawingKeyboardOptions
@@ -342,6 +349,20 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
         }
       }
     }, keyboardCtx)
+
+  // Right-click context menu — shares the api clipboard so menu Copy feeds
+  // the same Ctrl+V paste path, and opens the same settings dialog the
+  // floating toolbar uses.
+  const ctxMenuOpt = options?.contextMenu
+  const labelOpt = options?.label
+  const contextMenu: DrawingContextMenu | null = ctxMenuOpt === false
+    ? null
+    : attachContextMenu(chart, manager, {
+      label: labelOpt,
+      onSettings: overlay => { settingsDialog.open(overlay) },
+      ...(typeof ctxMenuOpt === 'object' ? ctxMenuOpt : {}),
+      onCopy: drawing => { clipboard = drawing }
+    })
 
   function resolveToolName (tool: string): string {
     return findCatalogItem(tool)?.overlayName ?? tool
@@ -610,6 +631,7 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
       })
       palettes.clear()
       toolbar?.destroy()
+      contextMenu?.destroy()
       settingsDialog.destroy()
       clipboard = null
       manager.destroy()

@@ -87,6 +87,10 @@ const ICONS: Record<string, string> = {
   fill: `${SVG_OPEN}<path d="M13 3l9.5 9.5-9.5 9.5L3.5 12.5z"/><path d="M22 20c1.5 2 1.5 4 0 5.2-1.5-1.2-1.5-3.2 0-5.2z" fill="currentColor" stroke="none"/></svg>`,
   background: `${SVG_OPEN}<rect x="5" y="5" width="18" height="18" rx="2"/></svg>`,
   stayDrawing: `${SVG_OPEN}<path d="M4 17l1-4 10-10 3 3-10 10-4 1z"/><rect x="16" y="17" width="9" height="7" rx="1.5"/><path d="M18.5 17v-2a2 2 0 0 1 4 0v2"/></svg>`,
+  copy: `${SVG_OPEN}<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
+  unlock: `${SVG_OPEN}<rect x="7" y="12" width="14" height="10" rx="2"/><path d="M10 12V8a4 4 0 0 1 7.8-1.3"/></svg>`,
+  bringToFront: `${SVG_OPEN}<rect x="4" y="4" width="10" height="10" rx="1.5" opacity="0.55"/><rect x="10" y="10" width="10" height="10" rx="1.5" opacity="0.8"/><rect x="16" y="16" width="10" height="10" rx="1.5"/></svg>`,
+  sendToBack: `${SVG_OPEN}<rect x="16" y="16" width="10" height="10" rx="1.5" opacity="0.55"/><rect x="10" y="10" width="10" height="10" rx="1.5" opacity="0.8"/><rect x="4" y="4" width="10" height="10" rx="1.5"/></svg>`,
   tool: `${SVG_OPEN}<path d="M17 4a5 5 0 0 0-6.6 6.6L5 16l6 6 5.4-5.4A5 5 0 0 0 24 11l-4 4-4-1-1-4 4-4a5 5 0 0 0-2-2z"/></svg>`
 }
 
