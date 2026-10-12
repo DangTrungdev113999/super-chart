@@ -10129,6 +10129,10 @@ function createDrawingManager(chart, options) {
                 emit('deselect', { overlay: overlay });
                 break;
             }
+            case 'contextmenu': {
+                emit('contextmenu', { overlay: overlay, x: event.pageX, y: event.pageY });
+                break;
+            }
         }
     };
     var onSymbolChange = function () {
@@ -11358,6 +11362,10 @@ var ICONS = {
     fill: "".concat(SVG_OPEN, "<path d=\"M13 3l9.5 9.5-9.5 9.5L3.5 12.5z\"/><path d=\"M22 20c1.5 2 1.5 4 0 5.2-1.5-1.2-1.5-3.2 0-5.2z\" fill=\"currentColor\" stroke=\"none\"/></svg>"),
     background: "".concat(SVG_OPEN, "<rect x=\"5\" y=\"5\" width=\"18\" height=\"18\" rx=\"2\"/></svg>"),
     stayDrawing: "".concat(SVG_OPEN, "<path d=\"M4 17l1-4 10-10 3 3-10 10-4 1z\"/><rect x=\"16\" y=\"17\" width=\"9\" height=\"7\" rx=\"1.5\"/><path d=\"M18.5 17v-2a2 2 0 0 1 4 0v2\"/></svg>"),
+    copy: "".concat(SVG_OPEN, "<rect x=\"9\" y=\"9\" width=\"13\" height=\"13\" rx=\"2\"/><path d=\"M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1\"/></svg>"),
+    unlock: "".concat(SVG_OPEN, "<rect x=\"7\" y=\"12\" width=\"14\" height=\"10\" rx=\"2\"/><path d=\"M10 12V8a4 4 0 0 1 7.8-1.3\"/></svg>"),
+    bringToFront: "".concat(SVG_OPEN, "<rect x=\"4\" y=\"4\" width=\"10\" height=\"10\" rx=\"1.5\" opacity=\"0.55\"/><rect x=\"10\" y=\"10\" width=\"10\" height=\"10\" rx=\"1.5\" opacity=\"0.8\"/><rect x=\"16\" y=\"16\" width=\"10\" height=\"10\" rx=\"1.5\"/></svg>"),
+    sendToBack: "".concat(SVG_OPEN, "<rect x=\"16\" y=\"16\" width=\"10\" height=\"10\" rx=\"1.5\" opacity=\"0.55\"/><rect x=\"10\" y=\"10\" width=\"10\" height=\"10\" rx=\"1.5\" opacity=\"0.8\"/><rect x=\"4\" y=\"4\" width=\"10\" height=\"10\" rx=\"1.5\"/></svg>"),
     tool: "".concat(SVG_OPEN, "<path d=\"M17 4a5 5 0 0 0-6.6 6.6L5 16l6 6 5.4-5.4A5 5 0 0 0 24 11l-4 4-4-1-1-4 4-4a5 5 0 0 0-2-2z\"/></svg>")
 };
 // Own-key set — `in` walks the prototype chain, so ids like 'constructor'
@@ -11406,7 +11414,7 @@ var PALETTE = [
     '#ffeb3b', '#ff9800', '#f23645', '#e91e63',
     '#9c27b0', '#673ab7'
 ];
-var CSS = "\n/* TV-capture tokens \u2014 dark theme measured off the real TradingView rail:\n   rail #0f0f0f, surfaces #1f1f1f, hover #2e2e2e, text #dbdbdb, muted #8c8c8c,\n   active tool = light tile #f0f3fa with dark icon. */\n.sc-drw-toolbar {\n  position: absolute;\n  top: 0;\n  left: 0;\n  display: flex;\n  align-items: center;\n  height: 38px;\n  padding: 0 2px;\n  background: #1f1f1f;\n  border: none;\n  border-radius: 6px;\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);\n  color: #dbdbdb;\n  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;\n  font-size: 12px;\n  line-height: 1;\n  user-select: none;\n  white-space: nowrap;\n  will-change: transform;\n}\n.sc-drw-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 38px;\n  height: 38px;\n  padding: 0;\n  margin: 0;\n  border: none;\n  border-radius: 4px;\n  background: transparent;\n  color: #dbdbdb;\n  cursor: pointer;\n  flex: none;\n}\n.sc-drw-btn:hover { background: #2e2e2e; }\n.sc-drw-btn:active { background: #363636; }\n.sc-drw-btn[data-on=\"true\"] { color: #2962ff; }\n.sc-drw-btn[data-on=\"true\"]:hover { color: #4c7dff; }\n.sc-drw-btn svg { display: block; width: 28px; height: 28px; }\n.sc-drw-btn--wide { width: auto; padding: 0 8px; font-size: 12px; gap: 4px; }\n.sc-drw-btn--wide svg { width: 16px; height: 16px; }\n.sc-drw-grip {\n  cursor: grab;\n  color: #8c8c8c;\n  width: 14px;\n}\n.sc-drw-grip:active { cursor: grabbing; }\n.sc-drw-sep {\n  width: 1px;\n  height: 18px;\n  margin: 0 1px;\n  background: rgba(219, 219, 219, 0.14);\n  flex: none;\n}\n/* Color buttons are icon glyphs with a 3px color bar at the foot \u2014 TV's\n   \"M\u00E0u c\u00F4ng c\u1EE5 \u0111\u01B0\u1EDDng k\u1EBB / M\u00E0u v\u0103n b\u1EA3n\" affordance, not a solid swatch. */\n.sc-drw-colorbtn { position: relative; }\n.sc-drw-colorbtn svg { width: 28px; height: 28px; }\n.sc-drw-colorbar {\n  position: absolute;\n  left: 9px;\n  right: 9px;\n  bottom: 5px;\n  height: 3px;\n  border-radius: 1.5px;\n}\n.sc-drw-widthbtn { width: auto; padding: 0 8px; gap: 5px; font-size: 12px; }\n.sc-drw-widthbtn .sc-drw-width-line { flex: none; }\n.sc-drw-widthbtn .sc-drw-width-caret { display: inline-flex; flex: none; color: #8c8c8c; }\n.sc-drw-widthbtn .sc-drw-width-caret svg { width: 10px; height: 10px; }\n.sc-drw-menu {\n  position: absolute;\n  top: 0;\n  left: 0;\n  min-width: 140px;\n  padding: 4px;\n  background: #1f1f1f;\n  border: none;\n  border-radius: 6px;\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 8px 20px rgba(0, 0, 0, 0.45);\n  color: #dbdbdb;\n  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;\n  font-size: 13px;\n  z-index: 10;\n}\n.sc-drw-menu-item {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  width: 100%;\n  height: 32px;\n  padding: 0 10px;\n  border: none;\n  border-radius: 4px;\n  background: transparent;\n  color: inherit;\n  font: inherit;\n  text-align: left;\n  cursor: pointer;\n}\n.sc-drw-menu-item:hover { background: #2e2e2e; }\n.sc-drw-menu-item[data-on=\"true\"] { color: #4c7dff; }\n.sc-drw-menu-item svg { width: 18px; height: 18px; flex: none; }\n.sc-drw-menu-label {\n  padding: 8px 12px 4px;\n  color: #8c8c8c;\n  font-size: 11px;\n  text-transform: uppercase;\n  letter-spacing: 0.4px;\n}\n.sc-drw-palette {\n  display: grid;\n  grid-template-columns: repeat(7, 20px);\n  gap: 5px;\n  padding: 6px;\n}\n.sc-drw-palette-cell {\n  width: 20px;\n  height: 20px;\n  padding: 0;\n  border: 1px solid rgba(255, 255, 255, 0.12);\n  border-radius: 3px;\n  cursor: pointer;\n}\n.sc-drw-palette-cell:hover { transform: scale(1.15); border-color: #ffffff; }\n.sc-drw-palette--inline {\n  display: none;\n  position: absolute;\n  top: 100%;\n  left: 0;\n  margin-top: 4px;\n  background: #1f1f1f;\n  border: none;\n  border-radius: 6px;\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 8px 20px rgba(0, 0, 0, 0.45);\n  z-index: 5;\n}\n.sc-drw-field:hover .sc-drw-palette--inline { display: grid; }\n.sc-drw-dialog {\n  position: absolute;\n  top: 0;\n  left: 0;\n  width: 250px;\n  background: #1f1f1f;\n  border: none;\n  border-radius: 6px;\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 8px 20px rgba(0, 0, 0, 0.45);\n  color: #dbdbdb;\n  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;\n  font-size: 12px;\n  user-select: none;\n  will-change: transform;\n  z-index: 20;\n}\n.sc-drw-dialog-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 8px 10px;\n  font-weight: 600;\n  cursor: grab;\n  border-bottom: 1px solid rgba(219, 219, 219, 0.08);\n}\n.sc-drw-dialog-header:active { cursor: grabbing; }\n.sc-drw-dialog-tabs {\n  display: flex;\n  gap: 2px;\n  padding: 4px 8px 0;\n  border-bottom: 1px solid rgba(219, 219, 219, 0.08);\n}\n.sc-drw-dialog-tab {\n  padding: 6px 10px;\n  border: none;\n  border-radius: 4px 4px 0 0;\n  background: transparent;\n  color: #8c8c8c;\n  font: inherit;\n  cursor: pointer;\n}\n.sc-drw-dialog-tab:hover { color: #dbdbdb; }\n.sc-drw-dialog-tab[data-on=\"true\"] {\n  color: #ffffff;\n  background: #2e2e2e;\n}\n.sc-drw-dialog-body {\n  max-height: 340px;\n  overflow-y: auto;\n  padding: 10px;\n}\n.sc-drw-section {\n  padding: 8px 2px 4px;\n  color: #8c8c8c;\n  font-size: 11px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: 0.4px;\n}\n.sc-drw-field {\n  position: relative;\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  padding: 4px 2px;\n  min-height: 26px;\n}\n.sc-drw-field-label {\n  flex: 1;\n  color: #9a9a9a;\n}\n.sc-drw-field-control {\n  position: relative;\n  display: flex;\n  align-items: center;\n  gap: 6px;\n}\n.sc-drw-input {\n  width: 112px;\n  padding: 4px 8px;\n  border: 1px solid #2e2e2e;\n  border-radius: 4px;\n  background: #0f0f0f;\n  color: #dbdbdb;\n  font: inherit;\n}\n.sc-drw-input:focus { outline: none; border-color: #2962ff; }\n.sc-drw-input--narrow { width: 64px; }\n.sc-drw-color {\n  width: 30px;\n  height: 24px;\n  padding: 0;\n  border: 1px solid #2e2e2e;\n  border-radius: 4px;\n  background: transparent;\n  cursor: pointer;\n}\n.sc-drw-levels {\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n  width: 100%;\n}\n.sc-drw-level-row {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  padding: 2px 0;\n}\n/* \u2500\u2500 Left tool palette (toolPalette.ts) \u2014 TV rail: 52px, flat #0f0f0f,\n   52\u00D738 buttons, 28px icons, right-edge \u203A carets, light active tile. \u2500\u2500\u2500\u2500 */\n.sc-drw-tools {\n  position: relative;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 0;\n  width: 52px;\n  height: 100%;\n  padding: 2px 0;\n  background: #0f0f0f;\n  border-right: none;\n  color: #dbdbdb;\n  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;\n  font-size: 12px;\n  line-height: 1;\n  user-select: none;\n  overflow-y: auto;\n  overflow-x: hidden;\n  scrollbar-width: none;\n}\n.sc-drw-tools::-webkit-scrollbar { display: none; }\n.sc-drw-tools-group {\n  position: relative;\n  display: flex;\n  width: 52px;\n  flex: none;\n}\n.sc-drw-tools-btn {\n  width: 52px;\n  height: 38px;\n  border-radius: 0;\n}\n.sc-drw-tools-btn:hover { background: transparent; }\n.sc-drw-tools-icon {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 32px;\n  height: 32px;\n  border-radius: 5px;\n}\n.sc-drw-tools-icon svg { display: block; width: 28px; height: 28px; }\n.sc-drw-tools-btn:hover .sc-drw-tools-icon { background: #2e2e2e; }\n.sc-drw-tools-btn[data-on=\"true\"] { color: #0f0f0f; }\n.sc-drw-tools-btn[data-on=\"true\"] .sc-drw-tools-icon {\n  background: #f0f3fa;\n  color: #0f0f0f;\n}\n/* The flyout caret is TV's right-edge \u203A sliver \u2014 a separate narrow button\n   overlaid on the group's right side, vertically centered. */\n.sc-drw-tools-caret {\n  position: absolute;\n  right: 0;\n  top: 50%;\n  transform: translateY(-50%);\n  display: inline-flex;\n  align-items: center;\n  justify-content: flex-start;\n  width: 11px;\n  height: 34px;\n  padding: 0 0 0 1px;\n  margin: 0;\n  border: none;\n  border-radius: 4px 0 0 4px;\n  background: transparent;\n  color: #8c8c8c;\n  cursor: pointer;\n}\n.sc-drw-tools-caret svg { display: block; width: 5px; height: 8px; }\n.sc-drw-tools-caret:hover { background: #2e2e2e; color: #dbdbdb; }\n.sc-drw-tools-chrome {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 0;\n  margin-top: auto;\n  padding-top: 2px;\n  width: 100%;\n  border-top: 1px solid rgba(219, 219, 219, 0.1);\n}\n.sc-drw-flyout {\n  /* position:fixed + document.body \u2014 the palette's rail can scroll\n     (overflow-y:auto) so an in-rail flyout would be clipped. */\n  position: fixed;\n  width: 292px;\n  max-width: calc(100vw - 60px);\n  max-height: calc(100vh - 16px);\n  overflow-y: auto;\n  padding: 4px 0;\n  background: #1f1f1f;\n  border: none;\n  border-radius: 6px;\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);\n  color: #dbdbdb;\n  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;\n  font-size: 14px;\n  z-index: 20;\n  scrollbar-width: thin;\n}\n.sc-drw-flyout-item {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  height: 40px;\n  padding: 6px 10px 6px 8px;\n  border-radius: 0;\n}\n.sc-drw-flyout-item[data-on=\"true\"] { background: #2e2e2e; color: inherit; }\n.sc-drw-flyout-item--disabled {\n  opacity: 0.4;\n  cursor: default;\n}\n.sc-drw-flyout-item--disabled:hover { background: transparent; }\n.sc-drw-flyout-icon {\n  display: inline-flex;\n  flex: none;\n  color: #dbdbdb;\n}\n.sc-drw-flyout-icon svg { width: 28px; height: 28px; }\n.sc-drw-flyout-title { flex: 1; font-size: 14px; }\n.sc-drw-flyout-key {\n  color: #8c8c8c;\n  font-size: 12px;\n  text-transform: uppercase;\n  flex: none;\n}\n.sc-drw-flyout-sep {\n  height: 1px;\n  margin: 4px 0;\n  background: #0f0f0f;\n}\n";
+var CSS = "\n/* TV-capture tokens \u2014 dark theme measured off the real TradingView rail:\n   rail #0f0f0f, surfaces #1f1f1f, hover #2e2e2e, text #dbdbdb, muted #8c8c8c,\n   active tool = light tile #f0f3fa with dark icon. */\n.sc-drw-toolbar {\n  position: absolute;\n  top: 0;\n  left: 0;\n  display: flex;\n  align-items: center;\n  height: 38px;\n  padding: 0 2px;\n  background: #1f1f1f;\n  border: none;\n  border-radius: 6px;\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);\n  color: #dbdbdb;\n  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;\n  font-size: 12px;\n  line-height: 1;\n  user-select: none;\n  white-space: nowrap;\n  will-change: transform;\n}\n.sc-drw-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 38px;\n  height: 38px;\n  padding: 0;\n  margin: 0;\n  border: none;\n  border-radius: 4px;\n  background: transparent;\n  color: #dbdbdb;\n  cursor: pointer;\n  flex: none;\n}\n.sc-drw-btn:hover { background: #2e2e2e; }\n.sc-drw-btn:active { background: #363636; }\n.sc-drw-btn[data-on=\"true\"] { color: #2962ff; }\n.sc-drw-btn[data-on=\"true\"]:hover { color: #4c7dff; }\n.sc-drw-btn svg { display: block; width: 28px; height: 28px; }\n.sc-drw-btn--wide { width: auto; padding: 0 8px; font-size: 12px; gap: 4px; }\n.sc-drw-btn--wide svg { width: 16px; height: 16px; }\n.sc-drw-grip {\n  cursor: grab;\n  color: #8c8c8c;\n  width: 14px;\n}\n.sc-drw-grip:active { cursor: grabbing; }\n.sc-drw-sep {\n  width: 1px;\n  height: 18px;\n  margin: 0 1px;\n  background: rgba(219, 219, 219, 0.14);\n  flex: none;\n}\n/* Color buttons are icon glyphs with a 3px color bar at the foot \u2014 TV's\n   \"M\u00E0u c\u00F4ng c\u1EE5 \u0111\u01B0\u1EDDng k\u1EBB / M\u00E0u v\u0103n b\u1EA3n\" affordance, not a solid swatch. */\n.sc-drw-colorbtn { position: relative; }\n.sc-drw-colorbtn svg { width: 28px; height: 28px; }\n.sc-drw-colorbar {\n  position: absolute;\n  left: 9px;\n  right: 9px;\n  bottom: 5px;\n  height: 3px;\n  border-radius: 1.5px;\n}\n.sc-drw-widthbtn { width: auto; padding: 0 8px; gap: 5px; font-size: 12px; }\n.sc-drw-widthbtn .sc-drw-width-line { flex: none; }\n.sc-drw-widthbtn .sc-drw-width-caret { display: inline-flex; flex: none; color: #8c8c8c; }\n.sc-drw-widthbtn .sc-drw-width-caret svg { width: 10px; height: 10px; }\n.sc-drw-menu {\n  position: absolute;\n  top: 0;\n  left: 0;\n  min-width: 140px;\n  padding: 4px;\n  background: #1f1f1f;\n  border: none;\n  border-radius: 6px;\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 8px 20px rgba(0, 0, 0, 0.45);\n  color: #dbdbdb;\n  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;\n  font-size: 13px;\n  z-index: 10;\n}\n.sc-drw-menu-item {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  width: 100%;\n  height: 32px;\n  padding: 0 10px;\n  border: none;\n  border-radius: 4px;\n  background: transparent;\n  color: inherit;\n  font: inherit;\n  text-align: left;\n  cursor: pointer;\n}\n.sc-drw-menu-item:hover { background: #2e2e2e; }\n.sc-drw-menu-item[data-on=\"true\"] { color: #4c7dff; }\n.sc-drw-menu-item svg { width: 18px; height: 18px; flex: none; }\n.sc-drw-ctxmenu {\n  position: fixed;\n  top: 0;\n  left: 0;\n  min-width: 220px;\n  z-index: 1200;\n}\n.sc-drw-menu-sep {\n  height: 1px;\n  margin: 4px -4px;\n  background: #0f0f0f;\n}\n.sc-drw-menu-icon { display: flex; width: 18px; height: 18px; flex: none; align-items: center; justify-content: center; }\n.sc-drw-menu-text { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.sc-drw-menu-item--danger { color: #f23645; }\n.sc-drw-menu-item--disabled { color: #8c8c8c; cursor: default; }\n.sc-drw-menu-item--disabled:hover { background: transparent; }\n.sc-drw-menu-label {\n  padding: 8px 12px 4px;\n  color: #8c8c8c;\n  font-size: 11px;\n  text-transform: uppercase;\n  letter-spacing: 0.4px;\n}\n.sc-drw-palette {\n  display: grid;\n  grid-template-columns: repeat(7, 20px);\n  gap: 5px;\n  padding: 6px;\n}\n.sc-drw-palette-cell {\n  width: 20px;\n  height: 20px;\n  padding: 0;\n  border: 1px solid rgba(255, 255, 255, 0.12);\n  border-radius: 3px;\n  cursor: pointer;\n}\n.sc-drw-palette-cell:hover { transform: scale(1.15); border-color: #ffffff; }\n.sc-drw-palette--inline {\n  display: none;\n  position: absolute;\n  top: 100%;\n  left: 0;\n  margin-top: 4px;\n  background: #1f1f1f;\n  border: none;\n  border-radius: 6px;\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 8px 20px rgba(0, 0, 0, 0.45);\n  z-index: 5;\n}\n.sc-drw-field:hover .sc-drw-palette--inline { display: grid; }\n.sc-drw-dialog {\n  position: absolute;\n  top: 0;\n  left: 0;\n  width: 250px;\n  background: #1f1f1f;\n  border: none;\n  border-radius: 6px;\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 8px 20px rgba(0, 0, 0, 0.45);\n  color: #dbdbdb;\n  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;\n  font-size: 12px;\n  user-select: none;\n  will-change: transform;\n  z-index: 20;\n}\n.sc-drw-dialog-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 8px 10px;\n  font-weight: 600;\n  cursor: grab;\n  border-bottom: 1px solid rgba(219, 219, 219, 0.08);\n}\n.sc-drw-dialog-header:active { cursor: grabbing; }\n.sc-drw-dialog-tabs {\n  display: flex;\n  gap: 2px;\n  padding: 4px 8px 0;\n  border-bottom: 1px solid rgba(219, 219, 219, 0.08);\n}\n.sc-drw-dialog-tab {\n  padding: 6px 10px;\n  border: none;\n  border-radius: 4px 4px 0 0;\n  background: transparent;\n  color: #8c8c8c;\n  font: inherit;\n  cursor: pointer;\n}\n.sc-drw-dialog-tab:hover { color: #dbdbdb; }\n.sc-drw-dialog-tab[data-on=\"true\"] {\n  color: #ffffff;\n  background: #2e2e2e;\n}\n.sc-drw-dialog-body {\n  max-height: 340px;\n  overflow-y: auto;\n  padding: 10px;\n}\n.sc-drw-section {\n  padding: 8px 2px 4px;\n  color: #8c8c8c;\n  font-size: 11px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: 0.4px;\n}\n.sc-drw-field {\n  position: relative;\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  padding: 4px 2px;\n  min-height: 26px;\n}\n.sc-drw-field-label {\n  flex: 1;\n  color: #9a9a9a;\n}\n.sc-drw-field-control {\n  position: relative;\n  display: flex;\n  align-items: center;\n  gap: 6px;\n}\n.sc-drw-input {\n  width: 112px;\n  padding: 4px 8px;\n  border: 1px solid #2e2e2e;\n  border-radius: 4px;\n  background: #0f0f0f;\n  color: #dbdbdb;\n  font: inherit;\n}\n.sc-drw-input:focus { outline: none; border-color: #2962ff; }\n.sc-drw-input--narrow { width: 64px; }\n.sc-drw-color {\n  width: 30px;\n  height: 24px;\n  padding: 0;\n  border: 1px solid #2e2e2e;\n  border-radius: 4px;\n  background: transparent;\n  cursor: pointer;\n}\n.sc-drw-levels {\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n  width: 100%;\n}\n.sc-drw-level-row {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  padding: 2px 0;\n}\n/* \u2500\u2500 Left tool palette (toolPalette.ts) \u2014 TV rail: 52px, flat #0f0f0f,\n   52\u00D738 buttons, 28px icons, right-edge \u203A carets, light active tile. \u2500\u2500\u2500\u2500 */\n.sc-drw-tools {\n  position: relative;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 0;\n  width: 52px;\n  height: 100%;\n  padding: 2px 0;\n  background: #0f0f0f;\n  border-right: none;\n  color: #dbdbdb;\n  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;\n  font-size: 12px;\n  line-height: 1;\n  user-select: none;\n  overflow-y: auto;\n  overflow-x: hidden;\n  scrollbar-width: none;\n}\n.sc-drw-tools::-webkit-scrollbar { display: none; }\n.sc-drw-tools-group {\n  position: relative;\n  display: flex;\n  width: 52px;\n  flex: none;\n}\n.sc-drw-tools-btn {\n  width: 52px;\n  height: 38px;\n  border-radius: 0;\n}\n.sc-drw-tools-btn:hover { background: transparent; }\n.sc-drw-tools-icon {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 32px;\n  height: 32px;\n  border-radius: 5px;\n}\n.sc-drw-tools-icon svg { display: block; width: 28px; height: 28px; }\n.sc-drw-tools-btn:hover .sc-drw-tools-icon { background: #2e2e2e; }\n.sc-drw-tools-btn[data-on=\"true\"] { color: #0f0f0f; }\n.sc-drw-tools-btn[data-on=\"true\"] .sc-drw-tools-icon {\n  background: #f0f3fa;\n  color: #0f0f0f;\n}\n/* The flyout caret is TV's right-edge \u203A sliver \u2014 a separate narrow button\n   overlaid on the group's right side, vertically centered. */\n.sc-drw-tools-caret {\n  position: absolute;\n  right: 0;\n  top: 50%;\n  transform: translateY(-50%);\n  display: inline-flex;\n  align-items: center;\n  justify-content: flex-start;\n  width: 11px;\n  height: 34px;\n  padding: 0 0 0 1px;\n  margin: 0;\n  border: none;\n  border-radius: 4px 0 0 4px;\n  background: transparent;\n  color: #8c8c8c;\n  cursor: pointer;\n}\n.sc-drw-tools-caret svg { display: block; width: 5px; height: 8px; }\n.sc-drw-tools-caret:hover { background: #2e2e2e; color: #dbdbdb; }\n.sc-drw-tools-chrome {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 0;\n  margin-top: auto;\n  padding-top: 2px;\n  width: 100%;\n  border-top: 1px solid rgba(219, 219, 219, 0.1);\n}\n.sc-drw-flyout {\n  /* position:fixed + document.body \u2014 the palette's rail can scroll\n     (overflow-y:auto) so an in-rail flyout would be clipped. */\n  position: fixed;\n  width: 292px;\n  max-width: calc(100vw - 60px);\n  max-height: calc(100vh - 16px);\n  overflow-y: auto;\n  padding: 4px 0;\n  background: #1f1f1f;\n  border: none;\n  border-radius: 6px;\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);\n  color: #dbdbdb;\n  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;\n  font-size: 14px;\n  z-index: 20;\n  scrollbar-width: thin;\n}\n.sc-drw-flyout-item {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  height: 40px;\n  padding: 6px 10px 6px 8px;\n  border-radius: 0;\n}\n.sc-drw-flyout-item[data-on=\"true\"] { background: #2e2e2e; color: inherit; }\n.sc-drw-flyout-item--disabled {\n  opacity: 0.4;\n  cursor: default;\n}\n.sc-drw-flyout-item--disabled:hover { background: transparent; }\n.sc-drw-flyout-icon {\n  display: inline-flex;\n  flex: none;\n  color: #dbdbdb;\n}\n.sc-drw-flyout-icon svg { width: 28px; height: 28px; }\n.sc-drw-flyout-title { flex: 1; font-size: 14px; }\n.sc-drw-flyout-key {\n  color: #8c8c8c;\n  font-size: 12px;\n  text-transform: uppercase;\n  flex: none;\n}\n.sc-drw-flyout-sep {\n  height: 1px;\n  margin: 4px 0;\n  background: #0f0f0f;\n}\n";
 /** Inject the drawings UI stylesheet — idempotent, SSR-safe. */
 function injectDrawingStyles(doc) {
     if (doc === undefined) {
@@ -14549,6 +14557,178 @@ function attachSettingsDialog(chart, manager) {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+function attachContextMenu(chart, manager, options) {
+    var _a;
+    injectDrawingStyles();
+    var label = (_a = options === null || options === void 0 ? void 0 : options.label) !== null && _a !== void 0 ? _a : (function (_id, fallback) { return fallback; });
+    var menu = null;
+    function itemEl(item, overlay) {
+        var el = createDom('button');
+        el.className = 'sc-drw-menu-item';
+        el.type = 'button';
+        if (item.checked === true) {
+            el.dataset.on = 'true';
+        }
+        if (item.danger === true) {
+            el.classList.add('sc-drw-menu-item--danger');
+        }
+        if (item.disabled === true) {
+            el.disabled = true;
+            el.classList.add('sc-drw-menu-item--disabled');
+        }
+        if (item.icon !== undefined) {
+            var icon = createDom('span');
+            icon.className = 'sc-drw-menu-icon';
+            icon.innerHTML = getDrawingIcon(item.icon);
+            el.appendChild(icon);
+        }
+        var text = createDom('span');
+        text.className = 'sc-drw-menu-text';
+        text.textContent = label(item.id, item.label);
+        el.appendChild(text);
+        el.addEventListener('click', function () {
+            var _a;
+            close();
+            (_a = item.onSelect) === null || _a === void 0 ? void 0 : _a.call(item, overlay);
+        });
+        return el;
+    }
+    function clone(overlay) {
+        var serialized = serializeOverlay$1(overlay);
+        if (serialized === null) {
+            return;
+        }
+        var create = serializedToOverlayCreate(serialized);
+        if (create === null) {
+            return;
+        }
+        delete create.id;
+        create.lock = false;
+        create.visible = true;
+        var bars = chart.getDataList();
+        var oneBar = bars.length > 1 ? bars[1].timestamp - bars[0].timestamp : 0;
+        if (create.points !== undefined) {
+            create.points = create.points.map(function (p) { return (__assign(__assign({}, p), { timestamp: p.timestamp !== undefined ? p.timestamp + oneBar : p.timestamp, dataIndex: p.dataIndex !== undefined ? p.dataIndex + 1 : p.dataIndex })); });
+        }
+        manager.create(create);
+    }
+    function copy(overlay) {
+        var _a;
+        (_a = options === null || options === void 0 ? void 0 : options.onCopy) === null || _a === void 0 ? void 0 : _a.call(options, serializeOverlay$1(overlay));
+    }
+    function zLevelEdge(dir) {
+        var siblings = chart.getOverlays({ groupId: 'drawings' });
+        var edge = 0;
+        siblings.forEach(function (o) {
+            var z = o.zLevel;
+            edge = dir === 1 ? Math.max(edge, z) : Math.min(edge, z);
+        });
+        return edge + dir;
+    }
+    function separator() {
+        var sep = createDom('div');
+        sep.className = 'sc-drw-menu-sep';
+        return sep;
+    }
+    function open(x, y, overlay) {
+        var _a;
+        close();
+        var locked = overlay.lock;
+        var items = [];
+        if ((options === null || options === void 0 ? void 0 : options.onSettings) !== undefined) {
+            items.push({ id: 'settings', label: 'Settings…', icon: 'settings', onSelect: function (o) { var _a; return (_a = options.onSettings) === null || _a === void 0 ? void 0 : _a.call(options, o); } });
+        }
+        items.push({ id: 'duplicate', label: 'Duplicate', icon: 'clone', disabled: locked, onSelect: clone }, { id: 'copy', label: 'Copy', icon: 'copy', disabled: locked, onSelect: copy }, 'sep', { id: 'bringToFront', label: 'Bring to front', icon: 'bringToFront', disabled: locked, onSelect: function (o) { manager.update(o.id, { zLevel: zLevelEdge(1) }); } }, { id: 'sendToBack', label: 'Send to back', icon: 'sendToBack', disabled: locked, onSelect: function (o) { manager.update(o.id, { zLevel: zLevelEdge(-1) }); } }, 'sep', locked
+            ? { id: 'unlock', label: 'Unlock', icon: 'unlock', onSelect: function (o) { manager.update(o.id, { lock: false }); } }
+            : { id: 'lock', label: 'Lock', icon: 'lock', onSelect: function (o) { manager.update(o.id, { lock: true }); } }, { id: 'hide', label: 'Hide', icon: 'hide', disabled: locked, onSelect: function (o) { manager.update(o.id, { visible: false }); } });
+        var extras = (_a = options === null || options === void 0 ? void 0 : options.extraItems) === null || _a === void 0 ? void 0 : _a.call(options, overlay);
+        if (extras !== undefined && extras.length > 0) {
+            items.push.apply(items, __spreadArray(['sep'], __read(extras), false));
+        }
+        items.push('sep', {
+            id: 'remove',
+            label: 'Remove',
+            icon: 'remove',
+            danger: true,
+            disabled: locked,
+            onSelect: function (o) { manager.remove(o.id); }
+        });
+        menu = createDom('div');
+        menu.className = 'sc-drw-menu sc-drw-ctxmenu';
+        menu.setAttribute('role', 'menu');
+        items.forEach(function (it) {
+            menu === null || menu === void 0 ? void 0 : menu.appendChild(it === 'sep' ? separator() : itemEl(it, overlay));
+        });
+        document.body.appendChild(menu);
+        // pageX/Y are page coordinates — the menu is position:fixed, so
+        // convert to client coordinates before clamping to the viewport.
+        var rect = menu.getBoundingClientRect();
+        var left = x - window.scrollX;
+        var top = y - window.scrollY;
+        if (left + rect.width > window.innerWidth - 8) {
+            left = Math.max(8, window.innerWidth - rect.width - 8);
+        }
+        if (top + rect.height > window.innerHeight - 8) {
+            top = Math.max(8, window.innerHeight - rect.height - 8);
+        }
+        menu.style.left = "".concat(Math.round(left), "px");
+        menu.style.top = "".concat(Math.round(top), "px");
+        document.addEventListener('pointerdown', onDocDown, true);
+        document.addEventListener('keydown', onDocKey, true);
+        window.addEventListener('resize', close, { once: true });
+    }
+    function onDocDown(e) {
+        if (menu !== null && !menu.contains(e.target)) {
+            close();
+        }
+    }
+    function onDocKey(e) {
+        if (e.key === 'Escape' && menu !== null) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            close();
+        }
+    }
+    function close() {
+        if (menu !== null) {
+            menu.remove();
+            menu = null;
+        }
+        document.removeEventListener('pointerdown', onDocDown, true);
+        document.removeEventListener('keydown', onDocKey, true);
+    }
+    var offContextMenu = manager.on('contextmenu', function (p) {
+        if (p.overlay === undefined || p.x === undefined || p.y === undefined) {
+            return;
+        }
+        if ((options === null || options === void 0 ? void 0 : options.shouldShow) !== undefined && !options.shouldShow(p.overlay)) {
+            return;
+        }
+        open(p.x, p.y, p.overlay);
+    });
+    return {
+        isOpen: function () { return menu !== null; },
+        close: close,
+        destroy: function () {
+            offContextMenu();
+            close();
+        }
+    };
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 function humanize(id) {
     return id.replace(/[-_]/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
 }
@@ -15474,6 +15654,14 @@ function createDrawingsApi(chart, options) {
                 }
             }
         }, keyboardCtx);
+    // Right-click context menu — shares the api clipboard so menu Copy feeds
+    // the same Ctrl+V paste path, and opens the same settings dialog the
+    // floating toolbar uses.
+    var ctxMenuOpt = options === null || options === void 0 ? void 0 : options.contextMenu;
+    var labelOpt = options === null || options === void 0 ? void 0 : options.label;
+    var contextMenu = ctxMenuOpt === false
+        ? null
+        : attachContextMenu(chart, manager, __assign(__assign({ label: labelOpt, onSettings: function (overlay) { settingsDialog.open(overlay); } }, (typeof ctxMenuOpt === 'object' ? ctxMenuOpt : {})), { onCopy: function (drawing) { clipboard = drawing; } }));
     function resolveToolName(tool) {
         var _a, _b;
         return (_b = (_a = findCatalogItem(tool)) === null || _a === void 0 ? void 0 : _a.overlayName) !== null && _b !== void 0 ? _b : tool;
@@ -15700,6 +15888,7 @@ function createDrawingsApi(chart, options) {
             });
             palettes.clear();
             toolbar === null || toolbar === void 0 ? void 0 : toolbar.destroy();
+            contextMenu === null || contextMenu === void 0 ? void 0 : contextMenu.destroy();
             settingsDialog.destroy();
             clipboard = null;
             manager.destroy();
@@ -28728,20 +28917,37 @@ var OverlayView = /** @class */ (function (_super) {
             return false;
         };
     };
-    OverlayView.prototype._figureMouseRightClickEvent = function (overlay, _figureType, _figureIndex, figure) {
+    OverlayView.prototype._figureMouseRightClickEvent = function (overlay, figureType, figureIndex, figure) {
         var _this = this;
         return function (event) {
             var _a;
-            if (overlay.ghost || overlay.lock) {
+            if (overlay.ghost) {
                 return false;
             }
             if (checkOverlayFigureEvent('onRightClick', figure)) {
                 var prevented_3 = false;
                 (_a = overlay.onRightClick) === null || _a === void 0 ? void 0 : _a.call(overlay, __assign(__assign({ chart: _this.getWidget().getPane().getChart(), overlay: overlay, figure: figure }, event), { preventDefault: function () { prevented_3 = true; } }));
                 // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- ignore
-                if (!prevented_3) {
-                    _this.getWidget().getPane().getChart().getChartStore().removeOverlay(overlay);
+                if (prevented_3) {
+                    return true;
                 }
+                // Right-click mid-draw is a CANCEL gesture (the host's drawing
+                // cancel hook) — never a context menu on an unfinished overlay.
+                if (overlay.isDrawing()) {
+                    return false;
+                }
+                // TradingView semantics: right-click selects the drawing AND asks
+                // the host for a context menu — superseding the stock right-click
+                // delete (hosts surface menus via the 'contextmenu' change event).
+                var pane = _this.getWidget().getPane();
+                var chartStore = pane.getChart().getChartStore();
+                chartStore.setClickOverlayInfo({ paneId: pane.getId(), overlay: overlay, figureType: figureType, figureIndex: figureIndex, figure: figure }, function (o, f) { return _this._processOverlaySelectedEvent(o, f, event); }, function (o, f) { return _this._processOverlayDeselectedEvent(o, f, event); });
+                chartStore.executeAction('onOverlayChange', {
+                    type: 'contextmenu',
+                    overlay: overlay,
+                    pageX: event.pageX,
+                    pageY: event.pageY
+                });
                 return !overlay.isDrawing();
             }
             return false;
@@ -36289,13 +36495,15 @@ function createChartSync(options) {
                             chart.removeOverlay({ id: overlay.id });
                             break;
                         }
-                        // Local-only lifecycle — selection state and drag-gesture brackets
-                        // are per-chart concerns; mirroring them would deselect the peer's
-                        // own drawing and corrupt its undo/persistence boundaries.
+                        // Local-only lifecycle — selection state, drag-gesture brackets
+                        // and the right-click menu signal are per-chart concerns;
+                        // mirroring them would deselect the peer's own drawing and
+                        // corrupt its undo/persistence boundaries.
                         case 'select':
                         case 'deselect':
                         case 'editStart':
-                        case 'editEnd': {
+                        case 'editEnd':
+                        case 'contextmenu': {
                             break;
                         }
                     }
@@ -37149,7 +37357,7 @@ function anchorVisible(isSelected, isHovered, lock) {
 function createAnchorFigures(params) {
     var e_1, _a;
     var _b, _c, _d, _e, _f;
-    var coordinates = params.coordinates, _g = params.isSelected, isSelected = _g === void 0 ? false : _g, _h = params.isHovered, isHovered = _h === void 0 ? false : _h, _j = params.lock, lock = _j === void 0 ? false : _j, _k = params.isDrawing, isDrawing = _k === void 0 ? false : _k, _l = params.isTouch, isTouch = _l === void 0 ? false : _l, _m = params.midPoint, midPoint = _m === void 0 ? false : _m, _o = params.shape, shape = _o === void 0 ? 'square' : _o, cursors = params.cursors, moveDirections = params.moveDirections, styles = params.styles, _p = params.keyPrefix, keyPrefix = _p === void 0 ? ANCHOR_KEY_PREFIX : _p, pointIndexes = params.pointIndexes;
+    var coordinates = params.coordinates, _g = params.isSelected, isSelected = _g === void 0 ? false : _g, _h = params.isHovered, isHovered = _h === void 0 ? false : _h, _j = params.lock, lock = _j === void 0 ? false : _j, _k = params.isDrawing, isDrawing = _k === void 0 ? false : _k, _l = params.isTouch, isTouch = _l === void 0 ? false : _l, _m = params.midPoint, midPoint = _m === void 0 ? false : _m, _o = params.shape, shape = _o === void 0 ? 'circle' : _o, cursors = params.cursors, moveDirections = params.moveDirections, styles = params.styles, _p = params.keyPrefix, keyPrefix = _p === void 0 ? ANCHOR_KEY_PREFIX : _p, pointIndexes = params.pointIndexes;
     if (!anchorVisible(isSelected, isHovered, lock)) {
         return [];
     }

@@ -979,10 +979,13 @@ export type OverlayOverride<E = unknown> = Partial<Omit<Overlay<E>, "currentStep
  *             use the pair as the commit boundary for undo and persistence
  *             (one gesture = one commit, not one commit per progress event).
  */
-export type OverlayChangeEventType = "create" | "progress" | "update" | "remove" | "drawEnd" | "select" | "deselect" | "editStart" | "editEnd";
+export type OverlayChangeEventType = "create" | "progress" | "update" | "remove" | "drawEnd" | "select" | "deselect" | "editStart" | "editEnd" | "contextmenu";
 export interface OverlayChangeEvent<E = unknown> {
 	type: OverlayChangeEventType;
 	overlay: Overlay<E>;
+	/** Viewport page coordinates for 'contextmenu' events — menu anchor point. */
+	pageX?: number;
+	pageY?: number;
 }
 export type OverlayFilter<E = unknown> = Partial<Pick<Overlay<E>, "id" | "groupId" | "name" | "paneId">>;
 export type OverlayConstructor<E = unknown> = new () => Overlay<E>;
@@ -1027,6 +1030,11 @@ export interface SerializedDrawing<E = unknown> {
 	createdAt: number;
 	updatedAt: number;
 }
+declare function serializeOverlay<E>(overlay: Overlay<E>, options?: {
+	now?: number;
+	positionPercents?: number[];
+	createdAt?: number;
+}): SerializedDrawing<E> | null;
 /**
  * Persistence contract — local-first, server-optional.
  *
@@ -1088,10 +1096,12 @@ export interface DrawingStore {
  * in-progress tools, and templates flagged `transient` — are tracked for
  * correctness but never persisted or undone.
  */
-export type DrawingsEventType = "select" | "deselect" | "toolChange" | "change" | "editStart" | "editEnd";
+export type DrawingsEventType = "select" | "deselect" | "toolChange" | "change" | "editStart" | "editEnd" | "contextmenu";
 export type DrawingsEventCallback = (payload: {
 	overlay?: Overlay;
 	tool?: string | null;
+	x?: number;
+	y?: number;
 }) => void;
 export interface DrawingManager {
 	/**
@@ -1159,6 +1169,33 @@ export interface FloatingToolbarHooks {
 	 * overlay (e.g. a host-owned template whose own settings UI handles it).
 	 * Called on every selection; hiding takes precedence over showing.
 	 */
+	shouldShow?: (overlay: Overlay) => boolean;
+}
+/**
+ * Right-click context menu for drawings (TradingView behavior): opens at
+ * the cursor on `contextmenu` manager events — Settings / Duplicate / Copy,
+ * z-order, Lock / Hide / Remove — plus host-supplied extra items. Rendered
+ * on document.body like the flyouts so nothing clips it.
+ */
+export interface ContextMenuItem {
+	id: string;
+	label: string;
+	icon?: string;
+	danger?: boolean;
+	checked?: boolean;
+	disabled?: boolean;
+	onSelect?: (overlay: Overlay) => void;
+}
+export interface ContextMenuOptions {
+	label?: (id: string, fallback: string) => string;
+	/** Open the settings surface for the overlay (wired to the lib dialog by the api). */
+	onSettings?: (overlay: Overlay) => void;
+	/** Copy sink — the api forwards its internal drawing clipboard. */
+	onCopy?: (drawing: ReturnType<typeof serializeOverlay>) => void;
+	/** Host extra rows appended above the Remove separator. */
+	extraItems?: (overlay: Overlay) => ContextMenuItem[];
+	/** Host veto — return false to suppress the menu for this overlay (e.g.
+	 *  overlays whose UX is owned by consumer panels). */
 	shouldShow?: (overlay: Overlay) => boolean;
 }
 /**
@@ -1280,6 +1317,10 @@ export interface DrawingsOptions {
 	store?: DrawingStore | null;
 	/** Floating toolbar: `false` disables, object supplies hooks. */
 	toolbar?: boolean | FloatingToolbarHooks;
+	/** Right-click context menu: `false` disables (default on), object supplies hooks. */
+	contextMenu?: boolean | Omit<ContextMenuOptions, "onCopy">;
+	/** Shared i18n hook for library-owned surfaces (context menu, palette). */
+	label?: (id: string, fallback: string) => string;
 	/**
 	 * Shared drawing keyboard layer — `false` disables (default on). Object
 	 * form forwards {@link DrawingKeyboardOptions}: `isActive` gates every
@@ -2267,7 +2308,8 @@ export interface AnchorFiguresParams {
 	 */
 	midPoint?: boolean;
 	/**
-	 * Anchor shape. 'square' = resize handles (default), 'circle' = round.
+	 * Anchor shape. 'circle' = TradingView round handles (default),
+	 * 'square' = resize handles.
 	 */
 	shape?: "square" | "circle";
 	/**
