@@ -1192,6 +1192,9 @@ export interface ContextMenuOptions {
 	onSettings?: (overlay: Overlay) => void;
 	/** Copy sink — the api forwards its internal drawing clipboard. */
 	onCopy?: (drawing: ReturnType<typeof serializeOverlay>) => void;
+	/** Paste from the same clipboard (`canPaste` gates the row's enabled state). */
+	onPaste?: () => boolean;
+	canPaste?: () => boolean;
 	/** Host extra rows appended above the Remove separator. */
 	extraItems?: (overlay: Overlay) => ContextMenuItem[];
 	/** Host veto — return false to suppress the menu for this overlay (e.g.

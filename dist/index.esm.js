@@ -5365,7 +5365,7 @@ var DEFAULT_BORDER_COLOR = '#FF9800';
 var DEFAULT_BORDER_WIDTH = 1;
 var DEFAULT_FILL_COLOR = '#FF9800';
 var DEFAULT_FILL_OPACITY$4 = 20;
-var MIN_RADIUS_PX$2 = 5;
+var MIN_RADIUS_PX$1 = 5;
 
 /**
  * Circle overlay — TradingView-style with 2 control points
@@ -5410,7 +5410,7 @@ var circle$2 = {
         var _l = __read(coordinates, 2), center = _l[0], edge = _l[1];
         var ext = overlay.extendData;
         // Radius: Euclidean distance, min 5px
-        var radius = Math.max(Math.hypot(edge.x - center.x, edge.y - center.y), MIN_RADIUS_PX$2);
+        var radius = Math.max(Math.hypot(edge.x - center.x, edge.y - center.y), MIN_RADIUS_PX$1);
         // Styles
         var borderColor = (_b = ext.borderColor) !== null && _b !== void 0 ? _b : DEFAULT_BORDER_COLOR;
         var borderWidth = (_c = ext.borderWidth) !== null && _c !== void 0 ? _c : DEFAULT_BORDER_WIDTH;
@@ -5544,7 +5544,7 @@ var circle$2 = {
         if (!isSelected && !isHovered)
             return [];
         var _f = __read(coordinates, 2), center = _f[0], edge = _f[1];
-        var radius = Math.max(Math.hypot(edge.x - center.x, edge.y - center.y), MIN_RADIUS_PX$2);
+        var radius = Math.max(Math.hypot(edge.x - center.x, edge.y - center.y), MIN_RADIUS_PX$1);
         var leftX = center.x - radius;
         var rightX = center.x + radius;
         var stripWidth = rightX - leftX;
@@ -5587,7 +5587,7 @@ var circle$2 = {
             return [];
         var precision = (_e = (_d = chart.getSymbol()) === null || _d === void 0 ? void 0 : _d.pricePrecision) !== null && _e !== void 0 ? _e : 2;
         var _h = __read(coordinates, 2), center = _h[0], edge = _h[1];
-        var radius = Math.max(Math.hypot(edge.x - center.x, edge.y - center.y), MIN_RADIUS_PX$2);
+        var radius = Math.max(Math.hypot(edge.x - center.x, edge.y - center.y), MIN_RADIUS_PX$1);
         var topY = center.y - radius;
         var bottomY = center.y + radius;
         var stripHeight = bottomY - topY;
@@ -5653,7 +5653,7 @@ var LABEL_PADDING_H$1 = 10;
 var LABEL_PADDING_V$1 = 5;
 var LABEL_BORDER_RADIUS$1 = 6;
 var LABEL_BORDER_SIZE$1 = 1.5;
-var LABEL_GAP$2 = 10; // gap between label and zone edge
+var LABEL_GAP$3 = 10; // gap between label and zone edge
 var ENTRY_LABEL_LINE_GAP$1 = 2; // gap between 2 lines of entry label
 
 /**
@@ -6032,7 +6032,7 @@ var longPosition$1 = {
                 var tpTextW = calcTextWidth(tpText, fontSize);
                 var tpLabelW = tpTextW + 2 * LABEL_PADDING_H$1;
                 var tpLabelH = fontSize + 2 * LABEL_PADDING_V$1;
-                var tpLabelY = Math.min(targetY, entryY) - tpLabelH - LABEL_GAP$2;
+                var tpLabelY = Math.min(targetY, entryY) - tpLabelH - LABEL_GAP$3;
                 figures.push({
                     key: 'lp_tp_label_bg',
                     type: 'rect',
@@ -6054,7 +6054,7 @@ var longPosition$1 = {
                 var slTextW = calcTextWidth(slText, fontSize);
                 var slLabelW = slTextW + 2 * LABEL_PADDING_H$1;
                 var slLabelH = fontSize + 2 * LABEL_PADDING_V$1;
-                var slLabelY = Math.max(stopY, entryY) + LABEL_GAP$2;
+                var slLabelY = Math.max(stopY, entryY) + LABEL_GAP$3;
                 figures.push({
                     key: 'lp_sl_label_bg',
                     type: 'rect',
@@ -6446,7 +6446,7 @@ var LABEL_PADDING_H = 10;
 var LABEL_PADDING_V = 5;
 var LABEL_BORDER_RADIUS = 6;
 var LABEL_BORDER_SIZE = 1.5;
-var LABEL_GAP$1 = 10; // gap between label and zone edge
+var LABEL_GAP$2 = 10; // gap between label and zone edge
 var ENTRY_LABEL_LINE_GAP = 2; // gap between 2 lines of entry label
 
 /**
@@ -6745,7 +6745,7 @@ var shortPosition$1 = {
                 var tpTextW = calcTextWidth(tpText, fontSize);
                 var tpLabelW = tpTextW + 2 * LABEL_PADDING_H;
                 var tpLabelH = fontSize + 2 * LABEL_PADDING_V;
-                var tpLabelY = Math.max(targetY, entryY) + LABEL_GAP$1;
+                var tpLabelY = Math.max(targetY, entryY) + LABEL_GAP$2;
                 figures.push({
                     key: 'sp_tp_label_bg',
                     type: 'rect',
@@ -6767,7 +6767,7 @@ var shortPosition$1 = {
                 var slTextW = calcTextWidth(slText, fontSize);
                 var slLabelW = slTextW + 2 * LABEL_PADDING_H;
                 var slLabelH = fontSize + 2 * LABEL_PADDING_V;
-                var slLabelY = Math.min(stopY, entryY) - slLabelH - LABEL_GAP$1;
+                var slLabelY = Math.min(stopY, entryY) - slLabelH - LABEL_GAP$2;
                 figures.push({
                     key: 'sp_sl_label_bg',
                     type: 'rect',
@@ -11363,9 +11363,13 @@ var ICONS = {
     background: "".concat(SVG_OPEN, "<rect x=\"5\" y=\"5\" width=\"18\" height=\"18\" rx=\"2\"/></svg>"),
     stayDrawing: "".concat(SVG_OPEN, "<path d=\"M4 17l1-4 10-10 3 3-10 10-4 1z\"/><rect x=\"16\" y=\"17\" width=\"9\" height=\"7\" rx=\"1.5\"/><path d=\"M18.5 17v-2a2 2 0 0 1 4 0v2\"/></svg>"),
     copy: "".concat(SVG_OPEN, "<rect x=\"9\" y=\"9\" width=\"13\" height=\"13\" rx=\"2\"/><path d=\"M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1\"/></svg>"),
+    cut: "".concat(SVG_OPEN, "<circle cx=\"7\" cy=\"19\" r=\"3\"/><circle cx=\"7\" cy=\"7\" r=\"3\"/><path d=\"M9 17l12-12M9 9l12 12\"/></svg>"),
+    paste: "".concat(SVG_OPEN, "<rect x=\"6\" y=\"4\" width=\"14\" height=\"17\" rx=\"2\"/><rect x=\"10\" y=\"2\" width=\"6\" height=\"4\" rx=\"1\"/><path d=\"M10 11h6M10 15h6\"/></svg>"),
     unlock: "".concat(SVG_OPEN, "<rect x=\"7\" y=\"12\" width=\"14\" height=\"10\" rx=\"2\"/><path d=\"M10 12V8a4 4 0 0 1 7.8-1.3\"/></svg>"),
     bringToFront: "".concat(SVG_OPEN, "<rect x=\"4\" y=\"4\" width=\"10\" height=\"10\" rx=\"1.5\" opacity=\"0.55\"/><rect x=\"10\" y=\"10\" width=\"10\" height=\"10\" rx=\"1.5\" opacity=\"0.8\"/><rect x=\"16\" y=\"16\" width=\"10\" height=\"10\" rx=\"1.5\"/></svg>"),
     sendToBack: "".concat(SVG_OPEN, "<rect x=\"16\" y=\"16\" width=\"10\" height=\"10\" rx=\"1.5\" opacity=\"0.55\"/><rect x=\"10\" y=\"10\" width=\"10\" height=\"10\" rx=\"1.5\" opacity=\"0.8\"/><rect x=\"4\" y=\"4\" width=\"10\" height=\"10\" rx=\"1.5\"/></svg>"),
+    bringForward: "".concat(SVG_OPEN, "<rect x=\"8\" y=\"8\" width=\"10\" height=\"10\" rx=\"1.5\" opacity=\"0.55\"/><rect x=\"14\" y=\"14\" width=\"10\" height=\"10\" rx=\"1.5\"/></svg>"),
+    sendBackward: "".concat(SVG_OPEN, "<rect x=\"14\" y=\"14\" width=\"10\" height=\"10\" rx=\"1.5\" opacity=\"0.55\"/><rect x=\"8\" y=\"8\" width=\"10\" height=\"10\" rx=\"1.5\"/></svg>"),
     tool: "".concat(SVG_OPEN, "<path d=\"M17 4a5 5 0 0 0-6.6 6.6L5 16l6 6 5.4-5.4A5 5 0 0 0 24 11l-4 4-4-1-1-4 4-4a5 5 0 0 0-2-2z\"/></svg>")
 };
 // Own-key set — `in` walks the prototype chain, so ids like 'constructor'
@@ -14625,6 +14629,36 @@ function attachContextMenu(chart, manager, options) {
         });
         return edge + dir;
     }
+    /** One-step z-order: swap zLevel with the next drawing above/below. */
+    function zStep(overlay, dir) {
+        var e_1, _a;
+        var mine = overlay.zLevel;
+        var next = null;
+        try {
+            for (var _b = __values(chart.getOverlays({ groupId: 'drawings' })), _c = _b.next(); !_c.done; _c = _b.next()) {
+                var o = _c.value;
+                if (o.id === overlay.id) {
+                    continue;
+                }
+                var z = o.zLevel;
+                if ((dir === 1 ? z > mine : z < mine) && (next === null || (dir === 1 ? z < next.zLevel : z > next.zLevel))) {
+                    next = o;
+                }
+            }
+        }
+        catch (e_1_1) { e_1 = { error: e_1_1 }; }
+        finally {
+            try {
+                if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
+            }
+            finally { if (e_1) throw e_1.error; }
+        }
+        if (next === null) {
+            return;
+        }
+        manager.update(overlay.id, { zLevel: next.zLevel });
+        manager.update(next.id, { zLevel: mine });
+    }
     function separator() {
         var sep = createDom('div');
         sep.className = 'sc-drw-menu-sep';
@@ -14638,9 +14672,20 @@ function attachContextMenu(chart, manager, options) {
         if ((options === null || options === void 0 ? void 0 : options.onSettings) !== undefined) {
             items.push({ id: 'settings', label: 'Settings…', icon: 'settings', onSelect: function (o) { var _a; return (_a = options.onSettings) === null || _a === void 0 ? void 0 : _a.call(options, o); } });
         }
-        items.push({ id: 'duplicate', label: 'Duplicate', icon: 'clone', disabled: locked, onSelect: clone }, { id: 'copy', label: 'Copy', icon: 'copy', disabled: locked, onSelect: copy }, 'sep', { id: 'bringToFront', label: 'Bring to front', icon: 'bringToFront', disabled: locked, onSelect: function (o) { manager.update(o.id, { zLevel: zLevelEdge(1) }); } }, { id: 'sendToBack', label: 'Send to back', icon: 'sendToBack', disabled: locked, onSelect: function (o) { manager.update(o.id, { zLevel: zLevelEdge(-1) }); } }, 'sep', locked
-            ? { id: 'unlock', label: 'Unlock', icon: 'unlock', onSelect: function (o) { manager.update(o.id, { lock: false }); } }
-            : { id: 'lock', label: 'Lock', icon: 'lock', onSelect: function (o) { manager.update(o.id, { lock: true }); } }, { id: 'hide', label: 'Hide', icon: 'hide', disabled: locked, onSelect: function (o) { manager.update(o.id, { visible: false }); } });
+        items.push.apply(items, __spreadArray(__spreadArray([{ id: 'cut', label: 'Cut', icon: 'cut', disabled: locked, onSelect: function (o) { copy(o); manager.remove(o.id); } },
+            { id: 'copy', label: 'Copy', icon: 'copy', disabled: locked, onSelect: copy }], __read(((options === null || options === void 0 ? void 0 : options.onPaste) !== undefined
+            ? [{ id: 'paste', label: 'Paste', icon: 'paste', disabled: options.canPaste !== undefined ? !options.canPaste() : false, onSelect: function () { var _a; (_a = options.onPaste) === null || _a === void 0 ? void 0 : _a.call(options); } }]
+            : [])), false), [{ id: 'duplicate', label: 'Duplicate', icon: 'clone', disabled: locked, onSelect: clone },
+            'sep',
+            { id: 'bringForward', label: 'Bring forward', icon: 'bringForward', disabled: locked, onSelect: function (o) { zStep(o, 1); } },
+            { id: 'sendBackward', label: 'Send backward', icon: 'sendBackward', disabled: locked, onSelect: function (o) { zStep(o, -1); } },
+            { id: 'bringToFront', label: 'Bring to front', icon: 'bringToFront', disabled: locked, onSelect: function (o) { manager.update(o.id, { zLevel: zLevelEdge(1) }); } },
+            { id: 'sendToBack', label: 'Send to back', icon: 'sendToBack', disabled: locked, onSelect: function (o) { manager.update(o.id, { zLevel: zLevelEdge(-1) }); } },
+            'sep',
+            locked
+                ? { id: 'unlock', label: 'Unlock', icon: 'unlock', onSelect: function (o) { manager.update(o.id, { lock: false }); } }
+                : { id: 'lock', label: 'Lock', icon: 'lock', onSelect: function (o) { manager.update(o.id, { lock: true }); } },
+            { id: 'hide', label: 'Hide', icon: 'hide', disabled: locked, onSelect: function (o) { manager.update(o.id, { visible: false }); } }], false));
         var extras = (_a = options === null || options === void 0 ? void 0 : options.extraItems) === null || _a === void 0 ? void 0 : _a.call(options, overlay);
         if (extras !== undefined && extras.length > 0) {
             items.push.apply(items, __spreadArray(['sep'], __read(extras), false));
@@ -15661,7 +15706,18 @@ function createDrawingsApi(chart, options) {
     var labelOpt = options === null || options === void 0 ? void 0 : options.label;
     var contextMenu = ctxMenuOpt === false
         ? null
-        : attachContextMenu(chart, manager, __assign(__assign({ label: labelOpt, onSettings: function (overlay) { settingsDialog.open(overlay); } }, (typeof ctxMenuOpt === 'object' ? ctxMenuOpt : {})), { onCopy: function (drawing) { clipboard = drawing; } }));
+        : attachContextMenu(chart, manager, __assign(__assign({ label: labelOpt, onSettings: function (overlay) { settingsDialog.open(overlay); } }, (typeof ctxMenuOpt === 'object' ? ctxMenuOpt : {})), { onCopy: function (drawing) { clipboard = drawing; }, canPaste: function () { return clipboard !== null; }, onPaste: function () {
+                if (clipboard === null) {
+                    return false;
+                }
+                var create = serializedToOverlayCreate(clipboard);
+                if (create === null) {
+                    return false;
+                }
+                delete create.id;
+                manager.create(create);
+                return true;
+            } }));
     function resolveToolName(tool) {
         var _a, _b;
         return (_b = (_a = findCatalogItem(tool)) === null || _a === void 0 ? void 0 : _a.overlayName) !== null && _b !== void 0 ? _b : tool;
@@ -39854,6 +39910,16 @@ var fibRetracement = {
                 ignoreEvent: true
             });
         });
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isTouch: isTouch,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_',
+            midPoint: true
+        })), false));
         return figures;
     }
 };
@@ -40120,1036 +40186,6 @@ var fibTimeZone = {
         })), false));
         return figures;
     }
-};
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-var TRENDLINE_COLOR = '#787b86';
-var TRENDLINE_DASH = [4, 4];
-var GRID_DASH = [2, 4];
-var FAN_DASH = [4, 4];
-/** Shared TradingView-ish level palette. */
-var FIB_COLORS = {
-    red: '#f23645',
-    orange: '#ff9800',
-    green: '#4caf50',
-    teal: '#089981',
-    cyan: '#00bcd4',
-    blue: '#2962ff',
-    purple: '#9c27b0',
-    pink: '#e91e63',
-    gray: '#787b86'
-};
-function fibLevel(coeff, color, visible, label) {
-    if (visible === void 0) { visible = true; }
-    var level = { coeff: coeff, color: color, visible: visible };
-    if (label !== undefined) {
-        level.label = label;
-    }
-    return level;
-}
-/**
- * Whole-array levels read: validates every row, keeps the user's ordering,
- * falls back to `defaults` when the overlay carries no usable array.
- */
-function readLevels(extendData, defaults) {
-    var e_1, _a;
-    var levels = extendData === null || extendData === void 0 ? void 0 : extendData.levels;
-    if (!isArray(levels) || levels.length === 0) {
-        return defaults;
-    }
-    var result = [];
-    try {
-        for (var levels_1 = __values(levels), levels_1_1 = levels_1.next(); !levels_1_1.done; levels_1_1 = levels_1.next()) {
-            var raw = levels_1_1.value;
-            if (raw === null || typeof raw !== 'object') {
-                continue;
-            }
-            var level = raw;
-            if (!isNumber(level.coeff)) {
-                continue;
-            }
-            result.push({
-                coeff: level.coeff,
-                color: isString(level.color) ? level.color : FIB_COLORS.gray,
-                visible: level.visible !== false,
-                label: isString(level.label) ? level.label : undefined
-            });
-        }
-    }
-    catch (e_1_1) { e_1 = { error: e_1_1 }; }
-    finally {
-        try {
-            if (levels_1_1 && !levels_1_1.done && (_a = levels_1.return)) _a.call(levels_1);
-        }
-        finally { if (e_1) throw e_1.error; }
-    }
-    return result;
-}
-function formatLevelLabel(level) {
-    if (isString(level.label)) {
-        return level.label;
-    }
-    // Compact coeff printing: 0.5 → '0.5', 1/3 → '0.333'
-    return "".concat(Math.round(level.coeff * 1000) / 1000);
-}
-function distance(a, b) {
-    var dx = b.x - a.x;
-    var dy = b.y - a.y;
-    return Math.sqrt(dx * dx + dy * dy);
-}
-/**
- * Ray exit point: the ray from `from` through `through` clipped at the pane
- * bounding rect. Falls back to `through` for degenerate directions or an
- * origin that lies outside the rect and moves away from it.
- */
-function rayToBoundingEdge(from, through, bounding) {
-    var dx = through.x - from.x;
-    var dy = through.y - from.y;
-    var t = Number.POSITIVE_INFINITY;
-    if (dx > 0) {
-        t = Math.min(t, (bounding.width - from.x) / dx);
-    }
-    else if (dx < 0) {
-        t = Math.min(t, -from.x / dx);
-    }
-    if (dy > 0) {
-        t = Math.min(t, (bounding.height - from.y) / dy);
-    }
-    else if (dy < 0) {
-        t = Math.min(t, -from.y / dy);
-    }
-    if (!Number.isFinite(t) || t <= 0) {
-        return through;
-    }
-    return { x: from.x + dx * t, y: from.y + dy * t };
-}
-function lineFigure(key, segments, styles, ignoreEvent) {
-    if (ignoreEvent === void 0) { ignoreEvent = false; }
-    var attrs = segments.map(function (coordinates) { return ({ coordinates: coordinates }); });
-    var figure = { key: key, type: 'line', attrs: attrs, styles: styles };
-    if (ignoreEvent) {
-        figure.ignoreEvent = true;
-    }
-    return figure;
-}
-function labelFigure(key, x, y, text, color, align, baseline) {
-    if (align === void 0) { align = 'center'; }
-    if (baseline === void 0) { baseline = 'middle'; }
-    var attrs = { x: x, y: y, text: text, align: align, baseline: baseline };
-    return {
-        key: key,
-        type: 'text',
-        attrs: attrs,
-        styles: {
-            color: color,
-            size: 11,
-            weight: 'normal',
-            backgroundColor: 'transparent',
-            paddingLeft: 0,
-            paddingRight: 0,
-            paddingTop: 0,
-            paddingBottom: 0
-        },
-        ignoreEvent: true
-    };
-}
-/** The 1/8-division levels shared by the gann box family. */
-function defaultGannEighthLevels() {
-    return [0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875]
-        .map(function (coeff) { return fibLevel(coeff, FIB_COLORS.gray); });
-}
-/**
- * Gann square/box interior shared by gannBox / gannSquare / gannFixed /
- * gannComplex: border + per-level 1/8 dividers + the two diagonals +
- * (optionally) the TradingView gann-square corner fans — each corner rayed
- * to the division points on the two opposite edges.
- */
-function gannBoxGridFigures(params) {
-    var minX = params.minX, minY = params.minY, maxX = params.maxX, maxY = params.maxY, levels = params.levels, lineColor = params.lineColor, lineSize = params.lineSize, keyPrefix = params.keyPrefix, showGrid = params.showGrid, showDiagonals = params.showDiagonals, showFans = params.showFans;
-    var figures = [];
-    var width = maxX - minX;
-    var height = maxY - minY;
-    if (width <= 0 || height <= 0) {
-        return figures;
-    }
-    figures.push({
-        key: "".concat(keyPrefix, "_border"),
-        type: 'rect',
-        attrs: { x: minX, y: minY, width: width, height: height },
-        styles: { style: 'stroke', borderColor: lineColor, borderSize: lineSize }
-    });
-    levels.forEach(function (level, index) {
-        if (!level.visible || level.coeff <= 0 || level.coeff >= 1) {
-            return;
-        }
-        var x = minX + width * level.coeff;
-        var y = minY + height * level.coeff;
-        if (showGrid) {
-            figures.push(lineFigure("".concat(keyPrefix, "_grid_").concat(index), [
-                [{ x: x, y: minY }, { x: x, y: maxY }],
-                [{ x: minX, y: y }, { x: maxX, y: y }]
-            ], { style: 'dashed', size: 1, color: level.color, dashedValue: GRID_DASH }));
-        }
-        if (showFans) {
-            // TradingView gann-square fans: 4 corners × 2 opposite-edge division
-            // points = 8 rays per division level. Decorative — not hit targets.
-            figures.push(lineFigure("".concat(keyPrefix, "_fan_").concat(index), [
-                [{ x: minX, y: maxY }, { x: x, y: minY }],
-                [{ x: maxX, y: maxY }, { x: x, y: minY }],
-                [{ x: minX, y: minY }, { x: x, y: maxY }],
-                [{ x: maxX, y: minY }, { x: x, y: maxY }],
-                [{ x: minX, y: maxY }, { x: maxX, y: y }],
-                [{ x: maxX, y: maxY }, { x: minX, y: y }],
-                [{ x: minX, y: minY }, { x: maxX, y: y }],
-                [{ x: maxX, y: minY }, { x: minX, y: y }]
-            ], { style: 'dashed', size: 1, color: level.color, dashedValue: FAN_DASH }, true));
-        }
-    });
-    if (showDiagonals) {
-        figures.push(lineFigure("".concat(keyPrefix, "_diags"), [
-            [{ x: minX, y: minY }, { x: maxX, y: maxY }],
-            [{ x: minX, y: maxY }, { x: maxX, y: minY }]
-        ], { style: 'solid', size: lineSize, color: lineColor }));
-    }
-    return figures;
-}
-/**
- * TradingView `gannLevelsDefaults`: six fifth-divisions of the box including
- * both edges (fractions 0, 0.2 … 1.0 — level 0 and 5 draw the border).
- */
-function defaultGannSquareLevels() {
-    return [
-        fibLevel(0, FIB_COLORS.gray),
-        fibLevel(0.2, FIB_COLORS.orange),
-        fibLevel(0.4, FIB_COLORS.cyan),
-        fibLevel(0.6, FIB_COLORS.teal),
-        fibLevel(0.8, FIB_COLORS.green),
-        fibLevel(1, FIB_COLORS.gray)
-    ];
-}
-/**
- * TradingView `gannFanlinesDefaults`: 11 fan ratios radiating from the
- * square's start vertex — only 2×1, 1×1 and 1×2 are visible by default.
- */
-function defaultGannFanLines() {
-    var row = function (x, y, color, visible) { return ({ x: x, y: y, color: color, visible: visible }); };
-    return [
-        row(8, 1, '#b2b5be', false),
-        row(5, 1, FIB_COLORS.red, false),
-        row(4, 1, FIB_COLORS.gray, false),
-        row(3, 1, FIB_COLORS.orange, false),
-        row(2, 1, FIB_COLORS.cyan, true),
-        row(1, 1, FIB_COLORS.teal, true),
-        row(1, 2, FIB_COLORS.green, true),
-        row(1, 3, FIB_COLORS.green, false),
-        row(1, 4, FIB_COLORS.blue, false),
-        row(1, 5, '#8c9eff', false),
-        row(1, 8, '#b2b5be', false)
-    ];
-}
-/** TradingView `gannArcsDefaults`: 11 quarter-ellipse scales, all visible. */
-function defaultGannArcs() {
-    var row = function (x, y, color) { return ({ x: x, y: y, color: color, visible: true }); };
-    return [
-        row(1, 0, FIB_COLORS.orange),
-        row(1, 1, FIB_COLORS.orange),
-        row(1.5, 0, FIB_COLORS.orange),
-        row(2, 0, FIB_COLORS.cyan),
-        row(2, 1, FIB_COLORS.cyan),
-        row(3, 0, FIB_COLORS.teal),
-        row(3, 1, FIB_COLORS.teal),
-        row(4, 0, FIB_COLORS.green),
-        row(4, 1, FIB_COLORS.green),
-        row(5, 0, FIB_COLORS.blue),
-        row(5, 1, FIB_COLORS.blue)
-    ];
-}
-/** Whole-array fanlines read (same contract as {@link readLevels}). */
-function readFanLines(extendData, defaults) {
-    var e_2, _a;
-    var fanlines = extendData === null || extendData === void 0 ? void 0 : extendData.fanlines;
-    if (!isArray(fanlines) || fanlines.length === 0) {
-        return defaults;
-    }
-    var result = [];
-    try {
-        for (var fanlines_1 = __values(fanlines), fanlines_1_1 = fanlines_1.next(); !fanlines_1_1.done; fanlines_1_1 = fanlines_1.next()) {
-            var raw = fanlines_1_1.value;
-            if (raw === null || typeof raw !== 'object') {
-                continue;
-            }
-            var line = raw;
-            if (!isNumber(line.x) || !isNumber(line.y)) {
-                continue;
-            }
-            result.push({
-                x: line.x,
-                y: line.y,
-                color: isString(line.color) ? line.color : FIB_COLORS.gray,
-                visible: line.visible !== false
-            });
-        }
-    }
-    catch (e_2_1) { e_2 = { error: e_2_1 }; }
-    finally {
-        try {
-            if (fanlines_1_1 && !fanlines_1_1.done && (_a = fanlines_1.return)) _a.call(fanlines_1);
-        }
-        finally { if (e_2) throw e_2.error; }
-    }
-    return result;
-}
-/** Whole-array arcs read (same contract as {@link readLevels}). */
-function readArcs(extendData, defaults) {
-    var e_3, _a;
-    var arcs = extendData === null || extendData === void 0 ? void 0 : extendData.arcs;
-    if (!isArray(arcs) || arcs.length === 0) {
-        return defaults;
-    }
-    var result = [];
-    try {
-        for (var arcs_1 = __values(arcs), arcs_1_1 = arcs_1.next(); !arcs_1_1.done; arcs_1_1 = arcs_1.next()) {
-            var raw = arcs_1_1.value;
-            if (raw === null || typeof raw !== 'object') {
-                continue;
-            }
-            var arc = raw;
-            if (!isNumber(arc.x) || !isNumber(arc.y)) {
-                continue;
-            }
-            result.push({
-                x: arc.x,
-                y: arc.y,
-                color: isString(arc.color) ? arc.color : FIB_COLORS.gray,
-                visible: arc.visible !== false
-            });
-        }
-    }
-    catch (e_3_1) { e_3 = { error: e_3_1 }; }
-    finally {
-        try {
-            if (arcs_1_1 && !arcs_1_1.done && (_a = arcs_1.return)) _a.call(arcs_1);
-        }
-        finally { if (e_3) throw e_3.error; }
-    }
-    return result;
-}
-/**
- * TradingView transparency is a percent scale (80 → alpha 0.2); a 0-1
- * fraction is tolerated as the same fraction (channelCommon precedent).
- */
-function gannTransparencyAlpha(transparency) {
-    var percent = transparency === undefined ? 80 : transparency <= 1 ? transparency * 100 : transparency;
-    return Math.max(0, Math.min(1, (100 - percent) / 100));
-}
-/**
- * The TradingView gann-box fan: from all four corners to the (divX, divY)
- * division point on the two OPPOSITE edges — 8 rays per division.
- */
-function gannBoxFanSegments(minX, minY, maxX, maxY, divX, divY) {
-    return [
-        [{ x: minX, y: maxY }, { x: divX, y: minY }],
-        [{ x: maxX, y: maxY }, { x: divX, y: minY }],
-        [{ x: minX, y: minY }, { x: divX, y: maxY }],
-        [{ x: maxX, y: minY }, { x: divX, y: maxY }],
-        [{ x: minX, y: maxY }, { x: maxX, y: divY }],
-        [{ x: maxX, y: maxY }, { x: minX, y: divY }],
-        [{ x: minX, y: minY }, { x: maxX, y: divY }],
-        [{ x: maxX, y: minY }, { x: minX, y: divY }]
-    ];
-}
-/**
- * TradingView `_prepareLevels`: a vertical + a horizontal divider per level
- * at `coeff` fractions of the start→end span. Level fractions 0 and 1 land
- * on the edges and act as the box border (drawn in the level's color).
- */
-function gannLevelLineFigures(start, end, levels, lineSize, keyPrefix) {
-    var dx = end.x - start.x;
-    var dy = end.y - start.y;
-    var figures = [];
-    levels.forEach(function (level, index) {
-        if (!level.visible) {
-            return;
-        }
-        var x = start.x + dx * level.coeff;
-        var y = start.y + dy * level.coeff;
-        figures.push(lineFigure("".concat(keyPrefix, "_lvl_").concat(index), [
-            [{ x: x, y: start.y }, { x: x, y: end.y }],
-            [{ x: start.x, y: y }, { x: end.x, y: y }]
-        ], { style: 'solid', size: lineSize, color: level.color }));
-    });
-    return figures;
-}
-/**
- * TradingView `_prepareFanLines`: each {x, y} ratio produces one ray from
- * the start vertex `p1`. x > y lands the endpoint on the far-x edge at
- * `start.y + (y/x)·height`; otherwise on the far-y edge at
- * `start.x + (x/y)·width`.
- */
-function gannP1FanFigures(p1, start, end, fanlines, lineSize, keyPrefix) {
-    var barsRange = end.x - start.x;
-    var priceRange = end.y - start.y;
-    var figures = [];
-    fanlines.forEach(function (line, index) {
-        if (!line.visible || line.x <= 0 || line.y <= 0) {
-            return;
-        }
-        var _a = line.x > line.y
-            ? { d: end.x, u: start.y + (line.y / line.x) * priceRange }
-            : { d: start.x + (line.x / line.y) * barsRange, u: end.y }, d = _a.d, u = _a.u;
-        figures.push(lineFigure("".concat(keyPrefix, "_fan_").concat(index), [[p1, { x: d, y: u }]], { style: 'solid', size: lineSize, color: line.color }));
-    });
-    return figures;
-}
-function round2(value) {
-    return Math.round(value * 100) / 100;
-}
-/**
- * TradingView `_prepareArcs` + `GannArcRenderer`: each {x, y} scale draws a
- * quarter-ellipse centred on the start vertex inside the start→end box,
- * with radii rx = width·√(x²+y²)/5, ry = height·√(x²+y²)/5 (the ellipse is
- * a scaled copy of the box). `GannArcRenderer` clips the arc to the box
- * when a radius exceeds the span — mirrored here by clamping the arc's
- * parametric range instead of emitting an out-of-box path.
- *
- * `fillBack` (TradingView `arcsBackground.fillBackground`, transparency 80
- * default) shades the ring sector between each visible arc and the
- * previous visible one; the first arc's sector is filled from the vertex.
- */
-function gannArcFigures(start, end, arcs, fillBack, transparency, lineSize, keyPrefix) {
-    var dx = end.x - start.x;
-    var dy = end.y - start.y;
-    var w = Math.abs(dx);
-    var h = Math.abs(dy);
-    var figures = [];
-    if (w <= 0 || h <= 0) {
-        return figures;
-    }
-    var sx = dx >= 0 ? 1 : -1;
-    var sy = dy >= 0 ? 1 : -1;
-    // SVG arc sweep direction — established by parametrisation in the
-    // (dx, dy) quadrant: same-sign directions sweep clockwise on screen.
-    var sweep = sx === sy ? 1 : 0;
-    var pointAt = function (rx, ry, t) {
-        return "".concat(round2(start.x + sx * rx * Math.cos(t)), " ").concat(round2(start.y + sy * ry * Math.sin(t)));
-    };
-    var alpha = gannTransparencyAlpha(transparency);
-    var prevRx = 0;
-    var prevRy = 0;
-    arcs.forEach(function (arc, index) {
-        if (!arc.visible || arc.x < 0 || arc.y < 0) {
-            return;
-        }
-        var k = Math.sqrt(arc.x * arc.x + arc.y * arc.y) / 5;
-        var rx = w * k;
-        var ry = h * k;
-        if (rx <= 0 || ry <= 0) {
-            return;
-        }
-        // Visible param range of the quarter arc clipped to the box edges.
-        var t0 = rx > w ? Math.acos(w / rx) : 0;
-        var t1 = ry > h ? Math.asin(h / ry) : Math.PI / 2;
-        if (t1 <= t0) {
-            return;
-        }
-        if (fillBack) {
-            var path = "M".concat(pointAt(rx, ry, t0), " A").concat(round2(rx), " ").concat(round2(ry), " 0 0 ").concat(sweep, " ").concat(pointAt(rx, ry, t1));
-            if (prevRx > 0 && prevRy > 0) {
-                path += " L".concat(pointAt(prevRx, prevRy, t1), " A").concat(round2(prevRx), " ").concat(round2(prevRy), " 0 0 ").concat(1 - sweep, " ").concat(pointAt(prevRx, prevRy, t0), " Z");
-            }
-            else {
-                path += " L".concat(round2(start.x), " ").concat(round2(start.y), " Z");
-            }
-            figures.push({
-                key: "".concat(keyPrefix, "_arcfill_").concat(index),
-                type: 'path',
-                attrs: { x: 0, y: 0, width: 0, height: 0, path: path },
-                styles: { style: 'fill', color: alphaColor(arc.color, alpha) },
-                ignoreEvent: true
-            });
-        }
-        figures.push({
-            key: "".concat(keyPrefix, "_arc_").concat(index),
-            type: 'path',
-            attrs: {
-                x: 0,
-                y: 0,
-                width: 0,
-                height: 0,
-                path: "M".concat(pointAt(rx, ry, t0), " A").concat(round2(rx), " ").concat(round2(ry), " 0 0 ").concat(sweep, " ").concat(pointAt(rx, ry, t1))
-            },
-            styles: { style: 'stroke', color: arc.color, lineWidth: lineSize },
-            ignoreEvent: true
-        });
-        prevRx = rx;
-        prevRy = ry;
-    });
-    return figures;
-}
-/**
- * Square drag handle at an arbitrary pixel position — for computed
- * corners/size handles whose location differs from `points[i]`
- * (`createAnchorFigures` only anchors at stored coordinates).
- */
-function squareHandleFigure(key, coordinate, options) {
-    var _a, _b;
-    var half = options.isTouch === true ? ANCHOR_HALF_TOUCH : ANCHOR_HALF_MOUSE;
-    var cx = Math.round(coordinate.x) - 0.5;
-    var cy = Math.round(coordinate.y) - 0.5;
-    return {
-        key: key,
-        type: 'rect',
-        attrs: { x: cx - half, y: cy - half, width: half * 2, height: half * 2 },
-        styles: {
-            style: 'stroke_fill',
-            color: '#ffffff',
-            borderColor: '#1592E6',
-            borderSize: 1.5
-        },
-        pointIndex: options.pointIndex,
-        moveDirection: (_a = options.moveDirection) !== null && _a !== void 0 ? _a : 'both',
-        cursor: (_b = options.cursor) !== null && _b !== void 0 ? _b : 'pointer'
-    };
-}
-/** Point → pane-local pixel; null when the conversion can't resolve. */
-function pointToCoordinate$2(chart, paneId, point) {
-    var converted = chart.convertToPixel(point, { paneId: paneId });
-    var c = isArray(converted) ? converted[0] : converted;
-    if (isValid(c) && isNumber(c.x) && isNumber(c.y)) {
-        return { x: c.x, y: c.y };
-    }
-    return null;
-}
-/** Pane-local pixel → Point; null when the conversion can't resolve. */
-function coordinateToPoint$2(chart, paneId, coordinate) {
-    var converted = chart.convertFromPixel([coordinate], { paneId: paneId });
-    var point = isArray(converted) ? converted[0] : converted;
-    return isValid(point) ? point : null;
-}
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-var DEFAULT_LEVELS$5 = [
-    fibLevel(0, FIB_COLORS.gray),
-    fibLevel(0.236, FIB_COLORS.red),
-    fibLevel(0.382, FIB_COLORS.orange),
-    fibLevel(0.5, FIB_COLORS.green),
-    fibLevel(0.618, FIB_COLORS.teal),
-    fibLevel(0.786, FIB_COLORS.cyan),
-    fibLevel(1, FIB_COLORS.blue),
-    fibLevel(1.272, FIB_COLORS.orange),
-    fibLevel(1.618, FIB_COLORS.purple)
-];
-var fibCircles = {
-    name: 'fibCircles',
-    totalStep: 3,
-    cullable: false,
-    needDefaultPointFigure: false,
-    needDefaultXAxisFigure: false,
-    needDefaultYAxisFigure: false,
-    styles: {
-        line: { color: TRENDLINE_COLOR, size: 1, style: 'dashed', dashedValue: TRENDLINE_DASH },
-        text: { color: TRENDLINE_COLOR, size: 11 }
-    },
-    extendData: {
-        levels: DEFAULT_LEVELS$5,
-        trendlineVisible: true,
-        showLabels: true
-    },
-    createPointFigures: withPerfPipeline(function (_a) {
-        var _b, _c, _d, _e, _f, _g;
-        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
-        var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
-        var figures = [];
-        if (coordinates.length >= 2) {
-            var _h = __read(coordinates, 2), p1_1 = _h[0], p2 = _h[1];
-            var dx_1 = Math.abs(p2.x - p1_1.x);
-            var dy_1 = Math.abs(p2.y - p1_1.y);
-            if (dx_1 > 0 || dy_1 > 0) {
-                if ((_c = extendData.trendlineVisible) !== null && _c !== void 0 ? _c : true) {
-                    // Inherits styles.line (dashed trendline color from the toolbar).
-                    figures.push(lineFigure('fib_circles_trend', [[p1_1, p2]], {}));
-                }
-                var levels = readLevels(extendData, DEFAULT_LEVELS$5);
-                var showLabels_1 = (_d = extendData.showLabels) !== null && _d !== void 0 ? _d : true;
-                var lineSize_1 = (_g = (_f = (_e = overlay.styles) === null || _e === void 0 ? void 0 : _e.line) === null || _f === void 0 ? void 0 : _f.size) !== null && _g !== void 0 ? _g : 1;
-                levels.forEach(function (level, index) {
-                    if (!level.visible) {
-                        return;
-                    }
-                    var rx = dx_1 * level.coeff;
-                    var ry = dy_1 * level.coeff;
-                    if (rx <= 0 && ry <= 0) {
-                        return;
-                    }
-                    figures.push({
-                        key: "fib_circle_".concat(index),
-                        type: 'ellipse',
-                        attrs: { x: p1_1.x, y: p1_1.y, rx: rx, ry: ry },
-                        styles: { style: 'stroke', borderColor: level.color, borderSize: lineSize_1 },
-                        bounds: { x: p1_1.x - rx, y: p1_1.y - ry, width: rx * 2, height: ry * 2 }
-                    });
-                    if (showLabels_1) {
-                        // Label hangs off the ellipse's bottom point (TV labelPoint).
-                        figures.push(labelFigure("fib_circle_label_".concat(index), p1_1.x, p1_1.y + ry, formatLevelLabel(level), level.color, 'center', 'top'));
-                    }
-                });
-            }
-        }
-        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
-            coordinates: coordinates,
-            isSelected: isSelected,
-            isHovered: isHovered,
-            isTouch: isTouch,
-            isDrawing: overlay.isDrawing(),
-            lock: overlay.lock,
-            keyPrefix: 'anchor_',
-            midPoint: true,
-            cursors: coordinates.length >= 2
-                ? [computeResizeCursor(coordinates[1], coordinates[0]), computeResizeCursor(coordinates[0], coordinates[1])]
-                : undefined
-        })), false));
-        return figures;
-    })
-};
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-var DEFAULT_LEVELS$4 = [
-    fibLevel(0.236, FIB_COLORS.red),
-    fibLevel(0.382, FIB_COLORS.orange),
-    fibLevel(0.5, FIB_COLORS.green),
-    fibLevel(0.618, FIB_COLORS.teal),
-    fibLevel(0.786, FIB_COLORS.cyan),
-    fibLevel(1, FIB_COLORS.blue)
-];
-var fibSpeedArcs = {
-    name: 'fibSpeedArcs',
-    totalStep: 3,
-    cullable: false,
-    needDefaultPointFigure: false,
-    needDefaultXAxisFigure: false,
-    needDefaultYAxisFigure: false,
-    styles: {
-        line: { color: TRENDLINE_COLOR, size: 1, style: 'dashed', dashedValue: TRENDLINE_DASH },
-        text: { color: TRENDLINE_COLOR, size: 11 }
-    },
-    extendData: {
-        levels: DEFAULT_LEVELS$4,
-        trendlineVisible: true,
-        showLabels: true
-    },
-    createPointFigures: withPerfPipeline(function (_a) {
-        var _b, _c, _d, _e, _f, _g;
-        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
-        var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
-        var figures = [];
-        if (coordinates.length >= 2) {
-            var _h = __read(coordinates, 2), p1_1 = _h[0], p2 = _h[1];
-            var baseRadius_1 = distance(p1_1, p2);
-            if (baseRadius_1 > 0) {
-                if ((_c = extendData.trendlineVisible) !== null && _c !== void 0 ? _c : true) {
-                    figures.push(lineFigure('fib_sra_trend', [[p1_1, p2]], {}));
-                }
-                // The half-circle opens toward P2's vertical side: lower half when
-                // P2 sits below P1 on screen (y down), upper half otherwise.
-                var dir_1 = p2.y - p1_1.y >= 0 ? 1 : -1;
-                var startAngle_1 = dir_1 > 0 ? 0 : Math.PI;
-                var endAngle_1 = startAngle_1 + Math.PI;
-                var labelBaseline_1 = dir_1 > 0 ? 'top' : 'bottom';
-                var levels = readLevels(extendData, DEFAULT_LEVELS$4);
-                var showLabels_1 = (_d = extendData.showLabels) !== null && _d !== void 0 ? _d : true;
-                var lineSize_1 = (_g = (_f = (_e = overlay.styles) === null || _e === void 0 ? void 0 : _e.line) === null || _f === void 0 ? void 0 : _f.size) !== null && _g !== void 0 ? _g : 1;
-                levels.forEach(function (level, index) {
-                    if (!level.visible) {
-                        return;
-                    }
-                    var r = baseRadius_1 * level.coeff;
-                    if (r <= 0) {
-                        return;
-                    }
-                    var attrs = { x: p1_1.x, y: p1_1.y, r: r, startAngle: startAngle_1, endAngle: endAngle_1 };
-                    figures.push({
-                        key: "fib_sra_".concat(index),
-                        type: 'arc',
-                        attrs: attrs,
-                        styles: { style: 'solid', size: lineSize_1, color: level.color },
-                        bounds: { x: p1_1.x - r, y: p1_1.y - r, width: r * 2, height: r * 2 }
-                    });
-                    if (showLabels_1) {
-                        figures.push(labelFigure("fib_sra_label_".concat(index), p1_1.x, p1_1.y + dir_1 * r, formatLevelLabel(level), level.color, 'center', labelBaseline_1));
-                    }
-                });
-            }
-        }
-        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
-            coordinates: coordinates,
-            isSelected: isSelected,
-            isHovered: isHovered,
-            isTouch: isTouch,
-            isDrawing: overlay.isDrawing(),
-            lock: overlay.lock,
-            keyPrefix: 'anchor_',
-            midPoint: true,
-            cursors: coordinates.length >= 2
-                ? [computeResizeCursor(coordinates[1], coordinates[0]), computeResizeCursor(coordinates[0], coordinates[1])]
-                : undefined
-        })), false));
-        return figures;
-    })
-};
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-var DEFAULT_LEVELS$3 = [
-    fibLevel(1 / 3, FIB_COLORS.red, true, '1/3'),
-    fibLevel(0.382, FIB_COLORS.orange),
-    fibLevel(0.5, FIB_COLORS.green),
-    fibLevel(0.618, FIB_COLORS.teal),
-    fibLevel(2 / 3, FIB_COLORS.cyan, true, '2/3')
-];
-var fibSpeedFan = {
-    name: 'fibSpeedFan',
-    totalStep: 3,
-    cullable: false,
-    needDefaultPointFigure: false,
-    needDefaultXAxisFigure: false,
-    needDefaultYAxisFigure: false,
-    styles: {
-        line: { color: TRENDLINE_COLOR, size: 1, style: 'dashed', dashedValue: GRID_DASH },
-        text: { color: TRENDLINE_COLOR, size: 11 }
-    },
-    extendData: {
-        levels: DEFAULT_LEVELS$3,
-        showBox: true,
-        showLabels: true
-    },
-    createPointFigures: withPerfPipeline(function (_a) {
-        var _b, _c, _d, _e, _f, _g;
-        var overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
-        var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
-        var figures = [];
-        if (coordinates.length >= 2) {
-            var _h = __read(coordinates, 2), p1_1 = _h[0], p2_1 = _h[1];
-            var dx_1 = p2_1.x - p1_1.x;
-            var dy_1 = p2_1.y - p1_1.y;
-            if (dx_1 !== 0 || dy_1 !== 0) {
-                if ((_c = extendData.showBox) !== null && _c !== void 0 ? _c : true) {
-                    // Box outline + the P1→P2 diagonal, both in styles.line.
-                    figures.push(lineFigure('srf_box', [[
-                            { x: p1_1.x, y: p1_1.y },
-                            { x: p2_1.x, y: p1_1.y },
-                            { x: p2_1.x, y: p2_1.y },
-                            { x: p1_1.x, y: p2_1.y },
-                            { x: p1_1.x, y: p1_1.y }
-                        ]], {}));
-                    figures.push(lineFigure('srf_trend', [[p1_1, p2_1]], {}));
-                }
-                var levels = readLevels(extendData, DEFAULT_LEVELS$3);
-                var showLabels_1 = (_d = extendData.showLabels) !== null && _d !== void 0 ? _d : true;
-                var lineSize_1 = (_g = (_f = (_e = overlay.styles) === null || _e === void 0 ? void 0 : _e.line) === null || _f === void 0 ? void 0 : _f.size) !== null && _g !== void 0 ? _g : 1;
-                var labelAlign_1 = dx_1 >= 0 ? 'left' : 'right';
-                var labelOffset_1 = dx_1 >= 0 ? 4 : -4;
-                levels.forEach(function (level, index) {
-                    if (!level.visible) {
-                        return;
-                    }
-                    // Horizontal-axis family: division point on the P2.x edge.
-                    var hTarget = { x: p2_1.x, y: p1_1.y + dy_1 * level.coeff };
-                    figures.push(lineFigure("srf_h_".concat(index), [[p1_1, rayToBoundingEdge(p1_1, hTarget, bounding)]], { style: 'solid', size: lineSize_1, color: level.color }));
-                    // Vertical-axis family: division point on the P2.y edge.
-                    var vTarget = { x: p1_1.x + dx_1 * level.coeff, y: p2_1.y };
-                    figures.push(lineFigure("srf_v_".concat(index), [[p1_1, rayToBoundingEdge(p1_1, vTarget, bounding)]], { style: 'solid', size: lineSize_1, color: level.color }));
-                    if (showLabels_1) {
-                        figures.push(labelFigure("srf_label_".concat(index), hTarget.x + labelOffset_1, hTarget.y, formatLevelLabel(level), level.color, labelAlign_1, 'middle'));
-                    }
-                });
-            }
-        }
-        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
-            coordinates: coordinates,
-            isSelected: isSelected,
-            isHovered: isHovered,
-            isTouch: isTouch,
-            isDrawing: overlay.isDrawing(),
-            lock: overlay.lock,
-            keyPrefix: 'anchor_',
-            midPoint: true,
-            cursors: coordinates.length >= 2
-                ? [computeResizeCursor(coordinates[1], coordinates[0]), computeResizeCursor(coordinates[0], coordinates[1])]
-                : undefined
-        })), false));
-        return figures;
-    })
-};
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-var PHI = 1.618033988749895;
-var SPIRAL_STEPS = 360;
-var MIN_THETA = -4 * Math.PI;
-var MAX_THETA = 4 * Math.PI;
-var MAX_RADIUS_FACTOR = 20;
-var MIN_RADIUS_PX$1 = 0.5;
-var fibSpiral = {
-    name: 'fibSpiral',
-    totalStep: 3,
-    cullable: false,
-    needDefaultPointFigure: false,
-    needDefaultXAxisFigure: false,
-    needDefaultYAxisFigure: false,
-    styles: {
-        line: { color: '#2962ff', size: 2, style: 'solid' }
-    },
-    extendData: {
-        counterclockwise: false,
-        trendlineVisible: true
-    },
-    createPointFigures: withPerfPipeline(function (_a) {
-        var _b, _c, _d, _e, _f, _g;
-        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
-        var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
-        var figures = [];
-        if (coordinates.length >= 2) {
-            var _h = __read(coordinates, 2), p1 = _h[0], p2 = _h[1];
-            var dx = p2.x - p1.x;
-            var dy = p2.y - p1.y;
-            var baseRadius = Math.sqrt(dx * dx + dy * dy);
-            var baseAngle = Math.atan2(dy, dx);
-            if (baseRadius >= 1) {
-                var dir = ((_c = extendData.counterclockwise) !== null && _c !== void 0 ? _c : false) ? -1 : 1;
-                var maxRadius = baseRadius * MAX_RADIUS_FACTOR;
-                var spiralPoints = [];
-                for (var i = 0; i <= SPIRAL_STEPS; i++) {
-                    var theta = MIN_THETA + (i / SPIRAL_STEPS) * (MAX_THETA - MIN_THETA);
-                    var r = baseRadius * Math.pow(PHI, (2 * theta) / Math.PI);
-                    if (r < MIN_RADIUS_PX$1) {
-                        continue;
-                    }
-                    if (r > maxRadius) {
-                        break;
-                    }
-                    spiralPoints.push({
-                        x: p1.x + r * Math.cos(baseAngle + dir * theta),
-                        y: p1.y + r * Math.sin(baseAngle + dir * theta)
-                    });
-                }
-                if (spiralPoints.length >= 2) {
-                    // Inherits styles.line (color/width from the toolbar).
-                    figures.push(lineFigure('fib_spiral', [spiralPoints], {}));
-                }
-                if ((_d = extendData.trendlineVisible) !== null && _d !== void 0 ? _d : true) {
-                    var lineColor = (_g = (_f = (_e = overlay.styles) === null || _e === void 0 ? void 0 : _e.line) === null || _f === void 0 ? void 0 : _f.color) !== null && _g !== void 0 ? _g : '#2962ff';
-                    figures.push(lineFigure('fib_spiral_trend', [[p1, p2]], { style: 'dashed', size: 1, color: lineColor, dashedValue: TRENDLINE_DASH }, true));
-                }
-            }
-        }
-        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
-            coordinates: coordinates,
-            isSelected: isSelected,
-            isHovered: isHovered,
-            isTouch: isTouch,
-            isDrawing: overlay.isDrawing(),
-            lock: overlay.lock,
-            keyPrefix: 'anchor_',
-            midPoint: true,
-            cursors: coordinates.length >= 2
-                ? [computeResizeCursor(coordinates[1], coordinates[0]), computeResizeCursor(coordinates[0], coordinates[1])]
-                : undefined
-        })), false));
-        return figures;
-    })
-};
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-var DEFAULT_LEVELS$2 = [
-    fibLevel(0.236, FIB_COLORS.red),
-    fibLevel(0.382, FIB_COLORS.orange),
-    fibLevel(0.5, FIB_COLORS.green),
-    fibLevel(0.618, FIB_COLORS.teal),
-    fibLevel(0.786, FIB_COLORS.cyan)
-];
-/** Signed smallest rotation from a1 to a2 in (−π, π] — the wedge always spans the small sector. */
-function signedSectorAngle$1(a1, a2) {
-    var da = a2 - a1;
-    while (da > Math.PI) {
-        da -= Math.PI * 2;
-    }
-    while (da <= -Math.PI) {
-        da += Math.PI * 2;
-    }
-    return da;
-}
-var fibWedge = {
-    name: 'fibWedge',
-    totalStep: 4,
-    cullable: false,
-    needDefaultPointFigure: false,
-    needDefaultXAxisFigure: false,
-    needDefaultYAxisFigure: false,
-    styles: {
-        line: { color: TRENDLINE_COLOR, size: 1, style: 'solid' },
-        arc: { color: TRENDLINE_COLOR, size: 1, style: 'solid' },
-        text: { color: TRENDLINE_COLOR, size: 11 }
-    },
-    extendData: {
-        levels: DEFAULT_LEVELS$2,
-        showLabels: true
-    },
-    createPointFigures: withPerfPipeline(function (_a) {
-        var _b, _c, _d, _e, _f, _g, _h, _j;
-        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
-        var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
-        var figures = [];
-        if (coordinates.length >= 3) {
-            var _k = __read(coordinates, 3), p1_1 = _k[0], p2 = _k[1], p3 = _k[2];
-            var radius_1 = distance(p1_1, p2);
-            var spread = distance(p1_1, p3);
-            if (radius_1 > 0 && spread > 0) {
-                var a1_1 = Math.atan2(p2.y - p1_1.y, p2.x - p1_1.x);
-                var a2 = Math.atan2(p3.y - p1_1.y, p3.x - p1_1.x);
-                var da_1 = signedSectorAngle$1(a1_1, a2);
-                var lineSize_1 = (_e = (_d = (_c = overlay.styles) === null || _c === void 0 ? void 0 : _c.line) === null || _d === void 0 ? void 0 : _d.size) !== null && _e !== void 0 ? _e : 1;
-                var lineColor = (_h = (_g = (_f = overlay.styles) === null || _f === void 0 ? void 0 : _f.line) === null || _g === void 0 ? void 0 : _g.color) !== null && _h !== void 0 ? _h : TRENDLINE_COLOR;
-                // Boundary rays — P1→P2 exact, P1→P3 projected onto its own ray at
-                // the wedge radius so both edges close on the same sector arc.
-                figures.push(lineFigure('fib_wedge_edge', [
-                    [p1_1, p2],
-                    [p1_1, { x: p1_1.x + Math.cos(a2) * radius_1, y: p1_1.y + Math.sin(a2) * radius_1 }]
-                ], {}));
-                // Fib-ratio concentric arcs spanning the sector — annular sectors
-                // at radius coeff × r, from boundary ray a1 to boundary ray a2.
-                var levels = readLevels(extendData, DEFAULT_LEVELS$2);
-                var showLabels_1 = (_j = extendData.showLabels) !== null && _j !== void 0 ? _j : true;
-                var startAngle_1 = da_1 > 0 ? a1_1 : a1_1 + da_1;
-                var endAngle_1 = da_1 > 0 ? a1_1 + da_1 : a1_1;
-                levels.forEach(function (level, index) {
-                    if (!level.visible) {
-                        return;
-                    }
-                    var r = radius_1 * level.coeff;
-                    if (r <= 0) {
-                        return;
-                    }
-                    var attrs = {
-                        x: p1_1.x,
-                        y: p1_1.y,
-                        r: r,
-                        startAngle: startAngle_1,
-                        endAngle: endAngle_1
-                    };
-                    figures.push({
-                        key: "fib_wedge_arc_".concat(index),
-                        type: 'arc',
-                        attrs: attrs,
-                        styles: { style: 'solid', size: lineSize_1, color: level.color },
-                        bounds: { x: p1_1.x - r, y: p1_1.y - r, width: r * 2, height: r * 2 }
-                    });
-                    if (showLabels_1) {
-                        // Label sits at the arc's angular midpoint (TV labelPoint).
-                        var midAngle = a1_1 + da_1 / 2;
-                        var labelRadius = r;
-                        figures.push(labelFigure("fib_wedge_label_".concat(index), p1_1.x + Math.cos(midAngle) * labelRadius, p1_1.y + Math.sin(midAngle) * labelRadius, formatLevelLabel(level), level.color, 'center', 'bottom'));
-                    }
-                });
-                // Closing arc at the full wedge radius.
-                if (da_1 !== 0) {
-                    var attrs = {
-                        x: p1_1.x,
-                        y: p1_1.y,
-                        r: radius_1,
-                        startAngle: startAngle_1,
-                        endAngle: endAngle_1
-                    };
-                    figures.push({
-                        key: 'fib_wedge_arc',
-                        type: 'arc',
-                        attrs: attrs,
-                        styles: { style: 'solid', size: lineSize_1, color: lineColor },
-                        bounds: { x: p1_1.x - radius_1, y: p1_1.y - radius_1, width: radius_1 * 2, height: radius_1 * 2 }
-                    });
-                }
-            }
-        }
-        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
-            coordinates: coordinates,
-            isSelected: isSelected,
-            isHovered: isHovered,
-            isTouch: isTouch,
-            isDrawing: overlay.isDrawing(),
-            lock: overlay.lock,
-            keyPrefix: 'anchor_'
-        })), false));
-        return figures;
-    })
 };
 
 /**
@@ -41708,6 +40744,1310 @@ function buildXAxisBandFigures(keyPrefix, params) {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+var TRENDLINE_COLOR = '#787b86';
+var TRENDLINE_DASH = [4, 4];
+var GRID_DASH = [2, 4];
+var FAN_DASH = [4, 4];
+/** Shared TradingView-ish level palette. */
+var FIB_COLORS = {
+    red: '#f23645',
+    orange: '#ff9800',
+    green: '#4caf50',
+    teal: '#089981',
+    cyan: '#00bcd4',
+    blue: '#2962ff',
+    purple: '#9c27b0',
+    pink: '#e91e63',
+    gray: '#787b86',
+    /** TradingView `colorColdGray500` — '#787b86' is the 600/700 shade. */
+    coldGray: '#808080'
+};
+function fibLevel(coeff, color, visible, label) {
+    if (visible === void 0) { visible = true; }
+    var level = { coeff: coeff, color: color, visible: visible };
+    if (label !== undefined) {
+        level.label = label;
+    }
+    return level;
+}
+/**
+ * Whole-array levels read: validates every row, keeps the user's ordering,
+ * falls back to `defaults` when the overlay carries no usable array.
+ */
+function readLevels(extendData, defaults) {
+    var e_1, _a;
+    var levels = extendData === null || extendData === void 0 ? void 0 : extendData.levels;
+    if (!isArray(levels) || levels.length === 0) {
+        return defaults;
+    }
+    var result = [];
+    try {
+        for (var levels_1 = __values(levels), levels_1_1 = levels_1.next(); !levels_1_1.done; levels_1_1 = levels_1.next()) {
+            var raw = levels_1_1.value;
+            if (raw === null || typeof raw !== 'object') {
+                continue;
+            }
+            var level = raw;
+            if (!isNumber(level.coeff)) {
+                continue;
+            }
+            result.push({
+                coeff: level.coeff,
+                color: isString(level.color) ? level.color : FIB_COLORS.gray,
+                visible: level.visible !== false,
+                label: isString(level.label) ? level.label : undefined
+            });
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (levels_1_1 && !levels_1_1.done && (_a = levels_1.return)) _a.call(levels_1);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    return result;
+}
+function formatLevelLabel(level) {
+    if (isString(level.label)) {
+        return level.label;
+    }
+    // Compact coeff printing: 0.5 → '0.5', 1/3 → '0.333'
+    return "".concat(Math.round(level.coeff * 1000) / 1000);
+}
+function distance(a, b) {
+    var dx = b.x - a.x;
+    var dy = b.y - a.y;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+/**
+ * Ray exit point: the ray from `from` through `through` clipped at the pane
+ * bounding rect. Falls back to `through` for degenerate directions or an
+ * origin that lies outside the rect and moves away from it.
+ */
+function rayToBoundingEdge(from, through, bounding) {
+    var dx = through.x - from.x;
+    var dy = through.y - from.y;
+    var t = Number.POSITIVE_INFINITY;
+    if (dx > 0) {
+        t = Math.min(t, (bounding.width - from.x) / dx);
+    }
+    else if (dx < 0) {
+        t = Math.min(t, -from.x / dx);
+    }
+    if (dy > 0) {
+        t = Math.min(t, (bounding.height - from.y) / dy);
+    }
+    else if (dy < 0) {
+        t = Math.min(t, -from.y / dy);
+    }
+    if (!Number.isFinite(t) || t <= 0) {
+        return through;
+    }
+    return { x: from.x + dx * t, y: from.y + dy * t };
+}
+/**
+ * SVG path for an axis-aligned ellipse (or ring): the outer ellipse is
+ * wound clockwise; when `innerRx`/`innerRy` are positive a same-centre
+ * counter-clockwise ellipse is appended, which the canvas nonzero fill
+ * rule subtracts — the TradingView `EllipseRendererSimple` `wholePoints`
+ * ring fill (ring between a level and the previous visible level).
+ */
+function ellipseRingPath(cx, cy, rx, ry, innerRx, innerRy) {
+    if (innerRx === void 0) { innerRx = 0; }
+    if (innerRy === void 0) { innerRy = 0; }
+    var r = function (v) { return Math.round(v * 100) / 100; };
+    var path = "M".concat(r(cx + rx), " ").concat(r(cy), " A").concat(r(rx), " ").concat(r(ry), " 0 0 1 ").concat(r(cx - rx), " ").concat(r(cy), " A").concat(r(rx), " ").concat(r(ry), " 0 0 1 ").concat(r(cx + rx), " ").concat(r(cy), " Z");
+    if (innerRx > 0 && innerRy > 0) {
+        path += " M".concat(r(cx + innerRx), " ").concat(r(cy), " A").concat(r(innerRx), " ").concat(r(innerRy), " 0 0 0 ").concat(r(cx - innerRx), " ").concat(r(cy), " A").concat(r(innerRx), " ").concat(r(innerRy), " 0 0 0 ").concat(r(cx + innerRx), " ").concat(r(cy), " Z");
+    }
+    return path;
+}
+/**
+ * Sutherland–Hodgman clip of `polygon` against the half-plane bounded by
+ * the ray `apex → through`, keeping the side that contains `keep` —
+ * TradingView `clipPolygonByEdge` parity. Returns [] when `keep` lies on
+ * the edge line (the wedge is degenerate).
+ */
+function clipToRaySide(polygon, apex, through, keep) {
+    var dx = through.x - apex.x;
+    var dy = through.y - apex.y;
+    var side = function (p) { return (p.x - apex.x) * dy - (p.y - apex.y) * dx; };
+    var keepSide = side(keep);
+    if (keepSide === 0) {
+        return [];
+    }
+    var sign = keepSide > 0 ? 1 : -1;
+    var out = [];
+    for (var i = 0; i < polygon.length; i++) {
+        var a = polygon[i];
+        var b = polygon[(i + 1) % polygon.length];
+        var da = side(a) * sign;
+        var db = side(b) * sign;
+        if (da >= 0) {
+            out.push(a);
+        }
+        if ((da > 0 && db < 0) || (da < 0 && db > 0)) {
+            var t = da / (da - db);
+            out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+        }
+    }
+    return out;
+}
+/**
+ * Screen-clipped wedge between two rays sharing `apex`: the pane rect
+ * clipped by each ray's half-plane, keeping the side containing the OTHER
+ * ray's target. Mirrors the TradingView `ChannelRenderer` wedge used for
+ * speed-resistance fan fills (p1 == p3 → the cone through the division
+ * points, unbounded past them to the screen edge).
+ */
+function rayWedgePolygon(apex, throughA, throughB, bounding) {
+    var polygon = [
+        { x: 0, y: 0 },
+        { x: bounding.width, y: 0 },
+        { x: bounding.width, y: bounding.height },
+        { x: 0, y: bounding.height }
+    ];
+    polygon = clipToRaySide(polygon, apex, throughA, throughB);
+    polygon = clipToRaySide(polygon, apex, throughB, throughA);
+    return polygon;
+}
+function lineFigure(key, segments, styles, ignoreEvent) {
+    if (ignoreEvent === void 0) { ignoreEvent = false; }
+    var attrs = segments.map(function (coordinates) { return ({ coordinates: coordinates }); });
+    var figure = { key: key, type: 'line', attrs: attrs, styles: styles };
+    if (ignoreEvent) {
+        figure.ignoreEvent = true;
+    }
+    return figure;
+}
+function labelFigure(key, x, y, text, color, align, baseline, size) {
+    if (align === void 0) { align = 'center'; }
+    if (baseline === void 0) { baseline = 'middle'; }
+    if (size === void 0) { size = 11; }
+    var attrs = { x: x, y: y, text: text, align: align, baseline: baseline };
+    return {
+        key: key,
+        type: 'text',
+        attrs: attrs,
+        styles: {
+            color: color,
+            size: size,
+            weight: 'normal',
+            backgroundColor: 'transparent',
+            paddingLeft: 0,
+            paddingRight: 0,
+            paddingTop: 0,
+            paddingBottom: 0
+        },
+        ignoreEvent: true
+    };
+}
+/** The 1/8-division levels shared by the gann box family. */
+function defaultGannEighthLevels() {
+    return [0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875]
+        .map(function (coeff) { return fibLevel(coeff, FIB_COLORS.gray); });
+}
+/**
+ * Gann square/box interior shared by gannBox / gannSquare / gannFixed /
+ * gannComplex: border + per-level 1/8 dividers + the two diagonals +
+ * (optionally) the TradingView gann-square corner fans — each corner rayed
+ * to the division points on the two opposite edges.
+ */
+function gannBoxGridFigures(params) {
+    var minX = params.minX, minY = params.minY, maxX = params.maxX, maxY = params.maxY, levels = params.levels, lineColor = params.lineColor, lineSize = params.lineSize, keyPrefix = params.keyPrefix, showGrid = params.showGrid, showDiagonals = params.showDiagonals, showFans = params.showFans;
+    var figures = [];
+    var width = maxX - minX;
+    var height = maxY - minY;
+    if (width <= 0 || height <= 0) {
+        return figures;
+    }
+    figures.push({
+        key: "".concat(keyPrefix, "_border"),
+        type: 'rect',
+        attrs: { x: minX, y: minY, width: width, height: height },
+        styles: { style: 'stroke', borderColor: lineColor, borderSize: lineSize }
+    });
+    levels.forEach(function (level, index) {
+        if (!level.visible || level.coeff <= 0 || level.coeff >= 1) {
+            return;
+        }
+        var x = minX + width * level.coeff;
+        var y = minY + height * level.coeff;
+        if (showGrid) {
+            figures.push(lineFigure("".concat(keyPrefix, "_grid_").concat(index), [
+                [{ x: x, y: minY }, { x: x, y: maxY }],
+                [{ x: minX, y: y }, { x: maxX, y: y }]
+            ], { style: 'dashed', size: 1, color: level.color, dashedValue: GRID_DASH }));
+        }
+        if (showFans) {
+            // TradingView gann-square fans: 4 corners × 2 opposite-edge division
+            // points = 8 rays per division level. Decorative — not hit targets.
+            figures.push(lineFigure("".concat(keyPrefix, "_fan_").concat(index), [
+                [{ x: minX, y: maxY }, { x: x, y: minY }],
+                [{ x: maxX, y: maxY }, { x: x, y: minY }],
+                [{ x: minX, y: minY }, { x: x, y: maxY }],
+                [{ x: maxX, y: minY }, { x: x, y: maxY }],
+                [{ x: minX, y: maxY }, { x: maxX, y: y }],
+                [{ x: maxX, y: maxY }, { x: minX, y: y }],
+                [{ x: minX, y: minY }, { x: maxX, y: y }],
+                [{ x: maxX, y: minY }, { x: minX, y: y }]
+            ], { style: 'dashed', size: 1, color: level.color, dashedValue: FAN_DASH }, true));
+        }
+    });
+    if (showDiagonals) {
+        figures.push(lineFigure("".concat(keyPrefix, "_diags"), [
+            [{ x: minX, y: minY }, { x: maxX, y: maxY }],
+            [{ x: minX, y: maxY }, { x: maxX, y: minY }]
+        ], { style: 'solid', size: lineSize, color: lineColor }));
+    }
+    return figures;
+}
+/**
+ * TradingView `gannLevelsDefaults`: six fifth-divisions of the box including
+ * both edges (fractions 0, 0.2 … 1.0 — level 0 and 5 draw the border).
+ */
+function defaultGannSquareLevels() {
+    return [
+        fibLevel(0, FIB_COLORS.gray),
+        fibLevel(0.2, FIB_COLORS.orange),
+        fibLevel(0.4, FIB_COLORS.cyan),
+        fibLevel(0.6, FIB_COLORS.teal),
+        fibLevel(0.8, FIB_COLORS.green),
+        fibLevel(1, FIB_COLORS.gray)
+    ];
+}
+/**
+ * TradingView `gannFanlinesDefaults`: 11 fan ratios radiating from the
+ * square's start vertex — only 2×1, 1×1 and 1×2 are visible by default.
+ */
+function defaultGannFanLines() {
+    var row = function (x, y, color, visible) { return ({ x: x, y: y, color: color, visible: visible }); };
+    return [
+        row(8, 1, '#b2b5be', false),
+        row(5, 1, FIB_COLORS.red, false),
+        row(4, 1, FIB_COLORS.gray, false),
+        row(3, 1, FIB_COLORS.orange, false),
+        row(2, 1, FIB_COLORS.cyan, true),
+        row(1, 1, FIB_COLORS.teal, true),
+        row(1, 2, FIB_COLORS.green, true),
+        row(1, 3, FIB_COLORS.green, false),
+        row(1, 4, FIB_COLORS.blue, false),
+        row(1, 5, '#8c9eff', false),
+        row(1, 8, '#b2b5be', false)
+    ];
+}
+/** TradingView `gannArcsDefaults`: 11 quarter-ellipse scales, all visible. */
+function defaultGannArcs() {
+    var row = function (x, y, color) { return ({ x: x, y: y, color: color, visible: true }); };
+    return [
+        row(1, 0, FIB_COLORS.orange),
+        row(1, 1, FIB_COLORS.orange),
+        row(1.5, 0, FIB_COLORS.orange),
+        row(2, 0, FIB_COLORS.cyan),
+        row(2, 1, FIB_COLORS.cyan),
+        row(3, 0, FIB_COLORS.teal),
+        row(3, 1, FIB_COLORS.teal),
+        row(4, 0, FIB_COLORS.green),
+        row(4, 1, FIB_COLORS.green),
+        row(5, 0, FIB_COLORS.blue),
+        row(5, 1, FIB_COLORS.blue)
+    ];
+}
+/** Whole-array fanlines read (same contract as {@link readLevels}). */
+function readFanLines(extendData, defaults) {
+    var e_2, _a;
+    var fanlines = extendData === null || extendData === void 0 ? void 0 : extendData.fanlines;
+    if (!isArray(fanlines) || fanlines.length === 0) {
+        return defaults;
+    }
+    var result = [];
+    try {
+        for (var fanlines_1 = __values(fanlines), fanlines_1_1 = fanlines_1.next(); !fanlines_1_1.done; fanlines_1_1 = fanlines_1.next()) {
+            var raw = fanlines_1_1.value;
+            if (raw === null || typeof raw !== 'object') {
+                continue;
+            }
+            var line = raw;
+            if (!isNumber(line.x) || !isNumber(line.y)) {
+                continue;
+            }
+            result.push({
+                x: line.x,
+                y: line.y,
+                color: isString(line.color) ? line.color : FIB_COLORS.gray,
+                visible: line.visible !== false
+            });
+        }
+    }
+    catch (e_2_1) { e_2 = { error: e_2_1 }; }
+    finally {
+        try {
+            if (fanlines_1_1 && !fanlines_1_1.done && (_a = fanlines_1.return)) _a.call(fanlines_1);
+        }
+        finally { if (e_2) throw e_2.error; }
+    }
+    return result;
+}
+/** Whole-array arcs read (same contract as {@link readLevels}). */
+function readArcs(extendData, defaults) {
+    var e_3, _a;
+    var arcs = extendData === null || extendData === void 0 ? void 0 : extendData.arcs;
+    if (!isArray(arcs) || arcs.length === 0) {
+        return defaults;
+    }
+    var result = [];
+    try {
+        for (var arcs_1 = __values(arcs), arcs_1_1 = arcs_1.next(); !arcs_1_1.done; arcs_1_1 = arcs_1.next()) {
+            var raw = arcs_1_1.value;
+            if (raw === null || typeof raw !== 'object') {
+                continue;
+            }
+            var arc = raw;
+            if (!isNumber(arc.x) || !isNumber(arc.y)) {
+                continue;
+            }
+            result.push({
+                x: arc.x,
+                y: arc.y,
+                color: isString(arc.color) ? arc.color : FIB_COLORS.gray,
+                visible: arc.visible !== false
+            });
+        }
+    }
+    catch (e_3_1) { e_3 = { error: e_3_1 }; }
+    finally {
+        try {
+            if (arcs_1_1 && !arcs_1_1.done && (_a = arcs_1.return)) _a.call(arcs_1);
+        }
+        finally { if (e_3) throw e_3.error; }
+    }
+    return result;
+}
+/**
+ * TradingView transparency is a percent scale (80 → alpha 0.2); a 0-1
+ * fraction is tolerated as the same fraction (channelCommon precedent).
+ */
+function gannTransparencyAlpha(transparency) {
+    var percent = transparency === undefined ? 80 : transparency <= 1 ? transparency * 100 : transparency;
+    return Math.max(0, Math.min(1, (100 - percent) / 100));
+}
+/**
+ * The TradingView gann-box fan: from all four corners to the (divX, divY)
+ * division point on the two OPPOSITE edges — 8 rays per division.
+ */
+function gannBoxFanSegments(minX, minY, maxX, maxY, divX, divY) {
+    return [
+        [{ x: minX, y: maxY }, { x: divX, y: minY }],
+        [{ x: maxX, y: maxY }, { x: divX, y: minY }],
+        [{ x: minX, y: minY }, { x: divX, y: maxY }],
+        [{ x: maxX, y: minY }, { x: divX, y: maxY }],
+        [{ x: minX, y: maxY }, { x: maxX, y: divY }],
+        [{ x: maxX, y: maxY }, { x: minX, y: divY }],
+        [{ x: minX, y: minY }, { x: maxX, y: divY }],
+        [{ x: maxX, y: minY }, { x: minX, y: divY }]
+    ];
+}
+/**
+ * TradingView `_prepareLevels`: a vertical + a horizontal divider per level
+ * at `coeff` fractions of the start→end span. Level fractions 0 and 1 land
+ * on the edges and act as the box border (drawn in the level's color).
+ */
+function gannLevelLineFigures(start, end, levels, lineSize, keyPrefix) {
+    var dx = end.x - start.x;
+    var dy = end.y - start.y;
+    var figures = [];
+    levels.forEach(function (level, index) {
+        if (!level.visible) {
+            return;
+        }
+        var x = start.x + dx * level.coeff;
+        var y = start.y + dy * level.coeff;
+        figures.push(lineFigure("".concat(keyPrefix, "_lvl_").concat(index), [
+            [{ x: x, y: start.y }, { x: x, y: end.y }],
+            [{ x: start.x, y: y }, { x: end.x, y: y }]
+        ], { style: 'solid', size: lineSize, color: level.color }));
+    });
+    return figures;
+}
+/**
+ * TradingView `_prepareFanLines`: each {x, y} ratio produces one ray from
+ * the start vertex `p1`. x > y lands the endpoint on the far-x edge at
+ * `start.y + (y/x)·height`; otherwise on the far-y edge at
+ * `start.x + (x/y)·width`.
+ */
+function gannP1FanFigures(p1, start, end, fanlines, lineSize, keyPrefix) {
+    var barsRange = end.x - start.x;
+    var priceRange = end.y - start.y;
+    var figures = [];
+    fanlines.forEach(function (line, index) {
+        if (!line.visible || line.x <= 0 || line.y <= 0) {
+            return;
+        }
+        var _a = line.x > line.y
+            ? { d: end.x, u: start.y + (line.y / line.x) * priceRange }
+            : { d: start.x + (line.x / line.y) * barsRange, u: end.y }, d = _a.d, u = _a.u;
+        figures.push(lineFigure("".concat(keyPrefix, "_fan_").concat(index), [[p1, { x: d, y: u }]], { style: 'solid', size: lineSize, color: line.color }));
+    });
+    return figures;
+}
+function round2(value) {
+    return Math.round(value * 100) / 100;
+}
+/**
+ * TradingView `_prepareArcs` + `GannArcRenderer`: each {x, y} scale draws a
+ * quarter-ellipse centred on the start vertex inside the start→end box,
+ * with radii rx = width·√(x²+y²)/5, ry = height·√(x²+y²)/5 (the ellipse is
+ * a scaled copy of the box). `GannArcRenderer` clips the arc to the box
+ * when a radius exceeds the span — mirrored here by clamping the arc's
+ * parametric range instead of emitting an out-of-box path.
+ *
+ * `fillBack` (TradingView `arcsBackground.fillBackground`, transparency 80
+ * default) shades the ring sector between each visible arc and the
+ * previous visible one; the first arc's sector is filled from the vertex.
+ */
+function gannArcFigures(start, end, arcs, fillBack, transparency, lineSize, keyPrefix) {
+    var dx = end.x - start.x;
+    var dy = end.y - start.y;
+    var w = Math.abs(dx);
+    var h = Math.abs(dy);
+    var figures = [];
+    if (w <= 0 || h <= 0) {
+        return figures;
+    }
+    var sx = dx >= 0 ? 1 : -1;
+    var sy = dy >= 0 ? 1 : -1;
+    // SVG arc sweep direction — established by parametrisation in the
+    // (dx, dy) quadrant: same-sign directions sweep clockwise on screen.
+    var sweep = sx === sy ? 1 : 0;
+    var pointAt = function (rx, ry, t) {
+        return "".concat(round2(start.x + sx * rx * Math.cos(t)), " ").concat(round2(start.y + sy * ry * Math.sin(t)));
+    };
+    var alpha = gannTransparencyAlpha(transparency);
+    var prevRx = 0;
+    var prevRy = 0;
+    arcs.forEach(function (arc, index) {
+        if (!arc.visible || arc.x < 0 || arc.y < 0) {
+            return;
+        }
+        var k = Math.sqrt(arc.x * arc.x + arc.y * arc.y) / 5;
+        var rx = w * k;
+        var ry = h * k;
+        if (rx <= 0 || ry <= 0) {
+            return;
+        }
+        // Visible param range of the quarter arc clipped to the box edges.
+        var t0 = rx > w ? Math.acos(w / rx) : 0;
+        var t1 = ry > h ? Math.asin(h / ry) : Math.PI / 2;
+        if (t1 <= t0) {
+            return;
+        }
+        if (fillBack) {
+            var path = "M".concat(pointAt(rx, ry, t0), " A").concat(round2(rx), " ").concat(round2(ry), " 0 0 ").concat(sweep, " ").concat(pointAt(rx, ry, t1));
+            if (prevRx > 0 && prevRy > 0) {
+                path += " L".concat(pointAt(prevRx, prevRy, t1), " A").concat(round2(prevRx), " ").concat(round2(prevRy), " 0 0 ").concat(1 - sweep, " ").concat(pointAt(prevRx, prevRy, t0), " Z");
+            }
+            else {
+                path += " L".concat(round2(start.x), " ").concat(round2(start.y), " Z");
+            }
+            figures.push({
+                key: "".concat(keyPrefix, "_arcfill_").concat(index),
+                type: 'path',
+                attrs: { x: 0, y: 0, width: 0, height: 0, path: path },
+                styles: { style: 'fill', color: alphaColor(arc.color, alpha) },
+                ignoreEvent: true
+            });
+        }
+        figures.push({
+            key: "".concat(keyPrefix, "_arc_").concat(index),
+            type: 'path',
+            attrs: {
+                x: 0,
+                y: 0,
+                width: 0,
+                height: 0,
+                path: "M".concat(pointAt(rx, ry, t0), " A").concat(round2(rx), " ").concat(round2(ry), " 0 0 ").concat(sweep, " ").concat(pointAt(rx, ry, t1))
+            },
+            styles: { style: 'stroke', color: arc.color, lineWidth: lineSize },
+            ignoreEvent: true
+        });
+        prevRx = rx;
+        prevRy = ry;
+    });
+    return figures;
+}
+/**
+ * Square drag handle at an arbitrary pixel position — for computed
+ * corners/size handles whose location differs from `points[i]`
+ * (`createAnchorFigures` only anchors at stored coordinates).
+ */
+function squareHandleFigure(key, coordinate, options) {
+    var _a, _b;
+    var half = options.isTouch === true ? ANCHOR_HALF_TOUCH : ANCHOR_HALF_MOUSE;
+    var cx = Math.round(coordinate.x) - 0.5;
+    var cy = Math.round(coordinate.y) - 0.5;
+    return {
+        key: key,
+        type: 'rect',
+        attrs: { x: cx - half, y: cy - half, width: half * 2, height: half * 2 },
+        styles: {
+            style: 'stroke_fill',
+            color: '#ffffff',
+            borderColor: '#1592E6',
+            borderSize: 1.5
+        },
+        pointIndex: options.pointIndex,
+        moveDirection: (_a = options.moveDirection) !== null && _a !== void 0 ? _a : 'both',
+        cursor: (_b = options.cursor) !== null && _b !== void 0 ? _b : 'pointer'
+    };
+}
+/** Point → pane-local pixel; null when the conversion can't resolve. */
+function pointToCoordinate$2(chart, paneId, point) {
+    var converted = chart.convertToPixel(point, { paneId: paneId });
+    var c = isArray(converted) ? converted[0] : converted;
+    if (isValid(c) && isNumber(c.x) && isNumber(c.y)) {
+        return { x: c.x, y: c.y };
+    }
+    return null;
+}
+/** Pane-local pixel → Point; null when the conversion can't resolve. */
+function coordinateToPoint$2(chart, paneId, coordinate) {
+    var converted = chart.convertFromPixel([coordinate], { paneId: paneId });
+    var point = isArray(converted) ? converted[0] : converted;
+    return isValid(point) ? point : null;
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+// TradingView `linetoolfibcircles` — 11 levels, all visible.
+var DEFAULT_LEVELS$5 = [
+    fibLevel(0.236, FIB_COLORS.red), // colorRipeRed500
+    fibLevel(0.382, FIB_COLORS.orange), // colorTanOrange500
+    fibLevel(0.5, FIB_COLORS.teal), // colorMintyGreen500
+    fibLevel(0.618, FIB_COLORS.green), // colorIguanaGreen500
+    fibLevel(0.786, FIB_COLORS.cyan), // colorSkyBlue500
+    fibLevel(1, FIB_COLORS.coldGray), // colorColdGray500
+    fibLevel(1.618, FIB_COLORS.blue), // colorTvBlue500
+    fibLevel(2.618, FIB_COLORS.pink), // colorBerryPink500
+    fibLevel(3.618, FIB_COLORS.blue), // colorTvBlue500
+    fibLevel(4.236, FIB_COLORS.pink), // colorBerryPink500
+    fibLevel(4.618, FIB_COLORS.red) // colorRipeRed500
+];
+var fibCircles = {
+    name: 'fibCircles',
+    totalStep: 3,
+    cullable: false,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    styles: {
+        // TV `trendline` — colorColdGray500, width 1, LINESTYLE_DASHED.
+        line: { color: FIB_COLORS.coldGray, size: 1, style: 'dashed', dashedValue: TRENDLINE_DASH },
+        text: { color: FIB_COLORS.coldGray, size: 12 }
+    },
+    extendData: {
+        levels: DEFAULT_LEVELS$5,
+        fillBackground: true,
+        transparency: 80,
+        trendlineVisible: true,
+        showLabels: true,
+        coeffsAsPercents: false
+    },
+    createPointFigures: withPerfPipeline(function (_a) {
+        var _b, _c, _d, _e, _f, _g, _h;
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
+        var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
+        var figures = [];
+        if (coordinates.length >= 2) {
+            var _j = __read(coordinates, 2), p1 = _j[0], p2 = _j[1];
+            // TV: common centre at the segment midpoint; the coeff-1 ring is the
+            // ellipse inscribed in the P1P2 box, so radii are HALF the box.
+            var cx_1 = (p1.x + p2.x) / 2;
+            var cy_1 = (p1.y + p2.y) / 2;
+            var halfW_1 = Math.abs(p2.x - p1.x) / 2;
+            var halfH_1 = Math.abs(p2.y - p1.y) / 2;
+            if (halfW_1 > 0 || halfH_1 > 0) {
+                var visible_1 = readLevels(extendData, DEFAULT_LEVELS$5)
+                    .filter(function (level) { return level.visible; })
+                    .map(function (level) { return ({ level: level, rx: halfW_1 * level.coeff, ry: halfH_1 * level.coeff }); })
+                    .filter(function (ring) { return ring.rx > 0 && ring.ry > 0; });
+                if ((_c = extendData.fillBackground) !== null && _c !== void 0 ? _c : true) {
+                    var alpha_1 = gannTransparencyAlpha(extendData.transparency);
+                    visible_1.forEach(function (ring, index) {
+                        var inner = index > 0 ? visible_1[index - 1] : { rx: 0, ry: 0 };
+                        figures.push({
+                            key: "fib_circle_fill_".concat(index),
+                            type: 'path',
+                            attrs: {
+                                x: 0,
+                                y: 0,
+                                width: 0,
+                                height: 0,
+                                path: ellipseRingPath(cx_1, cy_1, ring.rx, ring.ry, inner.rx, inner.ry)
+                            },
+                            styles: { style: 'fill', color: alphaColor(ring.level.color, alpha_1) },
+                            ignoreEvent: true
+                        });
+                    });
+                }
+                var lineSize_1 = (_f = (_e = (_d = overlay.styles) === null || _d === void 0 ? void 0 : _d.line) === null || _e === void 0 ? void 0 : _e.size) !== null && _f !== void 0 ? _f : 1;
+                var showLabels_1 = (_g = extendData.showLabels) !== null && _g !== void 0 ? _g : true;
+                visible_1.forEach(function (ring, index) {
+                    figures.push({
+                        key: "fib_circle_".concat(index),
+                        type: 'ellipse',
+                        attrs: { x: cx_1, y: cy_1, rx: ring.rx, ry: ring.ry },
+                        styles: { style: 'stroke', borderColor: ring.level.color, borderSize: lineSize_1 },
+                        bounds: { x: cx_1 - ring.rx, y: cy_1 - ring.ry, width: ring.rx * 2, height: ring.ry * 2 }
+                    });
+                    if (showLabels_1) {
+                        // TV labelPoint is the ring's bottom point; `horzAlign Left` +
+                        // offsetX 4 → the label starts 4px right of it, vertically
+                        // centred on the ring edge. `coeffsAsPercents` swaps the
+                        // numeric coeff for the percentage format (tailSize 2).
+                        var text = extendData.coeffsAsPercents === true
+                            ? "".concat((ring.level.coeff * 100).toFixed(2), "%")
+                            : formatLevelLabel(ring.level);
+                        figures.push(labelFigure("fib_circle_label_".concat(index), cx_1 + 4, cy_1 + ring.ry, text, ring.level.color, 'left', 'middle', 12));
+                    }
+                });
+                if ((_h = extendData.trendlineVisible) !== null && _h !== void 0 ? _h : true) {
+                    // Inherits styles.line (dashed trendline color from the toolbar).
+                    figures.push(lineFigure('fib_circles_trend', [[p1, p2]], {}));
+                }
+            }
+        }
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isTouch: isTouch,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_',
+            midPoint: true,
+            cursors: coordinates.length >= 2
+                ? [computeResizeCursor(coordinates[1], coordinates[0]), computeResizeCursor(coordinates[0], coordinates[1])]
+                : undefined
+        })), false));
+        return figures;
+    }),
+    // TV `snapTo45DegreesAvailable() → true`: Shift/align-45 constrains the
+    // dragged endpoint onto the nearest 45° ray from the other point.
+    performEventPressedMove: function (params) {
+        if (params.performPointIndex === 0 || params.performPointIndex === 1) {
+            applySnap45(this, params, params.performPointIndex === 0 ? 1 : 0);
+        }
+    },
+    performEventMoveForDrawing: function (params) {
+        if (params.performPointIndex === 1) {
+            applySnap45(this, params, 0);
+        }
+    }
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var DEFAULT_LEVELS$4 = [
+    fibLevel(0.236, FIB_COLORS.red),
+    fibLevel(0.382, FIB_COLORS.orange),
+    fibLevel(0.5, FIB_COLORS.green),
+    fibLevel(0.618, FIB_COLORS.teal),
+    fibLevel(0.786, FIB_COLORS.cyan),
+    fibLevel(1, FIB_COLORS.blue)
+];
+var fibSpeedArcs = {
+    name: 'fibSpeedArcs',
+    totalStep: 3,
+    cullable: false,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    styles: {
+        line: { color: TRENDLINE_COLOR, size: 1, style: 'dashed', dashedValue: TRENDLINE_DASH },
+        text: { color: TRENDLINE_COLOR, size: 11 }
+    },
+    extendData: {
+        levels: DEFAULT_LEVELS$4,
+        trendlineVisible: true,
+        showLabels: true
+    },
+    createPointFigures: withPerfPipeline(function (_a) {
+        var _b, _c, _d, _e, _f, _g;
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
+        var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
+        var figures = [];
+        if (coordinates.length >= 2) {
+            var _h = __read(coordinates, 2), p1_1 = _h[0], p2 = _h[1];
+            var baseRadius_1 = distance(p1_1, p2);
+            if (baseRadius_1 > 0) {
+                if ((_c = extendData.trendlineVisible) !== null && _c !== void 0 ? _c : true) {
+                    figures.push(lineFigure('fib_sra_trend', [[p1_1, p2]], {}));
+                }
+                // The half-circle opens toward P2's vertical side: lower half when
+                // P2 sits below P1 on screen (y down), upper half otherwise.
+                var dir_1 = p2.y - p1_1.y >= 0 ? 1 : -1;
+                var startAngle_1 = dir_1 > 0 ? 0 : Math.PI;
+                var endAngle_1 = startAngle_1 + Math.PI;
+                var labelBaseline_1 = dir_1 > 0 ? 'top' : 'bottom';
+                var levels = readLevels(extendData, DEFAULT_LEVELS$4);
+                var showLabels_1 = (_d = extendData.showLabels) !== null && _d !== void 0 ? _d : true;
+                var lineSize_1 = (_g = (_f = (_e = overlay.styles) === null || _e === void 0 ? void 0 : _e.line) === null || _f === void 0 ? void 0 : _f.size) !== null && _g !== void 0 ? _g : 1;
+                levels.forEach(function (level, index) {
+                    if (!level.visible) {
+                        return;
+                    }
+                    var r = baseRadius_1 * level.coeff;
+                    if (r <= 0) {
+                        return;
+                    }
+                    var attrs = { x: p1_1.x, y: p1_1.y, r: r, startAngle: startAngle_1, endAngle: endAngle_1 };
+                    figures.push({
+                        key: "fib_sra_".concat(index),
+                        type: 'arc',
+                        attrs: attrs,
+                        styles: { style: 'solid', size: lineSize_1, color: level.color },
+                        bounds: { x: p1_1.x - r, y: p1_1.y - r, width: r * 2, height: r * 2 }
+                    });
+                    if (showLabels_1) {
+                        figures.push(labelFigure("fib_sra_label_".concat(index), p1_1.x, p1_1.y + dir_1 * r, formatLevelLabel(level), level.color, 'center', labelBaseline_1));
+                    }
+                });
+            }
+        }
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isTouch: isTouch,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_',
+            midPoint: true,
+            cursors: coordinates.length >= 2
+                ? [computeResizeCursor(coordinates[1], coordinates[0]), computeResizeCursor(coordinates[0], coordinates[1])]
+                : undefined
+        })), false));
+        return figures;
+    })
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+// TradingView `linetoolfibspeedresistancefan` — 7 h + 7 v levels, all visible.
+var DEFAULT_LEVELS$3 = [
+    fibLevel(0, FIB_COLORS.coldGray), // colorColdGray500
+    fibLevel(0.25, FIB_COLORS.orange), // colorTanOrange500
+    fibLevel(0.382, FIB_COLORS.cyan), // colorSkyBlue500
+    fibLevel(0.5, FIB_COLORS.green), // colorIguanaGreen500
+    fibLevel(0.618, FIB_COLORS.teal), // colorMintyGreen500
+    fibLevel(0.75, FIB_COLORS.blue), // colorTvBlue500
+    fibLevel(1, FIB_COLORS.coldGray) // colorColdGray500
+];
+/** TV `grid.color` default. */
+var GRID_COLOR = 'rgba(21, 56, 153, 0.8)';
+/** TV label gutter — text boxes sit 5px outside the box edge. */
+var LABEL_GAP$1 = 5;
+var LABEL_SIZE = 12;
+var fibSpeedFan = {
+    name: 'fibSpeedFan',
+    totalStep: 3,
+    cullable: false,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    styles: {
+        // Tool `linewidth`/`linestyle` drive the fan rays (levels carry color).
+        line: { color: FIB_COLORS.coldGray, size: 1, style: 'solid' },
+        text: { color: FIB_COLORS.coldGray, size: LABEL_SIZE }
+    },
+    // `reverse` deliberately NOT seeded — an absent key on restored saves
+    // falls through to the `showBox` legacy probe (see below); new drawings
+    // get it stamped by onDrawStart so the settings dialog can toggle it.
+    extendData: {
+        levels: DEFAULT_LEVELS$3,
+        vlevels: DEFAULT_LEVELS$3,
+        fillBackground: true,
+        transparency: 80,
+        gridVisible: true,
+        gridColor: GRID_COLOR,
+        showLabels: true,
+        showLeftLabels: true,
+        showRightLabels: true,
+        showTopLabels: true,
+        showBottomLabels: true
+    },
+    onDrawStart: function (_a) {
+        var _b;
+        var overlay = _a.overlay;
+        // Stamp the new-drawing default — TradingView's `createProperties`
+        // shim in reverse: restored saves skip draw events entirely, so an
+        // absent `reverse` key marks pre-parity data (see the read below).
+        var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
+        if (extendData.reverse === undefined) {
+            overlay.extendData = __assign(__assign({}, extendData), { reverse: false });
+            overlay.invalidateFigures();
+        }
+    },
+    createPointFigures: withPerfPipeline(function (_a) {
+        var _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1;
+        var overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, xAxis = _a.xAxis, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
+        var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
+        var figures = [];
+        if (coordinates.length >= 2) {
+            var _2 = __read(coordinates, 2), p1_1 = _2[0], p2_1 = _2[1];
+            var dx = p2_1.x - p1_1.x;
+            var dy = p2_1.y - p1_1.y;
+            if (dx !== 0 || dy !== 0) {
+                var minX_1 = Math.min(p1_1.x, p2_1.x);
+                var maxX_1 = Math.max(p1_1.x, p2_1.x);
+                var minY_1 = Math.min(p1_1.y, p2_1.y);
+                var maxY_1 = Math.max(p1_1.y, p2_1.y);
+                // Absent on old saves (which carried `showBox` and drew the
+                // reversed convention) — read it as a legacy marker, exactly the
+                // migration TradingView performs in `createProperties`.
+                var reverse_1 = (_c = extendData.reverse) !== null && _c !== void 0 ? _c : isBoolean(extendData.showBox);
+                var v1_1 = (_d = overlay.points[0]) === null || _d === void 0 ? void 0 : _d.value;
+                var v2_1 = (_e = overlay.points[1]) === null || _e === void 0 ? void 0 : _e.value;
+                var i1_1 = (_f = overlay.points[0]) === null || _f === void 0 ? void 0 : _f.dataIndex;
+                var i2_1 = (_g = overlay.points[1]) === null || _g === void 0 ? void 0 : _g.dataIndex;
+                // TV: `d = p + coeff·c` in PRICE space, then priceToCoordinate —
+                // linear in raw value (NOT the log-aware real-space lerp).
+                var levelY_1 = function (coeff) {
+                    var fallback = reverse_1
+                        ? p1_1.y + (p2_1.y - p1_1.y) * coeff
+                        : p2_1.y + (p1_1.y - p2_1.y) * coeff;
+                    if (isNumber(v1_1) && isNumber(v2_1) && yAxis !== null) {
+                        var value = reverse_1 ? v1_1 + (v2_1 - v1_1) * coeff : v2_1 + (v1_1 - v2_1) * coeff;
+                        var y = yAxis.convertToPixel(value);
+                        if (Number.isFinite(y)) {
+                            return y;
+                        }
+                    }
+                    return fallback;
+                };
+                // TV: `o = round(u + coeff·h)` on bar indexes, then indexToCoordinate.
+                var levelX_1 = function (coeff) {
+                    var fallback = reverse_1
+                        ? p1_1.x + (p2_1.x - p1_1.x) * coeff
+                        : p2_1.x + (p1_1.x - p2_1.x) * coeff;
+                    if (isNumber(i1_1) && isNumber(i2_1) && xAxis !== null) {
+                        var index = Math.round(reverse_1 ? i1_1 + (i2_1 - i1_1) * coeff : i2_1 + (i1_1 - i2_1) * coeff);
+                        var x = xAxis.convertToPixel(index);
+                        if (Number.isFinite(x)) {
+                            return x;
+                        }
+                    }
+                    return fallback;
+                };
+                var hLevels = readLevels(extendData, DEFAULT_LEVELS$3)
+                    .filter(function (level) { return level.visible; })
+                    .map(function (level) { return ({ level: level, y: levelY_1(level.coeff) }); });
+                // Old saves carried ONE `levels` array drawn on both edges — mirror
+                // it when `vlevels` is absent so restored geometry keeps its set.
+                var vLevels = readLevels({ levels: (_h = extendData.vlevels) !== null && _h !== void 0 ? _h : extendData.levels }, DEFAULT_LEVELS$3)
+                    .filter(function (level) { return level.visible; })
+                    .map(function (level) { return ({ level: level, x: levelX_1(level.coeff) }); });
+                var lineSize_1 = (_l = (_k = (_j = overlay.styles) === null || _j === void 0 ? void 0 : _j.line) === null || _k === void 0 ? void 0 : _k.size) !== null && _l !== void 0 ? _l : 1;
+                var lineStyle_1 = (_p = (_o = (_m = overlay.styles) === null || _m === void 0 ? void 0 : _m.line) === null || _o === void 0 ? void 0 : _o.style) !== null && _p !== void 0 ? _p : 'solid';
+                var lineDash_1 = (_s = (_r = (_q = overlay.styles) === null || _q === void 0 ? void 0 : _q.line) === null || _r === void 0 ? void 0 : _r.dashedValue) !== null && _s !== void 0 ? _s : [2, 2];
+                // Wedge fills between adjacent visible levels — drawn under all
+                // linework (TV `fillBackground`, ChannelRenderer parity).
+                if ((_t = extendData.fillBackground) !== null && _t !== void 0 ? _t : true) {
+                    var alpha = gannTransparencyAlpha(extendData.transparency);
+                    for (var e = 1; e < hLevels.length; e++) {
+                        var wedge = rayWedgePolygon(p1_1, { x: p2_1.x, y: hLevels[e].y }, { x: p2_1.x, y: hLevels[e - 1].y }, bounding);
+                        if (wedge.length >= 3) {
+                            figures.push({
+                                key: "srf_hfill_".concat(e),
+                                type: 'polygon',
+                                attrs: { coordinates: wedge },
+                                styles: { style: 'fill', color: alphaColor(hLevels[e].level.color, alpha) },
+                                ignoreEvent: true
+                            });
+                        }
+                    }
+                    for (var e = 1; e < vLevels.length; e++) {
+                        var wedge = rayWedgePolygon(p1_1, { x: vLevels[e].x, y: p2_1.y }, { x: vLevels[e - 1].x, y: p2_1.y }, bounding);
+                        if (wedge.length >= 3) {
+                            figures.push({
+                                key: "srf_vfill_".concat(e),
+                                type: 'polygon',
+                                attrs: { coordinates: wedge },
+                                styles: { style: 'fill', color: alphaColor(vLevels[e].level.color, alpha) },
+                                ignoreEvent: true
+                            });
+                        }
+                    }
+                }
+                // Grid: one box-crossing line per visible level — coeffs 0 and 1
+                // land on the box edges, which is how TV draws the "outline".
+                var gridVisible = (_v = (_u = extendData.gridVisible) !== null && _u !== void 0 ? _u : extendData.showBox) !== null && _v !== void 0 ? _v : true;
+                if (gridVisible) {
+                    var gridColor_1 = (_w = extendData.gridColor) !== null && _w !== void 0 ? _w : GRID_COLOR;
+                    hLevels.forEach(function (entry, index) {
+                        figures.push(lineFigure("srf_grid_h_".concat(index), [
+                            [{ x: minX_1, y: entry.y }, { x: maxX_1, y: entry.y }]
+                        ], { style: 'solid', size: 1, color: gridColor_1 }));
+                    });
+                    vLevels.forEach(function (entry, index) {
+                        figures.push(lineFigure("srf_grid_v_".concat(index), [
+                            [{ x: entry.x, y: minY_1 }, { x: entry.x, y: maxY_1 }]
+                        ], { style: 'solid', size: 1, color: gridColor_1 }));
+                    });
+                }
+                // Fan rays — P1 through the box-edge division point, extended to
+                // the pane edge (TV TrendLineRenderer `extendright`).
+                hLevels.forEach(function (entry, index) {
+                    figures.push(lineFigure("srf_h_".concat(index), [
+                        [p1_1, rayToBoundingEdge(p1_1, { x: p2_1.x, y: entry.y }, bounding)]
+                    ], { style: lineStyle_1, size: lineSize_1, color: entry.level.color, dashedValue: lineDash_1 }));
+                });
+                vLevels.forEach(function (entry, index) {
+                    figures.push(lineFigure("srf_v_".concat(index), [
+                        [p1_1, rayToBoundingEdge(p1_1, { x: entry.x, y: p2_1.y }, bounding)]
+                    ], { style: lineStyle_1, size: lineSize_1, color: entry.level.color, dashedValue: lineDash_1 }));
+                });
+                // Coeff labels hang 5px OUTSIDE the box edges (TV TextRenderer —
+                // h-family on left/right at level height, v-family on top/bottom).
+                var showLabels = (_x = extendData.showLabels) !== null && _x !== void 0 ? _x : true;
+                if (showLabels) {
+                    var left_1 = (_y = extendData.showLeftLabels) !== null && _y !== void 0 ? _y : true;
+                    var right_1 = (_z = extendData.showRightLabels) !== null && _z !== void 0 ? _z : true;
+                    var top_1 = (_0 = extendData.showTopLabels) !== null && _0 !== void 0 ? _0 : true;
+                    var bottom_1 = (_1 = extendData.showBottomLabels) !== null && _1 !== void 0 ? _1 : true;
+                    hLevels.forEach(function (entry, index) {
+                        var text = formatLevelLabel(entry.level);
+                        if (left_1) {
+                            figures.push(labelFigure("srf_label_l_".concat(index), minX_1 - LABEL_GAP$1, entry.y, text, entry.level.color, 'right', 'middle', LABEL_SIZE));
+                        }
+                        if (right_1) {
+                            figures.push(labelFigure("srf_label_r_".concat(index), maxX_1 + LABEL_GAP$1, entry.y, text, entry.level.color, 'left', 'middle', LABEL_SIZE));
+                        }
+                    });
+                    vLevels.forEach(function (entry, index) {
+                        var text = formatLevelLabel(entry.level);
+                        if (top_1) {
+                            figures.push(labelFigure("srf_label_t_".concat(index), entry.x, minY_1 - LABEL_GAP$1, text, entry.level.color, 'center', 'bottom', LABEL_SIZE));
+                        }
+                        if (bottom_1) {
+                            figures.push(labelFigure("srf_label_b_".concat(index), entry.x, maxY_1 + LABEL_GAP$1, text, entry.level.color, 'center', 'top', LABEL_SIZE));
+                        }
+                    });
+                }
+            }
+        }
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isTouch: isTouch,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_',
+            midPoint: true,
+            cursors: coordinates.length >= 2
+                ? [computeResizeCursor(coordinates[1], coordinates[0]), computeResizeCursor(coordinates[0], coordinates[1])]
+                : undefined
+        })), false));
+        return figures;
+    }),
+    // TV `snapTo45DegreesAvailable() → true`: Shift/align-45 constrains the
+    // dragged endpoint onto the nearest 45° ray from the other point.
+    performEventPressedMove: function (params) {
+        if (params.performPointIndex === 0 || params.performPointIndex === 1) {
+            applySnap45(this, params, params.performPointIndex === 0 ? 1 : 0);
+        }
+    },
+    performEventMoveForDrawing: function (params) {
+        if (params.performPointIndex === 1) {
+            applySnap45(this, params, 0);
+        }
+    }
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/** TradingView `_fib` table — one entry per quarter turn of the spiral. */
+var FIB_SEQUENCE = [0, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89];
+/** Steps per quarter turn — the angle advances π/100 per step. */
+var STEPS_PER_QUARTER = 50;
+var ANGLE_STEP = Math.PI / (2 * STEPS_PER_QUARTER);
+var TOTAL_STEPS = STEPS_PER_QUARTER * (FIB_SEQUENCE.length - 1);
+/** TradingView `_continiusFib` — piecewise-linear fib index, frac^1.15. */
+function continuousFib(x) {
+    var lo = Math.floor(x);
+    var hi = Math.ceil(x);
+    if (hi >= FIB_SEQUENCE.length) {
+        return null;
+    }
+    var frac = Math.pow(x - lo, 1.15);
+    return FIB_SEQUENCE[lo] + (FIB_SEQUENCE[hi] - FIB_SEQUENCE[lo]) * frac;
+}
+var fibSpiral = {
+    name: 'fibSpiral',
+    totalStep: 3,
+    cullable: false,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    styles: {
+        // TV defaults — colorSkyBlue500, linewidth 2, LINESTYLE_SOLID.
+        line: { color: FIB_COLORS.cyan, size: 2, style: 'solid' }
+    },
+    extendData: {
+        counterclockwise: false,
+        trendlineVisible: true
+    },
+    createPointFigures: withPerfPipeline(function (_a) {
+        var _b, _c, _d;
+        var overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
+        var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
+        var figures = [];
+        if (coordinates.length >= 2) {
+            var _e = __read(coordinates, 2), p1 = _e[0], p2 = _e[1];
+            var dx = p2.x - p1.x;
+            var dy = p2.y - p1.y;
+            var baseRadius = Math.sqrt(dx * dx + dy * dy);
+            var baseAngle = Math.atan2(dy, dx);
+            if (baseRadius >= 1) {
+                var dir = ((_c = extendData.counterclockwise) !== null && _c !== void 0 ? _c : false) ? -1 : 1;
+                // TV: ctx.translate(P1) → rotate(P1→P2 angle) → scale(s/5) —
+                // i.e. world radius = fibIndex · |P1P2|/5 at angle base+θ.
+                var scale = baseRadius / 5;
+                var spiralPoints = [];
+                for (var e = 0; e < TOTAL_STEPS; e++) {
+                    var n = continuousFib(e / STEPS_PER_QUARTER);
+                    if (n === null) {
+                        break;
+                    }
+                    var angle = dir * e * ANGLE_STEP;
+                    var r = n * scale;
+                    spiralPoints.push({
+                        x: p1.x + r * Math.cos(baseAngle + angle),
+                        y: p1.y + r * Math.sin(baseAngle + angle)
+                    });
+                }
+                if (spiralPoints.length >= 2) {
+                    // Inherits styles.line (color/width/style from the toolbar).
+                    figures.push(lineFigure('fib_spiral', [spiralPoints], {}));
+                }
+                if ((_d = extendData.trendlineVisible) !== null && _d !== void 0 ? _d : true) {
+                    // TV TrendLineRenderer extendright — the P1→P2 ray runs on to
+                    // the pane edge in the SAME line style as the spiral.
+                    figures.push(lineFigure('fib_spiral_trend', [[p1, rayToBoundingEdge(p1, p2, bounding)]], {}));
+                }
+            }
+        }
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isTouch: isTouch,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_',
+            midPoint: true,
+            cursors: coordinates.length >= 2
+                ? [computeResizeCursor(coordinates[1], coordinates[0]), computeResizeCursor(coordinates[0], coordinates[1])]
+                : undefined
+        })), false));
+        return figures;
+    })
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var DEFAULT_LEVELS$2 = [
+    fibLevel(0.236, FIB_COLORS.red),
+    fibLevel(0.382, FIB_COLORS.orange),
+    fibLevel(0.5, FIB_COLORS.green),
+    fibLevel(0.618, FIB_COLORS.teal),
+    fibLevel(0.786, FIB_COLORS.cyan)
+];
+/** Signed smallest rotation from a1 to a2 in (−π, π] — the wedge always spans the small sector. */
+function signedSectorAngle$1(a1, a2) {
+    var da = a2 - a1;
+    while (da > Math.PI) {
+        da -= Math.PI * 2;
+    }
+    while (da <= -Math.PI) {
+        da += Math.PI * 2;
+    }
+    return da;
+}
+var fibWedge = {
+    name: 'fibWedge',
+    totalStep: 4,
+    cullable: false,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    styles: {
+        line: { color: TRENDLINE_COLOR, size: 1, style: 'solid' },
+        arc: { color: TRENDLINE_COLOR, size: 1, style: 'solid' },
+        text: { color: TRENDLINE_COLOR, size: 11 }
+    },
+    extendData: {
+        levels: DEFAULT_LEVELS$2,
+        showLabels: true
+    },
+    createPointFigures: withPerfPipeline(function (_a) {
+        var _b, _c, _d, _e, _f, _g, _h, _j;
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
+        var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
+        var figures = [];
+        if (coordinates.length >= 3) {
+            var _k = __read(coordinates, 3), p1_1 = _k[0], p2 = _k[1], p3 = _k[2];
+            var radius_1 = distance(p1_1, p2);
+            var spread = distance(p1_1, p3);
+            if (radius_1 > 0 && spread > 0) {
+                var a1_1 = Math.atan2(p2.y - p1_1.y, p2.x - p1_1.x);
+                var a2 = Math.atan2(p3.y - p1_1.y, p3.x - p1_1.x);
+                var da_1 = signedSectorAngle$1(a1_1, a2);
+                var lineSize_1 = (_e = (_d = (_c = overlay.styles) === null || _c === void 0 ? void 0 : _c.line) === null || _d === void 0 ? void 0 : _d.size) !== null && _e !== void 0 ? _e : 1;
+                var lineColor = (_h = (_g = (_f = overlay.styles) === null || _f === void 0 ? void 0 : _f.line) === null || _g === void 0 ? void 0 : _g.color) !== null && _h !== void 0 ? _h : TRENDLINE_COLOR;
+                // Boundary rays — P1→P2 exact, P1→P3 projected onto its own ray at
+                // the wedge radius so both edges close on the same sector arc.
+                figures.push(lineFigure('fib_wedge_edge', [
+                    [p1_1, p2],
+                    [p1_1, { x: p1_1.x + Math.cos(a2) * radius_1, y: p1_1.y + Math.sin(a2) * radius_1 }]
+                ], {}));
+                // Fib-ratio concentric arcs spanning the sector — annular sectors
+                // at radius coeff × r, from boundary ray a1 to boundary ray a2.
+                var levels = readLevels(extendData, DEFAULT_LEVELS$2);
+                var showLabels_1 = (_j = extendData.showLabels) !== null && _j !== void 0 ? _j : true;
+                var startAngle_1 = da_1 > 0 ? a1_1 : a1_1 + da_1;
+                var endAngle_1 = da_1 > 0 ? a1_1 + da_1 : a1_1;
+                levels.forEach(function (level, index) {
+                    if (!level.visible) {
+                        return;
+                    }
+                    var r = radius_1 * level.coeff;
+                    if (r <= 0) {
+                        return;
+                    }
+                    var attrs = {
+                        x: p1_1.x,
+                        y: p1_1.y,
+                        r: r,
+                        startAngle: startAngle_1,
+                        endAngle: endAngle_1
+                    };
+                    figures.push({
+                        key: "fib_wedge_arc_".concat(index),
+                        type: 'arc',
+                        attrs: attrs,
+                        styles: { style: 'solid', size: lineSize_1, color: level.color },
+                        bounds: { x: p1_1.x - r, y: p1_1.y - r, width: r * 2, height: r * 2 }
+                    });
+                    if (showLabels_1) {
+                        // Label sits at the arc's angular midpoint (TV labelPoint).
+                        var midAngle = a1_1 + da_1 / 2;
+                        var labelRadius = r;
+                        figures.push(labelFigure("fib_wedge_label_".concat(index), p1_1.x + Math.cos(midAngle) * labelRadius, p1_1.y + Math.sin(midAngle) * labelRadius, formatLevelLabel(level), level.color, 'center', 'bottom'));
+                    }
+                });
+                // Closing arc at the full wedge radius.
+                if (da_1 !== 0) {
+                    var attrs = {
+                        x: p1_1.x,
+                        y: p1_1.y,
+                        r: radius_1,
+                        startAngle: startAngle_1,
+                        endAngle: endAngle_1
+                    };
+                    figures.push({
+                        key: 'fib_wedge_arc',
+                        type: 'arc',
+                        attrs: attrs,
+                        styles: { style: 'solid', size: lineSize_1, color: lineColor },
+                        bounds: { x: p1_1.x - radius_1, y: p1_1.y - radius_1, width: radius_1 * 2, height: radius_1 * 2 }
+                    });
+                }
+            }
+        }
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isTouch: isTouch,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_'
+        })), false));
+        return figures;
+    })
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 var DEFAULT_LEVELS$1 = [
     fibLevel(0, FIB_COLORS.gray),
     fibLevel(0.25, FIB_COLORS.orange),
@@ -41977,32 +42317,146 @@ var gannBox = {
  * limitations under the License.
  */
 /**
- * TV `_correctPoint` pixel form: keep the dragged point's x, rewrite its
- * value so the pixel offset from the fixed point is square (|dy| = |dx|,
- * side preserved). The x is unchanged → only `value` is written.
+ * TV `gannLevelsDefaults`: six fifth-divisions including both edges —
+ * exact colors (colorColdGray500 edges, then tanOrange/skyBlue/
+ * iguanaGreen/mintyGreen).
  */
-function correctToSquare(overlay, params, moveIndex, fixedIndex) {
-    var event = params.event;
+function gcLevels() {
+    return [
+        fibLevel(0, '#808080'),
+        fibLevel(0.2, FIB_COLORS.orange),
+        fibLevel(0.4, FIB_COLORS.cyan),
+        fibLevel(0.6, FIB_COLORS.green),
+        fibLevel(0.8, FIB_COLORS.teal),
+        fibLevel(1, '#808080')
+    ];
+}
+/** TV `gannFanlinesDefaults`: 11 ratios — only 2×1, 1×1, 1×2 visible. */
+function gcFanlines() {
+    var row = function (x, y, color, visible) { return ({ x: x, y: y, color: color, visible: visible }); };
+    return [
+        row(8, 1, '#b39ddb', false),
+        row(5, 1, FIB_COLORS.red, false),
+        row(4, 1, '#808080', false),
+        row(3, 1, FIB_COLORS.orange, false),
+        row(2, 1, FIB_COLORS.cyan, true),
+        row(1, 1, FIB_COLORS.green, true),
+        row(1, 2, FIB_COLORS.teal, true),
+        row(1, 3, FIB_COLORS.teal, false),
+        row(1, 4, FIB_COLORS.blue, false),
+        row(1, 5, '#9575cd', false),
+        row(1, 8, '#b39ddb', false)
+    ];
+}
+/** TV `gannArcsDefaults`: 11 quarter-ellipse scales, all visible. */
+function gcArcs() {
+    var row = function (x, y, color) { return ({ x: x, y: y, color: color, visible: true }); };
+    return [
+        row(1, 0, FIB_COLORS.orange),
+        row(1, 1, FIB_COLORS.orange),
+        row(1.5, 0, FIB_COLORS.orange),
+        row(2, 0, FIB_COLORS.cyan),
+        row(2, 1, FIB_COLORS.cyan),
+        row(3, 0, FIB_COLORS.green),
+        row(3, 1, FIB_COLORS.green),
+        row(4, 0, FIB_COLORS.teal),
+        row(4, 1, FIB_COLORS.teal),
+        row(5, 0, FIB_COLORS.blue),
+        row(5, 1, FIB_COLORS.blue)
+    ];
+}
+/**
+ * TradingView `scaleRatio` resolution: an explicit `extendData.scaleRatio`
+ * wins (and applies on every axis type, as in TV); otherwise the auto
+ * ratio `barSpacing / px-per-value` — TV's `scaleRatio(timeScale,
+ * priceScale)` = `getValidBarSpacing() / (internalHeight / priceRange)`.
+ * Null on a 'logarithm' axis, where TV disables the correction entirely.
+ * Everything is sampled through the public convert API: the auto path is
+ * self-calibrating (the corrected point lands on the pixel square).
+ */
+function effectiveScaleRatio(chart, overlay, params, indexDiff) {
+    var _a, _b, _c, _d, _e, _f;
+    var ext = isValid(overlay.extendData) ? overlay.extendData : {};
+    if (isNumber(ext.scaleRatio)) {
+        return ext.scaleRatio;
+    }
+    var paneOptions = chart.getPaneOptions(overlay.paneId);
+    if (!isArray(paneOptions) && ((_a = paneOptions === null || paneOptions === void 0 ? void 0 : paneOptions.axis) === null || _a === void 0 ? void 0 : _a.name) === 'logarithm') {
+        return null;
+    }
+    var height = (_b = chart.getSize(overlay.paneId, 'main')) === null || _b === void 0 ? void 0 : _b.height;
+    var p0 = params.points[0];
+    var p1 = params.points[1];
+    if (!isValid(p0) || !isValid(p1) ||
+        !isNumber(p0.dataIndex) || !isNumber(p1.dataIndex) ||
+        !isNumber(height) || height <= 0 || indexDiff <= 0) {
+        return null;
+    }
+    // px-per-value = pane height ÷ value span across it; px-per-index =
+    // the overlay's own anchor x-span ÷ its bar span (rounding self-cancels
+    // — the same |indexDiff| multiplies the result back).
+    var values = chart.convertFromPixel([{ x: 0, y: 0 }, { x: 0, y: height }], { paneId: overlay.paneId });
+    var xs = chart.convertToPixel([{ dataIndex: p0.dataIndex }, { dataIndex: p1.dataIndex }], { paneId: overlay.paneId });
+    if (!isArray(values) || !isArray(xs)) {
+        return null;
+    }
+    var v0 = (_c = values[0]) === null || _c === void 0 ? void 0 : _c.value;
+    var v1 = (_d = values[1]) === null || _d === void 0 ? void 0 : _d.value;
+    var x0 = (_e = xs[0]) === null || _e === void 0 ? void 0 : _e.x;
+    var x1 = (_f = xs[1]) === null || _f === void 0 ? void 0 : _f.x;
+    if (!isNumber(v0) || !isNumber(v1) || !isNumber(x0) || !isNumber(x1)) {
+        return null;
+    }
+    var valueSpan = Math.abs(v1 - v0);
+    var pxPerIndex = Math.abs(x1 - x0) / indexDiff;
+    if (valueSpan <= 0 || pxPerIndex <= 0) {
+        return null;
+    }
+    return (pxPerIndex * valueSpan) / height;
+}
+/**
+ * TradingView `_correctPoint`: rewrite the moved point's VALUE so that
+ * |Δvalue| = |indexDiff| × scaleRatio, keeping its price side vs the
+ * fixed point (TV's l·t·i form collapses to `fixed ± |indexDiff|·ratio`
+ * for either moved index — the index/x stays untouched).
+ */
+function correctScaledPoint(overlay, params, moveIndex, fixedIndex) {
     var chart = lineChartOf(overlay);
-    if (event === undefined || chart === undefined || !isNumber(event.x) || !isNumber(event.y)) {
-        return;
-    }
+    var p0 = params.points[0];
+    var p1 = params.points[1];
+    var moved = params.points[moveIndex];
     var fixed = params.points[fixedIndex];
-    if (!isValid(fixed)) {
+    if (chart === undefined ||
+        !isValid(p0) || !isValid(p1) || !isValid(moved) || !isValid(fixed) ||
+        !isNumber(p0.dataIndex) || !isNumber(p1.dataIndex) ||
+        !isNumber(moved.value) || !isNumber(fixed.value)) {
         return;
     }
-    var fixedPx = pointToCoordinate$2(chart, overlay.paneId, fixed);
-    if (fixedPx === null) {
+    var indexDiff = Math.abs(p1.dataIndex - p0.dataIndex);
+    var ratio = effectiveScaleRatio(chart, overlay, params, indexDiff);
+    if (ratio === null) {
         return;
     }
-    var side = Math.abs(event.x - fixedPx.x);
-    var correctedY = fixedPx.y + (event.y - fixedPx.y < 0 ? -side : side);
-    var point = coordinateToPoint$2(chart, overlay.paneId, { x: event.x, y: correctedY });
-    var target = params.points[moveIndex];
-    if (point === null || !isValid(target) || !isNumber(point.value)) {
-        return;
-    }
-    target.value = point.value;
+    moved.value = fixed.value + (moved.value > fixed.value ? 1 : -1) * indexDiff * ratio;
+}
+/**
+ * TradingView `_correctScaleRatio`: after a freeform setPoint the stored
+ * ratio is re-synced to |Δvalue/Δindex|; a 0-bar diff sets null, which
+ * refills with the auto ratio at next use (`_adjustScaleRatio`).
+ */
+function storeScaleRatio(overlay) {
+    var p0 = overlay.points[0];
+    var p1 = overlay.points[1];
+    var ext = isValid(overlay.extendData) ? overlay.extendData : {};
+    ext.scaleRatio =
+        isValid(p0) && isValid(p1) &&
+            isNumber(p0.value) && isNumber(p1.value) &&
+            isNumber(p0.dataIndex) && isNumber(p1.dataIndex) &&
+            p1.dataIndex !== p0.dataIndex
+            ? Math.abs((p1.value - p0.value) / (p1.dataIndex - p0.dataIndex))
+            : null;
+    overlay.extendData = ext;
+    overlay.invalidateFigures();
 }
 var gannComplex = {
     name: 'gannComplex',
@@ -42016,13 +42470,14 @@ var gannComplex = {
         text: { color: FIB_COLORS.gray, size: 12 }
     },
     extendData: {
-        levels: defaultGannSquareLevels(),
-        fanlines: defaultGannFanLines(),
-        arcs: defaultGannArcs(),
+        levels: gcLevels(),
+        fanlines: gcFanlines(),
+        arcs: gcArcs(),
         fillArcsBackground: true,
         arcsTransparency: 80,
         showLabels: true,
-        reverse: false
+        reverse: false,
+        scaleRatio: null
     },
     createPointFigures: withPerfPipeline(function (_a) {
         var _b, _c, _d, _e, _f;
@@ -42038,10 +42493,10 @@ var gannComplex = {
             var dy = end.y - start.y;
             if (dx !== 0 || dy !== 0) {
                 var lineSize = (_d = (_c = (_b = overlay.styles) === null || _b === void 0 ? void 0 : _b.line) === null || _c === void 0 ? void 0 : _c.size) !== null && _d !== void 0 ? _d : 1;
-                var levels = readLevels(ext, defaultGannSquareLevels());
+                var levels = readLevels(ext, gcLevels());
                 figures.push.apply(figures, __spreadArray([], __read(gannLevelLineFigures(start, end, levels, lineSize, 'gc')), false));
-                figures.push.apply(figures, __spreadArray([], __read(gannP1FanFigures(start, start, end, readFanLines(ext, defaultGannFanLines()), lineSize, 'gc')), false));
-                figures.push.apply(figures, __spreadArray([], __read(gannArcFigures(start, end, readArcs(ext, defaultGannArcs()), (_e = ext.fillArcsBackground) !== null && _e !== void 0 ? _e : true, ext.arcsTransparency, lineSize, 'gc')), false));
+                figures.push.apply(figures, __spreadArray([], __read(gannP1FanFigures(start, start, end, readFanLines(ext, gcFanlines()), lineSize, 'gc')), false));
+                figures.push.apply(figures, __spreadArray([], __read(gannArcFigures(start, end, readArcs(ext, gcArcs()), (_e = ext.fillArcsBackground) !== null && _e !== void 0 ? _e : true, ext.arcsTransparency, lineSize, 'gc')), false));
                 if ((_f = ext.showLabels) !== null && _f !== void 0 ? _f : true) {
                     var p0 = isValid(overlay.points[0]) ? overlay.points[0] : {};
                     var p1 = isValid(overlay.points[1]) ? overlay.points[1] : {};
@@ -42054,12 +42509,18 @@ var gannComplex = {
                         // reverse — matches TradingView's label math.
                         var h = reversed ? v0 - v1 : v1 - v0;
                         var d = reversed ? i0 - i1 : i1 - i0;
-                        var textColor = levels.length > 0 ? levels[levels.length - 1].color : FIB_COLORS.gray;
+                        var textColor_1 = levels.length > 0 ? levels[levels.length - 1].color : FIB_COLORS.gray;
                         var precision = pricePrecisionOf(chart, overlay, yAxis);
                         var rightward = d > 0;
-                        figures.push(labelFigure('gc_label_price', start.x + 10, end.y + (h > 0 ? 8 : 10), formatNum(h, precision), textColor, rightward ? 'right' : 'left', h > 0 ? 'bottom' : 'top'));
-                        figures.push(labelFigure('gc_label_bars', end.x + 10, start.y + (h > 0 ? 10 : 8), "".concat(d), textColor, rightward ? 'left' : 'right', h > 0 ? 'top' : 'bottom'));
-                        figures.push(labelFigure('gc_label_ratio', end.x + 10, end.y + (h > 0 ? 8 : 10), formatNum(Math.abs(h / d), 7), textColor, rightward ? 'left' : 'right', h > 0 ? 'bottom' : 'top'));
+                        // TV labelsStyle.fontSize default is 12.
+                        var label = function (key, x, y, text, align, baseline) {
+                            var figure = labelFigure(key, x, y, text, textColor_1, align, baseline);
+                            figure.styles = __assign(__assign({}, figure.styles), { size: 12 });
+                            return figure;
+                        };
+                        figures.push(label('gc_label_price', start.x + 10, end.y + (h > 0 ? 8 : 10), formatNum(h, precision), rightward ? 'right' : 'left', h > 0 ? 'bottom' : 'top'));
+                        figures.push(label('gc_label_bars', end.x + 10, start.y + (h > 0 ? 10 : 8), "".concat(d), rightward ? 'left' : 'right', h > 0 ? 'top' : 'bottom'));
+                        figures.push(label('gc_label_ratio', end.x + 10, end.y + (h > 0 ? 8 : 10), formatNum(Math.abs(h / d), 7), rightward ? 'left' : 'right', h > 0 ? 'bottom' : 'top'));
                     }
                 }
             }
@@ -42125,21 +42586,27 @@ var gannComplex = {
         return figures;
     },
     performEventMoveForDrawing: function (params) {
-        // TradingView `setLastPoint`: the second point is always square-
-        // corrected while it is being placed.
+        // TradingView `setLastPoint`: the second point is always scaleRatio-
+        // corrected while it is being placed (log axis → null ratio → no-op).
         if (params.performPointIndex === 1) {
-            correctToSquare(this, params, 1, 0);
+            correctScaledPoint(this, params, 1, 0);
         }
     },
     performEventPressedMove: function (params) {
-        // Post-draw drags are freeform; Shift (or the align-45 toggle)
-        // re-applies the square correction to the dragged corner.
         var index = params.performPointIndex;
-        if ((index === 0 || index === 1) && params.event !== undefined) {
-            var chart = lineChartOf(this);
-            if (chart !== undefined && isSnap45Active(chart, params.event)) {
-                correctToSquare(this, params, index, 1 - index);
-            }
+        if (index !== 0 && index !== 1) {
+            return;
+        }
+        var chart = lineChartOf(this);
+        if (chart !== undefined && isSnap45Active(chart, params.event)) {
+            // Shift (or align-45) → TradingView `_correctPoint`: re-square the
+            // dragged corner to |Δvalue| = |Δindex| × scaleRatio.
+            correctScaledPoint(this, params, index, 1 - index);
+        }
+        else {
+            // Freeform drag → TradingView `_correctScaleRatio`: the stored
+            // ratio is re-synced to the dragged geometry.
+            storeScaleRatio(this);
         }
     }
 };
@@ -42158,15 +42625,15 @@ var gannComplex = {
  * limitations under the License.
  */
 var DEFAULT_LEVELS = [
-    fibLevel(1 / 8, FIB_COLORS.orange, true, '1×8'),
-    fibLevel(1 / 4, FIB_COLORS.green, true, '1×4'),
-    fibLevel(1 / 3, FIB_COLORS.teal, true, '1×3'),
-    fibLevel(1 / 2, FIB_COLORS.green, true, '1×2'),
-    fibLevel(1, FIB_COLORS.cyan, true, '1×1'),
-    fibLevel(2, FIB_COLORS.blue, true, '2×1'),
-    fibLevel(3, FIB_COLORS.purple, true, '3×1'),
-    fibLevel(4, FIB_COLORS.pink, true, '4×1'),
-    fibLevel(8, FIB_COLORS.red, true, '8×1')
+    fibLevel(1 / 8, FIB_COLORS.orange, true, '1/8'),
+    fibLevel(1 / 4, FIB_COLORS.teal, true, '1/4'),
+    fibLevel(1 / 3, FIB_COLORS.green, true, '1/3'),
+    fibLevel(1 / 2, FIB_COLORS.teal, true, '1/2'),
+    fibLevel(1, FIB_COLORS.cyan, true, '1/1'),
+    fibLevel(2, FIB_COLORS.blue, true, '2/1'),
+    fibLevel(3, FIB_COLORS.purple, true, '3/1'),
+    fibLevel(4, FIB_COLORS.pink, true, '4/1'),
+    fibLevel(8, FIB_COLORS.red, true, '8/1')
 ];
 var gannFan = {
     name: 'gannFan',
@@ -42177,39 +42644,67 @@ var gannFan = {
     needDefaultYAxisFigure: false,
     styles: {
         line: { color: TRENDLINE_COLOR, size: 1, style: 'solid' },
-        text: { color: TRENDLINE_COLOR, size: 11 }
+        text: { color: TRENDLINE_COLOR, size: 12 }
     },
     extendData: {
         levels: DEFAULT_LEVELS,
-        showLabels: true
+        showLabels: true,
+        fillBackground: true,
+        transparency: 80
     },
     createPointFigures: withPerfPipeline(function (_a) {
-        var _b, _c, _d, _e, _f;
+        var _b, _c, _d, _e, _f, _g;
         var overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         var extendData = (_b = overlay.extendData) !== null && _b !== void 0 ? _b : {};
         var figures = [];
         if (coordinates.length >= 2) {
-            var _g = __read(coordinates, 2), p1_1 = _g[0], p2_1 = _g[1];
+            var _h = __read(coordinates, 2), p1_1 = _h[0], p2_1 = _h[1];
             var dx_1 = p2_1.x - p1_1.x;
             var dy_1 = p2_1.y - p1_1.y;
             if (dx_1 !== 0 || dy_1 !== 0) {
-                var levels = readLevels(extendData, DEFAULT_LEVELS);
+                var levels_1 = readLevels(extendData, DEFAULT_LEVELS);
                 var showLabels_1 = (_c = extendData.showLabels) !== null && _c !== void 0 ? _c : true;
-                var lineSize_1 = (_f = (_e = (_d = overlay.styles) === null || _d === void 0 ? void 0 : _d.line) === null || _e === void 0 ? void 0 : _e.size) !== null && _f !== void 0 ? _f : 1;
-                var labelAlign_1 = dx_1 >= 0 ? 'left' : 'right';
-                var labelOffset_1 = dx_1 >= 0 ? 4 : -4;
-                levels.forEach(function (level, index) {
+                var fillBackground_1 = (_d = extendData.fillBackground) !== null && _d !== void 0 ? _d : true;
+                var alpha_1 = gannTransparencyAlpha(extendData.transparency);
+                var lineSize_1 = (_g = (_f = (_e = overlay.styles) === null || _e === void 0 ? void 0 : _e.line) === null || _f === void 0 ? void 0 : _f.size) !== null && _g !== void 0 ? _g : 1;
+                // TradingView division point: steep ratios (>1) divide the y-span
+                // on the P2.x edge; shallow ratios divide the x-span on P2.y edge.
+                // `n[]`/`index` parity: the slot number is the level's 1-based
+                // position in the array — it decides the fill-band direction.
+                var divisions_1 = [];
+                var slots_1 = [];
+                levels_1.forEach(function (level, index) {
                     if (!level.visible) {
                         return;
                     }
-                    // TradingView division point: steep ratios (>1) divide the y-span
-                    // on the P2.x edge; shallow ratios divide the x-span on P2.y edge.
-                    var division = level.coeff > 1
+                    divisions_1.push(level.coeff > 1
                         ? { x: p2_1.x, y: p1_1.y + dy_1 / level.coeff }
-                        : { x: p1_1.x + dx_1 * level.coeff, y: p2_1.y };
-                    figures.push(lineFigure("gann_fan_".concat(index), [[p1_1, rayToBoundingEdge(p1_1, division, bounding)]], { style: 'solid', size: lineSize_1, color: level.color }));
+                        : { x: p1_1.x + dx_1 * level.coeff, y: p2_1.y });
+                    slots_1.push(index + 1);
+                });
+                divisions_1.forEach(function (division, e) {
+                    var level = levels_1[slots_1[e] - 1];
+                    // TV ChannelRenderer band: shaded triangle apex → division_e →
+                    // division_neighbor inside the P2 box (never to the pane edge).
+                    if (fillBackground_1) {
+                        var neighbor = slots_1[e] < 4 ? e + 1 : slots_1[e] > 4 ? e - 1 : -1;
+                        if (neighbor >= 0 && neighbor < divisions_1.length) {
+                            figures.push({
+                                key: "gann_fan_fill_".concat(e),
+                                type: 'polygon',
+                                attrs: { coordinates: [p1_1, division, divisions_1[neighbor]] },
+                                styles: { style: 'fill', color: alphaColor(level.color, alpha_1) },
+                                ignoreEvent: true
+                            });
+                        }
+                    }
+                    figures.push(lineFigure("gann_fan_".concat(e), [[p1_1, rayToBoundingEdge(p1_1, division, bounding)]], { style: 'solid', size: lineSize_1, color: level.color }));
                     if (showLabels_1) {
-                        figures.push(labelFigure("gann_fan_label_".concat(index), division.x + labelOffset_1, division.y, formatLevelLabel(level), level.color, labelAlign_1, 'middle'));
+                        // TV TextRenderer: on the division point — left/middle aligned,
+                        // +5px down, "n/d" text. fontsize 12 (labelsStyle default).
+                        var label = labelFigure("gann_fan_label_".concat(e), division.x, division.y + 5, formatLevelLabel(level), level.color, 'left', 'middle');
+                        label.styles = __assign(__assign({}, label.styles), { size: 12 });
+                        figures.push(label);
                     }
                 });
             }
@@ -44182,6 +44677,566 @@ var ghostFeed = {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+var SHAPE_DASH_MAP = {
+    solid: [],
+    dashed: [8, 4],
+    dotted: [2, 2]
+};
+/**
+ * Resolved border for fill-capable shapes. Priority: `overlay.styles`
+ * channel for the figure type (kernel settings dialog), then the
+ * extendData color channel, then the theme default.
+ */
+function shapeStrokeOf(overlay, chart, ext, channel) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+    var themePoly = chart.getStyles().overlay[channel];
+    var channelStyles = (_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a[channel]) !== null && _b !== void 0 ? _b : {};
+    var extStyle = (_c = ext.borderStyle) !== null && _c !== void 0 ? _c : ext.lineStyle;
+    var style = (_d = channelStyles.borderStyle) !== null && _d !== void 0 ? _d : (extStyle === 'solid' || extStyle === 'dotted' ? extStyle : extStyle !== undefined ? 'dashed' : themePoly.borderStyle);
+    var dashedValue = (_e = channelStyles.borderDashedValue) !== null && _e !== void 0 ? _e : (extStyle !== undefined ? SHAPE_DASH_MAP[extStyle] : themePoly.borderDashedValue);
+    return {
+        color: (_j = (_h = (_g = (_f = channelStyles.borderColor) !== null && _f !== void 0 ? _f : ext.borderColor) !== null && _g !== void 0 ? _g : ext.lineColor) !== null && _h !== void 0 ? _h : ext.color) !== null && _j !== void 0 ? _j : themePoly.borderColor,
+        size: (_m = (_l = (_k = channelStyles.borderSize) !== null && _k !== void 0 ? _k : ext.borderWidth) !== null && _l !== void 0 ? _l : ext.lineWidth) !== null && _m !== void 0 ? _m : themePoly.borderSize,
+        style: style,
+        dashedValue: dashedValue
+    };
+}
+/**
+ * Whether the shape body is filled. The consumer `background.enabled`
+ * wins over the kernel flat flags; default is filled.
+ */
+function shapeFillEnabled(ext) {
+    var _a, _b, _c;
+    var bg = ext.background;
+    if (isValid(bg) && isBoolean(bg.enabled)) {
+        return bg.enabled;
+    }
+    return (_c = (_b = (_a = ext.fillEnabled) !== null && _a !== void 0 ? _a : ext.fillBackground) !== null && _b !== void 0 ? _b : ext.showBackground) !== null && _c !== void 0 ? _c : true;
+}
+function normalizeOpacity(opacity) {
+    // Percent (20 = 20%) vs fraction (0.2 = 20%) — both spellings exist in
+    // the wild, so treat <=1 as a fraction.
+    return Math.max(0, Math.min(1, opacity <= 1 ? opacity : opacity / 100));
+}
+/**
+ * Resolved fill color honoring every field casing:
+ * `background{color,opacity}` (consumer) → `fillColor`+`fillOpacity`
+ * (kernel) → `backgroundColor`+`transparency` (TV) → stroke tint.
+ */
+function shapeFillColor(overlay, ext, strokeColor, channel) {
+    var _a, _b;
+    var channelStyles = (_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a[channel]) !== null && _b !== void 0 ? _b : {};
+    if (isValid(channelStyles.color)) {
+        // The kernel settings channel wins outright — string or gradient.
+        return channelStyles.color;
+    }
+    var bg = ext.background;
+    if (isValid(bg) && (isString(bg.color) || isNumber(bg.opacity))) {
+        var color = isString(bg.color) ? bg.color : strokeColor;
+        var opacity = isNumber(bg.opacity) ? bg.opacity : 20;
+        return alphaRgba(color, normalizeOpacity(opacity));
+    }
+    if (isString(ext.backgroundColor)) {
+        if (!ext.backgroundColor.startsWith('#')) {
+            return ext.backgroundColor;
+        }
+        var t_1 = isNumber(ext.transparency) ? ext.transparency : 80;
+        var pct_1 = t_1 <= 1 ? t_1 * 100 : t_1;
+        return alphaRgba(ext.backgroundColor, Math.max(0, Math.min(1, (100 - pct_1) / 100)));
+    }
+    if (isString(ext.fillColor)) {
+        var opacity = isNumber(ext.fillOpacity) ? ext.fillOpacity : 20;
+        return alphaRgba(ext.fillColor, normalizeOpacity(opacity));
+    }
+    var t = isNumber(ext.transparency) ? ext.transparency : 80;
+    var pct = t <= 1 ? t * 100 : t;
+    return alphaRgba(strokeColor, Math.max(0, Math.min(1, (100 - pct) / 100)));
+}
+/**
+ * Normalized text spec. Returns null when no text is configured, a master
+ * gate (`textEnabled`/`showLabel`) is off, or an external editor owns the
+ * text right now (`isEditing`).
+ */
+function shapeLabelSpecOf(ext) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;
+    if (ext.isEditing === true) {
+        return null;
+    }
+    if (ext.textEnabled === false || ext.showLabel === false) {
+        return null;
+    }
+    var text = ext.text;
+    if (!isString(text) || text === '') {
+        return null;
+    }
+    var hRaw = (_c = (_b = (_a = ext.horzAlign) !== null && _a !== void 0 ? _a : ext.textHorizontalAlign) !== null && _b !== void 0 ? _b : ext.horzLabelsAlign) !== null && _c !== void 0 ? _c : 'center';
+    var vRaw = (_f = (_e = (_d = ext.vertAlign) !== null && _d !== void 0 ? _d : ext.textVerticalAlign) !== null && _e !== void 0 ? _e : ext.vertLabelsAlign) !== null && _f !== void 0 ? _f : 'middle';
+    return {
+        text: text,
+        color: (_g = ext.textColor) !== null && _g !== void 0 ? _g : ext.textcolor,
+        fontSize: (_j = (_h = ext.textSize) !== null && _h !== void 0 ? _h : ext.fontsize) !== null && _j !== void 0 ? _j : 14,
+        bold: (_m = (_l = (_k = ext.isBold) !== null && _k !== void 0 ? _k : ext.bold) !== null && _l !== void 0 ? _l : ext.textBold) !== null && _m !== void 0 ? _m : false,
+        italic: (_q = (_p = (_o = ext.isItalic) !== null && _o !== void 0 ? _o : ext.italic) !== null && _p !== void 0 ? _p : ext.textItalic) !== null && _q !== void 0 ? _q : false,
+        hAlign: hRaw === 'left' || hRaw === 'right' ? hRaw : 'center',
+        vAlign: vRaw === 'top' || vRaw === 'bottom' ? vRaw : 'middle'
+    };
+}
+var TEXT_PAD = 8;
+/**
+ * In-box text figure (kernel rect pattern): alignment offsets the anchor
+ * inside the box; `width`/`height` clip the text bounds. `rotation`
+ * (radians around the text anchor) renders rotated labels — the TradingView
+ * ellipse tilts its inscribed text by the edge angle.
+ */
+function shapeTextFigure(key, spec, box, fallbackColor, rotation) {
+    var _a;
+    var tx = (box.left + box.right) / 2;
+    var ty = (box.top + box.bottom) / 2;
+    if (spec.hAlign === 'left') {
+        tx = box.left + TEXT_PAD;
+    }
+    else if (spec.hAlign === 'right') {
+        tx = box.right - TEXT_PAD;
+    }
+    if (spec.vAlign === 'top') {
+        ty = box.top + TEXT_PAD;
+    }
+    else if (spec.vAlign === 'bottom') {
+        ty = box.bottom - TEXT_PAD;
+    }
+    return {
+        key: key,
+        type: 'text',
+        attrs: {
+            x: tx,
+            y: ty,
+            text: spec.text,
+            align: spec.hAlign,
+            baseline: spec.vAlign === 'middle' ? 'middle' : spec.vAlign,
+            width: Math.max(0, box.right - box.left - TEXT_PAD * 2),
+            height: Math.max(0, box.bottom - box.top - TEXT_PAD * 2),
+            rotation: rotation
+        },
+        styles: {
+            color: (_a = spec.color) !== null && _a !== void 0 ? _a : fallbackColor,
+            size: spec.fontSize,
+            weight: spec.bold ? 'bold' : '600',
+            // `style` on a text figure is the fill/stroke draw mode — italic goes
+            // through fontStyle or the font string is never italicized.
+            fontStyle: spec.italic ? 'italic' : undefined,
+            backgroundColor: 'transparent'
+        },
+        ignoreEvent: true
+    };
+}
+/** "+ Add text" placeholder (kernel rect parity) for selected empty-text shapes. */
+function shapeTextPlaceholderFigure(key, box, color, rotation) {
+    return {
+        key: key,
+        type: 'text',
+        attrs: {
+            x: (box.left + box.right) / 2,
+            y: (box.top + box.bottom) / 2,
+            text: '+ Add text',
+            align: 'center',
+            baseline: 'middle',
+            rotation: rotation
+        },
+        styles: {
+            color: color,
+            size: 13,
+            weight: 'normal',
+            style: 'normal',
+            backgroundColor: 'transparent'
+        },
+        cursor: 'text'
+    };
+}
+/**
+ * Square drag handle at an arbitrary pixel position (computed corners,
+ * edge midpoints, generated controls — the channelCommon precedent). The
+ * factory `createAnchorFigures` only anchors at stored coordinates, so
+ * handles whose pixel position differs from `points[i]` are built here.
+ */
+function shapeHandleFigure(key, coordinate, options) {
+    var _a, _b, _c;
+    var half = options.isTouch === true ? ANCHOR_HALF_TOUCH : ANCHOR_HALF_MOUSE;
+    var cx = Math.round(coordinate.x) - 0.5;
+    var cy = Math.round(coordinate.y) - 0.5;
+    var shape = (_a = options.shape) !== null && _a !== void 0 ? _a : 'square';
+    return {
+        key: key,
+        type: shape === 'circle' ? 'circle' : 'rect',
+        attrs: shape === 'circle'
+            ? { x: cx, y: cy, r: half }
+            : { x: cx - half, y: cy - half, width: half * 2, height: half * 2 },
+        styles: {
+            style: 'stroke_fill',
+            color: '#ffffff',
+            borderColor: '#1592E6',
+            borderSize: 1.5
+        },
+        pointIndex: options.pointIndex,
+        moveDirection: (_b = options.moveDirection) !== null && _b !== void 0 ? _b : 'both',
+        cursor: (_c = options.cursor) !== null && _c !== void 0 ? _c : 'pointer'
+    };
+}
+// ═══════════════════════════════════════
+// Point ↔ pixel helpers (union-narrowed)
+// ═══════════════════════════════════════
+function pointToCoordinate$1(chart, paneId, point) {
+    var converted = chart.convertToPixel(point, { paneId: paneId });
+    var c = isArray(converted) ? converted[0] : converted;
+    if (isValid(c) && isNumber(c.x) && isNumber(c.y)) {
+        return { x: c.x, y: c.y };
+    }
+    return null;
+}
+function coordinateToPoint$1(chart, paneId, coordinate) {
+    var converted = chart.convertFromPixel([coordinate], { paneId: paneId });
+    var point = isArray(converted) ? converted[0] : converted;
+    return isValid(point) ? point : null;
+}
+/**
+ * Move `target` to the pixel position `prevPx + (dx, dy)` — exact
+ * translation regardless of axis scale (log axes included).
+ */
+function translatePointByPixelDelta(chart, paneId, target, prevPx, dx, dy) {
+    var point = coordinateToPoint$1(chart, paneId, { x: prevPx.x + dx, y: prevPx.y + dy });
+    if (point !== null) {
+        target.timestamp = point.timestamp;
+        target.dataIndex = point.dataIndex;
+        target.value = point.value;
+    }
+}
+// ═══════════════════════════════════════
+// Shift constraints
+// ═══════════════════════════════════════
+/** Square constraint: equal pixel extents on both axes, direction kept. */
+function squareCoordinate(to, from) {
+    var dx = to.x - from.x;
+    var dy = to.y - from.y;
+    var side = Math.max(Math.abs(dx), Math.abs(dy));
+    return {
+        x: from.x + (dx < 0 ? -side : side),
+        y: from.y + (dy < 0 ? -side : side)
+    };
+}
+/**
+ * Shift (or the persistent align-45 toggle) → rewrite the moving point so
+ * its pixel offset from `points[fixedIndex]` is square — TV's Shift-square
+ * for rectangle/ellipse drawing. Same call shape as `applySnap45`.
+ */
+function applySquareSnap(overlay, params, fixedIndex) {
+    var event = params.event;
+    var chart = lineChartOf(overlay);
+    if (event === undefined || chart === undefined) {
+        return;
+    }
+    if (!isSnap45Active(chart, event) || !isNumber(event.x) || !isNumber(event.y)) {
+        return;
+    }
+    var fixed = params.points[fixedIndex];
+    if (!isValid(fixed)) {
+        return;
+    }
+    var from = pointToCoordinate$1(chart, overlay.paneId, fixed);
+    if (from === null) {
+        return;
+    }
+    var point = coordinateToPoint$1(chart, overlay.paneId, squareCoordinate({ x: event.x, y: event.y }, from));
+    var target = params.points[params.performPointIndex];
+    if (point === null || !isValid(target)) {
+        return;
+    }
+    target.timestamp = point.timestamp;
+    target.dataIndex = point.dataIndex;
+    target.value = point.value;
+}
+// ═══════════════════════════════════════
+// Per-period visibility (kernel ellipse parity)
+// ═══════════════════════════════════════
+/**
+ * Fails OPEN — no configured range → visible. `enabled === false` hides on
+ * that band; otherwise the period span must sit inside [min, max].
+ * Mirrors the kernel ellipse `isEllipseVisibleAtPeriod` gate.
+ */
+function hiddenAtPeriod(ext, period) {
+    if (period === null) {
+        return false;
+    }
+    var key = PERIOD_VIS_KEY[period.type];
+    var range = ext[key];
+    if (!isValid(range)) {
+        return false;
+    }
+    if (range.enabled === false) {
+        return true;
+    }
+    if (!isNumber(period.span)) {
+        return false;
+    }
+    var min = isNumber(range.min) ? range.min : Number.MIN_SAFE_INTEGER;
+    var max = isNumber(range.max) ? range.max : Number.MAX_SAFE_INTEGER;
+    return period.span < min || period.span > max;
+}
+/** Sample a quadratic Bezier into `segments` line-ready coordinates. */
+function sampleQuadratic(p0, pc, p1, segments) {
+    var steps = Math.max(2, Math.floor(segments));
+    var pts = [];
+    for (var i = 0; i <= steps; i++) {
+        var t = i / steps;
+        var mt = 1 - t;
+        pts.push({
+            x: mt * mt * p0.x + 2 * mt * t * pc.x + t * t * p1.x,
+            y: mt * mt * p0.y + 2 * mt * t * pc.y + t * t * p1.y
+        });
+    }
+    return pts;
+}
+function catmullRom(t, p0, p1, p2, p3) {
+    var t2 = t * t;
+    var t3 = t2 * t;
+    return 0.5 * (2 * p1 +
+        (-p0 + p2) * t +
+        (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
+        (-p0 + 3 * p1 - 3 * p2 + p3) * t3);
+}
+/**
+ * Catmull-Rom spline through all four control points (the curve passes
+ * through every anchor — reference doubleCurve renderer). Phantom
+ * endpoints mirror the boundary tangents.
+ */
+function sampleCatmullRom4(p0, p1, p2, p3, segments) {
+    var per = Math.max(1, Math.floor(segments / 3));
+    var phantom0 = {
+        x: p0.x - (p1.x - p0.x),
+        y: p0.y - (p1.y - p0.y)
+    };
+    var phantom3 = {
+        x: p3.x + (p3.x - p2.x),
+        y: p3.y + (p3.y - p2.y)
+    };
+    var pts = [];
+    for (var i = 0; i <= per; i++) {
+        var t = i / per;
+        pts.push({
+            x: catmullRom(t, phantom0.x, p0.x, p1.x, p2.x),
+            y: catmullRom(t, phantom0.y, p0.y, p1.y, p2.y)
+        });
+    }
+    for (var i = 1; i <= per; i++) {
+        var t = i / per;
+        pts.push({
+            x: catmullRom(t, p0.x, p1.x, p2.x, p3.x),
+            y: catmullRom(t, p0.y, p1.y, p2.y, p3.y)
+        });
+    }
+    for (var i = 1; i <= per; i++) {
+        var t = i / per;
+        pts.push({
+            x: catmullRom(t, p1.x, p2.x, p3.x, phantom3.x),
+            y: catmullRom(t, p1.y, p2.y, p3.y, phantom3.y)
+        });
+    }
+    return pts;
+}
+/**
+ * S-curve intermediates between the two endpoints (reference doubleCurve
+ * generation): 1/3 and 2/3 along the segment, offset ±0.25·len along the
+ * perpendicular. Position-invariant (unlike TV's raw `e.add(t).scaled`).
+ */
+function sCurveIntermediates(p0, p3) {
+    var dx = p3.x - p0.x;
+    var dy = p3.y - p0.y;
+    var len = Math.sqrt(dx * dx + dy * dy);
+    var px = len > 0 ? -dy / len : 0;
+    var py = len > 0 ? dx / len : 0;
+    var offset = len * 0.25;
+    return [
+        { x: p0.x + dx / 3 + px * offset, y: p0.y + dy / 3 + py * offset },
+        { x: p0.x + (2 * dx) / 3 - px * offset, y: p0.y + (2 * dy) / 3 - py * offset }
+    ];
+}
+/**
+ * Quadratic-Bezier control midpoint + perpendicular offset (TV
+ * BezierQuadro generation): mid(p1,p2) + 0.15·len perpendicular.
+ */
+function quadControlOffset(p1, p2) {
+    var dx = p2.x - p1.x;
+    var dy = p2.y - p1.y;
+    var len = Math.sqrt(dx * dx + dy * dy);
+    var px = len > 0 ? -dy / len : 0;
+    var py = len > 0 ? dx / len : 0;
+    var offset = len * 0.15;
+    return {
+        x: (p1.x + p2.x) / 2 + px * offset,
+        y: (p1.y + p2.y) / 2 + py * offset
+    };
+}
+// ═══════════════════════════════════════
+// Rotated rectangle / parallelogram corners
+// ═══════════════════════════════════════
+/**
+ * The four corners of the rotated rectangle (TradingView
+ * LineToolRotatedRectangle): `p1`→`p2` is the quad's CENTERLINE — the
+ * rectangle expands symmetrically by the unsigned perpendicular
+ * distance of `p3` to the p1p2 line on BOTH sides (full width =
+ * 2·distance). `n` is TV's right normal Point(edge.y, -edge.x)·dist.
+ * Order: [p1+n, p2+n, p2−n, p1−n].
+ */
+function rotatedRectCorners(p1, p2, p3) {
+    var ex = p2.x - p1.x;
+    var ey = p2.y - p1.y;
+    var len = Math.sqrt(ex * ex + ey * ey);
+    if (len === 0) {
+        return [p1, p1, p1, p1];
+    }
+    var nx = ey / len;
+    var ny = -ex / len;
+    var half = Math.abs((p3.x - p1.x) * nx + (p3.y - p1.y) * ny);
+    var ox = nx * half;
+    var oy = ny * half;
+    return [
+        { x: p1.x + ox, y: p1.y + oy },
+        { x: p2.x + ox, y: p2.y + oy },
+        { x: p2.x - ox, y: p2.y - oy },
+        { x: p1.x - ox, y: p1.y - oy }
+    ];
+}
+/** Frame for segment `a`→`b`; null when the edge is degenerate (<1e-9 px). */
+function edgeFrameOf(a, b) {
+    var dx = b.x - a.x;
+    var dy = b.y - a.y;
+    var len = Math.sqrt(dx * dx + dy * dy);
+    if (len < 1e-9) {
+        return null;
+    }
+    return { ux: dx / len, uy: dy / len, nx: -dy / len, ny: dx / len, len: len };
+}
+/**
+ * Signed perpendicular distance from `p` to the infinite line `a`→`b` in
+ * left-normal units. `Math.abs()` reproduces TradingView's unsigned
+ * `distanceToLine().distance`; the sign reports which side `p` sits on
+ * (positive = the Point(-dy, dx) side). Degenerate edges → 0.
+ */
+function signedLineDistance(a, b, p) {
+    var frame = edgeFrameOf(a, b);
+    if (frame === null) {
+        return 0;
+    }
+    return (p.x - a.x) * frame.nx + (p.y - a.y) * frame.ny;
+}
+/**
+ * N-sample perimeter of a rotated ellipse: semi-axis `a` along `angle`
+ * (radians), semi-axis `b` perpendicular — the TradingView
+ * translate/rotate/scale ellipse, rendered as a polygon so it also
+ * serves as the point-in-polygon hit target.
+ */
+function sampleRotatedEllipsePolygon(cx, cy, a, b, angle, n) {
+    var cos = Math.cos(angle);
+    var sin = Math.sin(angle);
+    var steps = Math.max(3, Math.floor(n));
+    var pts = [];
+    for (var i = 0; i < steps; i++) {
+        var t = (2 * Math.PI * i) / steps;
+        var u = a * Math.cos(t);
+        var v = b * Math.sin(t);
+        pts.push({ x: cx + u * cos - v * sin, y: cy + u * sin + v * cos });
+    }
+    return pts;
+}
+/**
+ * TradingView LineToolArc curve. TV draws a 60° circular arc — radius
+ * `u` (the chord length) centered on the chord's perpendicular bisector
+ * at ∓(√3/2)·u — then scales it perpendicular to the chord so the apex
+ * lands at signed distance `d`, i.e. an affine-stretched (elliptical)
+ * arc through p1, apex = mid + n̂·d, p2. `d` is `p3`'s signed
+ * left-normal distance; |d| < 1 or a degenerate chord renders as the
+ * bare chord (TV's `distance < 1 → line` fallback).
+ */
+function sampleTVArc(p1, p2, p3, segments) {
+    var frame = edgeFrameOf(p1, p2);
+    if (frame === null) {
+        return [p1, p2];
+    }
+    var d = signedLineDistance(p1, p2, p3);
+    if (Math.abs(d) < 1) {
+        return [p1, p2];
+    }
+    var u = frame.len;
+    var k = d / (u * (1 - Math.sqrt(3) / 2));
+    var steps = Math.max(2, Math.floor(segments));
+    var pts = [];
+    for (var i = 0; i <= steps; i++) {
+        var theta = (2 * Math.PI) / 3 - (i / steps) * (Math.PI / 3);
+        var xl = u / 2 + u * Math.cos(theta);
+        var yl = (u * Math.sin(theta) - (u * Math.sqrt(3)) / 2) * k;
+        pts.push({
+            x: p1.x + xl * frame.ux + yl * frame.nx,
+            y: p1.y + xl * frame.uy + yl * frame.ny
+        });
+    }
+    return pts;
+}
+// ═══════════════════════════════════════
+// Unlimited-step restore settle
+// ═══════════════════════════════════════
+/**
+ * Overlays armed through `onDrawStart` — i.e. created empty for a live
+ * draw. Restored overlays never fire onDrawStart (`override` advances
+ * `currentStep` past START before createOverlay reaches the hook), so the
+ * set distinguishes "user is drawing right now" from "deserialized into a
+ * drawing state" — a distinction persisted data alone cannot express.
+ */
+var ARMED_DRAWS = new WeakSet();
+/** Mark an overlay as a live draw — call from the template's `onDrawStart`. */
+function markDrawArmed(overlay) {
+    ARMED_DRAWS.add(overlay);
+}
+/**
+ * Kernel gap workaround for `totalStep: MAX_SAFE_INTEGER` tools: a
+ * restored overlay lands in the drawing-progress slot (`override` can
+ * never satisfy `points.length >= totalStep - 1`), eats the user's next
+ * click, and is skipped by the serializer. When such an overlay owns the
+ * slot and is NOT a live draw (never armed through onDrawStart), finish it
+ * and hand it to the committed overlay list.
+ *
+ * Called from createPointFigures — the earliest hook that runs after
+ * restore, with a live `chart`. Degenerate restores (< 2 points) are left
+ * in place rather than removed mid-render.
+ */
+function settleRestoredUnlimited(overlay, chart) {
+    var _a;
+    if (!overlay.isDrawing() || overlay.isStart() || ARMED_DRAWS.has(overlay)) {
+        return;
+    }
+    if (overlay.points.length < 2) {
+        return;
+    }
+    var store = chart.getChartStore();
+    if (((_a = store.getProgressOverlayInfo()) === null || _a === void 0 ? void 0 : _a.overlay) !== overlay) {
+        return;
+    }
+    overlay.forceComplete();
+    store.progressOverlayComplete();
+}
+/** Minimum rendered radius for the circle tool (kernel constant). */
+var MIN_RADIUS_PX = 5;
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 var POSITION_DEFAULTS = {
     profitHeight: 150,
     stopHeight: 150,
@@ -44279,6 +45334,9 @@ var LABEL_GAP = 8;
 function buildPositionFigures(params, direction) {
     var _a, _b;
     var chart = params.chart, overlay = params.overlay, coordinates = params.coordinates, isSelected = params.isSelected, isHovered = params.isHovered;
+    // perform* callbacks receive no chart — register per the lineCommon
+    // WeakMap convention so the drag handlers can run px conversions.
+    rememberLineChart(overlay, chart);
     if (coordinates.length < 1) {
         return [];
     }
@@ -44436,6 +45494,231 @@ function buildPositionYAxisFigures(params, direction) {
     pill('stop', geo.stopY, geo.stopValue, rgbaToSolid(ext.stopBackground));
     return figures;
 }
+// ═══════════════════════════════════════
+// Selection handles + drag routing
+// ═══════════════════════════════════════
+var POSITION_WIDTH_HANDLE_KEY = 'pos_width_handle';
+var POSITION_STOP_HANDLE_KEY = 'pos_stop_handle';
+var POSITION_TARGET_HANDLE_KEY = 'pos_target_handle';
+/**
+ * Smallest zone a level handle can leave. TradingView clamps stop/target
+ * drags one tick from the entry — 1 screen px is the analogous floor and
+ * also keeps `sanePx` (> 0) from snapping back to defaults.
+ */
+var MIN_ZONE_HEIGHT_PX = 1;
+/** Minimum box width — matches the renderer's `Math.max(width, 20)` floor. */
+var MIN_ZONE_WIDTH_PX = 20;
+var positionDragSnapshots = new WeakMap();
+/** Guarded point → pane-pixel conversion (union-narrowed, throw-safe). */
+function pointToPanePx(chart, paneId, point) {
+    try {
+        var converted = chart.convertToPixel(point, { paneId: paneId });
+        var c = isArray(converted) ? converted[0] : converted;
+        if (isValid(c) && isNumber(c.x) && isNumber(c.y)) {
+            return { x: c.x, y: c.y };
+        }
+    }
+    catch ( /* pane/axis missing mid-gesture — treat as unconvertible */_a) { /* pane/axis missing mid-gesture — treat as unconvertible */ }
+    return null;
+}
+/** Price → pane-pixel Y, or null when the axis can't convert. */
+function valueToPaneY(chart, paneId, value) {
+    try {
+        var converted = chart.convertToPixel({ value: value }, { paneId: paneId });
+        var c = isArray(converted) ? converted[0] : converted;
+        return isValid(c) && isNumber(c.y) ? c.y : null;
+    }
+    catch (_a) {
+        return null;
+    }
+}
+/** Bar index → pane-pixel X, or null when the axis can't convert. */
+function indexToPaneX(chart, paneId, dataIndex) {
+    try {
+        var converted = chart.convertToPixel({ dataIndex: dataIndex }, { paneId: paneId });
+        var c = isArray(converted) ? converted[0] : converted;
+        return isValid(c) && isNumber(c.x) ? c.x : null;
+    }
+    catch (_a) {
+        return null;
+    }
+}
+/** Pane-pixel Y → price, or null when the axis can't convert. */
+function paneYToValue(chart, paneId, y) {
+    try {
+        var converted = chart.convertFromPixel([{ y: y }], { paneId: paneId });
+        var p = isArray(converted) ? converted[0] : converted;
+        return isValid(p) && isNumber(p.value) ? p.value : null;
+    }
+    catch (_a) {
+        return null;
+    }
+}
+/**
+ * Resolve (and cache) the gesture-start zone edges: entry pixel position,
+ * profit/stop line Ys and the right edge X. Returns null when the press
+ * snapshot can't be converted (fresh restore, missing point fields).
+ */
+function positionGestureSnapshot(overlay, params, direction, chart) {
+    var cached = positionDragSnapshots.get(overlay);
+    if (cached !== undefined && cached.ref === params.prevPoints) {
+        return cached;
+    }
+    var prev = params.prevPoints[0];
+    if (!isValid(prev)) {
+        return null;
+    }
+    var entryPx = pointToPanePx(chart, overlay.paneId, prev);
+    if (entryPx === null) {
+        return null;
+    }
+    var geo = computeZoneGeometry(chart, overlay.paneId, direction, entryPx, getPositionExt(overlay.extendData));
+    var snapshot = {
+        ref: params.prevPoints,
+        entryPx: entryPx,
+        profitY: geo.profitY,
+        stopY: geo.stopY,
+        rightX: geo.rightX
+    };
+    positionDragSnapshots.set(overlay, snapshot);
+    return snapshot;
+}
+/**
+ * Merge a patch into `extendData` and invalidate the figure cache — the
+ * prescribed in-place mutation path for perform* callbacks. A fresh
+ * object is assigned (not mutated) so `shouldUpdate` sees the change.
+ */
+function writePositionExt(overlay, patch) {
+    var base = isObject(overlay.extendData) ? overlay.extendData : {};
+    overlay.extendData = __assign(__assign({}, base), patch);
+    overlay.invalidateFigures();
+}
+/**
+ * Anchor figures + the three derived handles. The entry anchor comes from
+ * the shared factory; the stop/target/width handles sit at DERIVED pixel
+ * positions (no backing point slot), so they are emitted as
+ * `shapeHandleFigure` squares — TradingView's `square: true` flag on its
+ * resize anchors. They all claim `pointIndex: 0` so the kernel routes
+ * their drags through `performEventPressedMove`, which reroutes the write
+ * into the matching `extendData` field by `figureKey` (the channel
+ * `dc_left` precedent) and restores the entry point.
+ */
+function buildPositionAnchorFigures(params, direction) {
+    var chart = params.chart, overlay = params.overlay, coordinates = params.coordinates, isSelected = params.isSelected, isHovered = params.isHovered, isTouch = params.isTouch;
+    var figures = createAnchorFigures({
+        coordinates: coordinates,
+        isSelected: isSelected,
+        isHovered: isHovered,
+        lock: overlay.lock,
+        isDrawing: overlay.isDrawing(),
+        isTouch: isTouch,
+        pointIndexes: [0]
+    });
+    // Same visibility rule the anchor factory encodes (selected, or hovered
+    // + unlocked), plus no handles mid-draw — geometry is still forming.
+    var interactive = !overlay.lock && !overlay.isDrawing() &&
+        ((isSelected !== null && isSelected !== void 0 ? isSelected : false) || (isHovered !== null && isHovered !== void 0 ? isHovered : false));
+    if (interactive && coordinates.length >= 1) {
+        var geo = computeZoneGeometry(chart, overlay.paneId, direction, coordinates[0], getPositionExt(overlay.extendData));
+        // TradingView anchor layout: three handles stacked on the LEFT edge
+        // (target/entry/stop levels) + the width handle on the right edge at
+        // entry level.
+        figures.push(shapeHandleFigure(POSITION_WIDTH_HANDLE_KEY, { x: geo.rightX, y: geo.entryY }, { pointIndex: 0, moveDirection: 'horz', cursor: 'ew-resize', isTouch: isTouch }));
+        figures.push(shapeHandleFigure(POSITION_STOP_HANDLE_KEY, { x: geo.leftX, y: geo.stopY }, { pointIndex: 0, moveDirection: 'vert', cursor: 'ns-resize', isTouch: isTouch }));
+        figures.push(shapeHandleFigure(POSITION_TARGET_HANDLE_KEY, { x: geo.leftX, y: geo.profitY }, { pointIndex: 0, moveDirection: 'vert', cursor: 'ns-resize', isTouch: isTouch }));
+    }
+    return figures;
+}
+/**
+ * `performEventPressedMove` implementation shared by both position tools.
+ * Routes on `figureKey`:
+ *  - `pos_stop_handle` / `pos_target_handle`: the kernel already wrote the
+ *    cursor's value into `points[0]` ('vert' constraint). Capture it as
+ *    the new level price, restore the entry value, then store the
+ *    direction-aware pixel distance — which inherently clamps the level
+ *    to its own side of the entry (TradingView prepare*Price parity).
+ *  - `pos_width_handle`: 'horz' drag wrote the cursor's index into
+ *    `points[0]`; restore the entry slot and store `zoneWidth` in px.
+ *  - `anchor_0` / API writes (`figureKey` undefined): entry re-anchor —
+ *    TradingView `_changeEntryPoint`. The stop/target lines and the right
+ *    edge keep their gesture-start pixel positions; the entry re-prices
+ *    clamped between them and re-xes the left edge.
+ */
+function performPositionPressedMove(overlay, params, direction) {
+    var entry = params.points[0];
+    var prev = params.prevPoints[0];
+    var chart = lineChartOf(overlay);
+    if (!isValid(entry) || !isValid(prev) || chart === undefined) {
+        return;
+    }
+    var paneId = overlay.paneId;
+    var sign = direction === 'long' ? 1 : -1;
+    var key = params.figureKey;
+    var snapshot = positionGestureSnapshot(overlay, params, direction, chart);
+    if (key === POSITION_STOP_HANDLE_KEY || key === POSITION_TARGET_HANDLE_KEY) {
+        var levelValue = entry.value;
+        entry.value = prev.value;
+        if (snapshot === null || !isNumber(levelValue)) {
+            return;
+        }
+        var levelY = valueToPaneY(chart, paneId, levelValue);
+        if (levelY === null) {
+            return;
+        }
+        if (key === POSITION_STOP_HANDLE_KEY) {
+            writePositionExt(overlay, {
+                stopHeight: Math.max(sign * (levelY - snapshot.entryPx.y), MIN_ZONE_HEIGHT_PX)
+            });
+        }
+        else {
+            writePositionExt(overlay, {
+                profitHeight: Math.max(sign * (snapshot.entryPx.y - levelY), MIN_ZONE_HEIGHT_PX)
+            });
+        }
+        return;
+    }
+    if (key === POSITION_WIDTH_HANDLE_KEY) {
+        var newIndex = entry.dataIndex;
+        entry.timestamp = prev.timestamp;
+        entry.dataIndex = prev.dataIndex;
+        if (snapshot === null || !isNumber(newIndex)) {
+            return;
+        }
+        var cursorX = indexToPaneX(chart, paneId, newIndex);
+        if (cursorX === null) {
+            return;
+        }
+        writePositionExt(overlay, {
+            zoneWidth: Math.max(cursorX - snapshot.entryPx.x, MIN_ZONE_WIDTH_PX)
+        });
+        return;
+    }
+    if ((key === undefined || key === "".concat(ANCHOR_KEY_PREFIX, "0")) && params.performPointIndex === 0) {
+        if (snapshot === null) {
+            return;
+        }
+        var newPx = pointToPanePx(chart, paneId, entry);
+        if (newPx === null) {
+            return;
+        }
+        // Clamp the entry inside the stop/target span — TradingView keeps
+        // both levels and bounds the entry between them (±1 tick ≈ ±1 px).
+        var lo = Math.min(snapshot.stopY, snapshot.profitY) + MIN_ZONE_HEIGHT_PX;
+        var hi = Math.max(snapshot.stopY, snapshot.profitY) - MIN_ZONE_HEIGHT_PX;
+        var entryY = Math.min(Math.max(newPx.y, lo), hi);
+        if (entryY !== newPx.y) {
+            var corrected = paneYToValue(chart, paneId, entryY);
+            if (corrected !== null) {
+                entry.value = corrected;
+            }
+        }
+        writePositionExt(overlay, {
+            profitHeight: Math.max(sign * (entryY - snapshot.profitY), MIN_ZONE_HEIGHT_PX),
+            stopHeight: Math.max(sign * (snapshot.stopY - entryY), MIN_ZONE_HEIGHT_PX),
+            zoneWidth: Math.max(snapshot.rightX - newPx.x, MIN_ZONE_WIDTH_PX)
+        });
+    }
+}
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -44451,10 +45734,12 @@ function buildPositionYAxisFigures(params, direction) {
  * limitations under the License.
  */
 /**
- * 'longPosition' — TradingView Long Position. One entry anchor; the
+ * 'longPosition' — TradingView Long Position. One stored entry point; the
  * take-profit/stop-loss zone geometry lives in extendData
  * (profitHeight/stopHeight/zoneWidth), so the tool works standalone
- * without the kernel's host-side P2/P3/P4 injection.
+ * without the kernel's host-side P2/P3/P4 injection. Selected: four
+ * TradingView-parity handles — entry re-anchor (left edge), width handle
+ * (right edge at entry level), stop + target level handles (left edge).
  */
 var longPosition = {
     name: 'longPosition',
@@ -44464,16 +45749,11 @@ var longPosition = {
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
-    createPointFigures: function (params) { return __spreadArray(__spreadArray([], __read(buildPositionFigures(params, 'long')), false), __read(createAnchorFigures({
-        coordinates: params.coordinates,
-        isSelected: params.isSelected,
-        isHovered: params.isHovered,
-        lock: params.overlay.lock,
-        isDrawing: params.overlay.isDrawing(),
-        isTouch: params.isTouch,
-        pointIndexes: [0]
-    })), false); },
-    createYAxisFigures: function (params) { return buildPositionYAxisFigures(params, 'long'); }
+    createPointFigures: function (params) { return __spreadArray(__spreadArray([], __read(buildPositionFigures(params, 'long')), false), __read(buildPositionAnchorFigures(params, 'long')), false); },
+    createYAxisFigures: function (params) { return buildPositionYAxisFigures(params, 'long'); },
+    performEventPressedMove: function (params) {
+        performPositionPressedMove(this, params, 'long');
+    }
 };
 
 /**
@@ -44930,7 +46210,9 @@ var projection = {
  */
 /**
  * 'shortPosition' — TradingView Short Position. Mirror of longPosition:
- * profit zone extends below the entry, stop zone above.
+ * profit zone extends below the entry, stop zone above. Same four
+ * TradingView-parity selection handles (entry re-anchor, right-edge width,
+ * stop/target level handles on the left edge).
  */
 var shortPosition = {
     name: 'shortPosition',
@@ -44940,16 +46222,11 @@ var shortPosition = {
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
-    createPointFigures: function (params) { return __spreadArray(__spreadArray([], __read(buildPositionFigures(params, 'short')), false), __read(createAnchorFigures({
-        coordinates: params.coordinates,
-        isSelected: params.isSelected,
-        isHovered: params.isHovered,
-        lock: params.overlay.lock,
-        isDrawing: params.overlay.isDrawing(),
-        isTouch: params.isTouch,
-        pointIndexes: [0]
-    })), false); },
-    createYAxisFigures: function (params) { return buildPositionYAxisFigures(params, 'short'); }
+    createPointFigures: function (params) { return __spreadArray(__spreadArray([], __read(buildPositionFigures(params, 'short')), false), __read(buildPositionAnchorFigures(params, 'short')), false); },
+    createYAxisFigures: function (params) { return buildPositionYAxisFigures(params, 'short'); },
+    performEventPressedMove: function (params) {
+        performPositionPressedMove(this, params, 'short');
+    }
 };
 
 /**
@@ -45471,9 +46748,9 @@ var schiffPitchfork = createPitchforkTemplate('schiffPitchfork', 'schiff');
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
-
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
-
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -45483,96 +46760,138 @@ var schiffPitchfork = createPitchforkTemplate('schiffPitchfork', 'schiff');
 var arrowLine = {
     name: 'arrowLine',
     totalStep: 3,
-    // Arrowhead wings extend beyond the anchor hull.
     cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
     createPointFigures: function (_a) {
-        var _b;
-        var chart = _a.chart, coordinates = _a.coordinates, overlay = _a.overlay, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
+        var _b, _c, _d, _e, _f;
+        var chart = _a.chart, coordinates = _a.coordinates, bounding = _a.bounding, overlay = _a.overlay, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
+        rememberLineChart(overlay, chart);
         if (coordinates.length < 2)
             return [];
-        rememberLineChart(overlay, chart);
-        var _c = __read(coordinates, 2), c1 = _c[0], c2 = _c[1];
+        var _g = __read(coordinates, 2), c1 = _g[0], c2 = _g[1];
         var ext = isValid(overlay.extendData) ? overlay.extendData : {};
+        var points = overlay.points;
+        var precision = pricePrecisionOf(chart, overlay, yAxis, ext.pricePrecision);
         var lineColor = lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color);
         var lineWidth = lineSizeOf(overlay, chart, ext.lineWidth);
-        var figures = [
-            {
-                key: 'al_line',
-                type: 'line',
-                attrs: { coordinates: [c1, c2] },
-                styles: { style: 'solid', color: lineColor, size: lineWidth }
-            }
-        ];
-        // Arrowhead at p2 (the point direction) — always present.
-        var tip = getArrowCoordinates(c1, c2);
-        if (tip.length === 3) {
-            figures.push({
-                key: 'al_head',
-                type: 'polygon',
-                attrs: { coordinates: tip },
-                styles: { style: 'fill', color: lineColor },
-                ignoreEvent: true
-            });
+        var isActive = (isSelected !== null && isSelected !== void 0 ? isSelected : false) || (isHovered !== null && isHovered !== void 0 ? isHovered : false);
+        var figures = [];
+        // ─── Rendered endpoints (extension to bounding edges when enabled) ───
+        var extendLeft = ext.extendLeft === true;
+        var extendRight = ext.extendRight === true;
+        var lineStart = c1;
+        var lineEnd = c2;
+        if (extendLeft || extendRight) {
+            var _h = __read(getExtendedCoordinates(c1, c2, bounding.width, bounding.height, extendLeft, extendRight), 2), s = _h[0], e = _h[1];
+            lineStart = s;
+            lineEnd = e;
         }
-        if (ext.leftEnd === 1) {
-            var tail = getArrowCoordinates(c2, c1);
-            if (tail.length === 3) {
+        // ─── Text label layout first — it can request a gap in the line ───
+        var spec = labelSpecOf(ext);
+        var labelLayout = spec !== null
+            ? layoutDiagonalLabel('al_label', spec, lineStart, lineEnd, lineColor, lineWidth)
+            : null;
+        pushLineWithGap(figures, 'al', lineStart, lineEnd, labelLayout === null || labelLayout === void 0 ? void 0 : labelLayout.gap);
+        // ─── End caps — Arrow's right end defaults to Arrow; left Normal ───
+        var leftEnd = (_c = ext.leftEnd) !== null && _c !== void 0 ? _c : 0;
+        var rightEnd = (_d = ext.rightEnd) !== null && _d !== void 0 ? _d : 1;
+        if (leftEnd === 1) {
+            var coords = getArrowCoordinates(c2, extendLeft ? lineStart : c1);
+            if (coords.length === 3) {
                 figures.push({
-                    key: 'al_head0',
+                    key: 'al_arrow_left',
                     type: 'polygon',
-                    attrs: { coordinates: tail },
+                    attrs: { coordinates: coords },
                     styles: { style: 'fill', color: lineColor },
                     ignoreEvent: true
                 });
             }
         }
+        if (rightEnd === 1) {
+            var coords = getArrowCoordinates(c1, extendRight ? lineEnd : c2);
+            if (coords.length === 3) {
+                figures.push({
+                    key: 'al_arrow_right',
+                    type: 'polygon',
+                    attrs: { coordinates: coords },
+                    styles: { style: 'fill', color: lineColor },
+                    ignoreEvent: true
+                });
+            }
+        }
+        // ─── Price labels at the anchors ───
+        if (ext.showPriceLabels === true || ext.showPriceLabel === true) {
+            pushAnchorPriceLabel(figures, 'al_price0', c1, (_e = points[0]) === null || _e === void 0 ? void 0 : _e.value, lineColor, precision);
+            pushAnchorPriceLabel(figures, 'al_price1', c2, (_f = points[1]) === null || _f === void 0 ? void 0 : _f.value, lineColor, precision);
+        }
+        if (labelLayout !== null) {
+            figures.push(labelLayout.figure);
+        }
+        // ─── Stats ───
+        var statLines = inlineStatsLines({
+            ext: ext,
+            points: points,
+            anchorA: c1,
+            anchorB: c2,
+            spanA: lineStart,
+            spanB: lineEnd,
+            precision: precision,
+            isActive: isActive
+        });
+        pushInlineStats(figures, 'al_stats', statLines, ext.statsPosition, c1, c2, lineColor);
+        // ─── Anchors + optional midpoint handle ───
+        var resizeCursor = computeResizeCursor(c1, c2);
         figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
             coordinates: coordinates,
             isSelected: isSelected,
             isHovered: isHovered,
             isDrawing: overlay.isDrawing(),
             lock: overlay.lock,
-            isTouch: isTouch
+            isTouch: isTouch,
+            midPoint: ext.showMiddlePoint === true || ext.showMidpoint === true,
+            cursors: [resizeCursor, resizeCursor]
         })), false));
         return figures;
     },
-    performEventMoveForDrawing: function (params) {
-        // Placing the tip: Shift/align-45 snaps to 45° rays from the tail.
-        if (params.performPointIndex === 1) {
-            applySnap45(this, params, 0);
+    performEventPressedMove: function (params) {
+        if (params.performPointIndex === 0 || params.performPointIndex === 1) {
+            applySnap45(this, params, params.performPointIndex === 0 ? 1 : 0);
         }
     },
-    performEventPressedMove: function (params) {
-        // Tip drag snaps to 45° rays from the tail anchor.
+    performEventMoveForDrawing: function (params) {
         if (params.performPointIndex === 1) {
             applySnap45(this, params, 0);
         }
     },
     createXAxisFigures: function (_a) {
-        var _b, _c;
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates;
+        var _b;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding;
         if (coordinates.length < 1)
             return [];
         var ext = isValid(overlay.extendData) ? overlay.extendData : {};
-        var lineColor = lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color);
-        var d0 = formatDate((_c = overlay.points[0]) === null || _c === void 0 ? void 0 : _c.timestamp);
-        if (d0 === '')
-            return [];
-        return [buildXAxisPill(coordinates[0].x, d0, lineColor, 'al_x0')];
+        return buildXAxisBandFigures('al', {
+            overlay: overlay,
+            coordinates: coordinates,
+            bounding: bounding,
+            lineColor: lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color)
+        });
     },
     createYAxisFigures: function (_a) {
-        var _b, _c;
+        var _b;
         var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis;
         if (coordinates.length < 1)
             return [];
         var ext = isValid(overlay.extendData) ? overlay.extendData : {};
-        var lineColor = lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color);
-        var precision = pricePrecisionOf(chart, overlay, yAxis, ext.pricePrecision);
-        var pill = buildYAxisPill(coordinates[0].y, (_c = overlay.points[0]) === null || _c === void 0 ? void 0 : _c.value, lineColor, precision, bounding, yAxis !== null && yAxis !== void 0 ? yAxis : undefined, 'al_y0');
-        return pill != null ? [pill] : [];
+        return buildYAxisBandFigures('al', {
+            overlay: overlay,
+            coordinates: coordinates,
+            bounding: bounding,
+            lineColor: lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color),
+            precision: pricePrecisionOf(chart, overlay, yAxis, ext.pricePrecision),
+            yAxis: yAxis !== null && yAxis !== void 0 ? yAxis : undefined
+        });
     }
 };
 
@@ -45597,26 +46916,24 @@ var crossLine = {
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
     createPointFigures: function (_a) {
-        var _b;
         var chart = _a.chart, coordinates = _a.coordinates, bounding = _a.bounding, overlay = _a.overlay, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         if (coordinates.length < 1)
             return [];
-        var _c = __read(coordinates, 1), c1 = _c[0];
+        var _b = __read(coordinates, 1), c1 = _b[0];
         var ext = isValid(overlay.extendData) ? overlay.extendData : {};
-        var lineColor = lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color);
-        var lineWidth = lineSizeOf(overlay, chart, ext.lineWidth);
+        var stroke = lineStyleOverrides(overlay, chart, ext);
         var figures = [
             {
                 key: 'cl_v',
                 type: 'line',
                 attrs: { coordinates: [{ x: c1.x, y: 0 }, { x: c1.x, y: bounding.height }] },
-                styles: { style: 'solid', color: lineColor, size: lineWidth }
+                styles: { style: stroke.style, color: stroke.color, size: stroke.size, dashedValue: stroke.dashedValue }
             },
             {
                 key: 'cl_h',
                 type: 'line',
                 attrs: { coordinates: [{ x: 0, y: c1.y }, { x: bounding.width, y: c1.y }] },
-                styles: { style: 'solid', color: lineColor, size: lineWidth }
+                styles: { style: stroke.style, color: stroke.color, size: stroke.size, dashedValue: stroke.dashedValue }
             }
         ];
         figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
@@ -45697,8 +47014,8 @@ var horizontalRayLine = {
             type: 'line',
             attrs: { coordinates: [c1, rayTip] }
         });
-        // ─── Arrow at the ray tip (on by default) ───
-        var rightEnd = (_c = ext.rightEnd) !== null && _c !== void 0 ? _c : 1;
+        // ─── Arrow at the ray tip (TV default: Normal — off) ───
+        var rightEnd = (_c = ext.rightEnd) !== null && _c !== void 0 ? _c : 0;
         if (rightEnd === 1) {
             var coords = getArrowCoordinates(c1, rayTip);
             if (coords.length === 3) {
@@ -46603,12 +47920,12 @@ var rayLine = {
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
     createPointFigures: function (_a) {
-        var _b, _c, _d;
+        var _b, _c, _d, _e;
         var chart = _a.chart, coordinates = _a.coordinates, bounding = _a.bounding, overlay = _a.overlay, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         rememberLineChart(overlay, chart);
         if (coordinates.length < 2)
             return [];
-        var _e = __read(coordinates, 2), c1 = _e[0], c2 = _e[1];
+        var _f = __read(coordinates, 2), c1 = _f[0], c2 = _f[1];
         var ext = isValid(overlay.extendData) ? overlay.extendData : {};
         var points = overlay.points;
         var precision = pricePrecisionOf(chart, overlay, yAxis, ext.pricePrecision);
@@ -46622,14 +47939,23 @@ var rayLine = {
             : c1.x > c2.x
                 ? { x: 0, y: getLinearYFromCoordinates(c1, c2, { x: 0, y: c1.y }) }
                 : { x: bounding.width, y: getLinearYFromCoordinates(c1, c2, { x: bounding.width, y: c1.y }) };
+        // ─── Optional backward extension through P1 (TradingView extendLeft) ───
+        var extendLeft = ext.extendLeft === true;
+        var lineStart = extendLeft
+            ? c1.x === c2.x && c1.y !== c2.y
+                ? { x: c1.x, y: c1.y < c2.y ? 0 : bounding.height }
+                : c1.x > c2.x
+                    ? { x: bounding.width, y: getLinearYFromCoordinates(c1, c2, { x: bounding.width, y: c1.y }) }
+                    : { x: 0, y: getLinearYFromCoordinates(c1, c2, { x: 0, y: c1.y }) }
+            : c1;
         // ─── Label layout first (may request a gap in the line) ───
         var spec = labelSpecOf(ext);
         var labelLayout = spec !== null
-            ? layoutDiagonalLabel('ray_label', spec, c1, rayTip, lineColor, lineWidth)
+            ? layoutDiagonalLabel('ray_label', spec, lineStart, rayTip, lineColor, lineWidth)
             : null;
-        pushLineWithGap(figures, 'ray', c1, rayTip, labelLayout === null || labelLayout === void 0 ? void 0 : labelLayout.gap);
-        // ─── Arrow at the ray tip (on by default, TradingView parity) ───
-        var rightEnd = (_c = ext.rightEnd) !== null && _c !== void 0 ? _c : 1;
+        pushLineWithGap(figures, 'ray', lineStart, rayTip, labelLayout === null || labelLayout === void 0 ? void 0 : labelLayout.gap);
+        // ─── End caps (TradingView: both default to Normal — no arrow) ───
+        var rightEnd = (_c = ext.rightEnd) !== null && _c !== void 0 ? _c : 0;
         if (rightEnd === 1) {
             var coords = getArrowCoordinates(c1, rayTip);
             if (coords.length === 3) {
@@ -46642,9 +47968,22 @@ var rayLine = {
                 });
             }
         }
+        var leftEnd = (_d = ext.leftEnd) !== null && _d !== void 0 ? _d : 0;
+        if (leftEnd === 1 && extendLeft) {
+            var coords = getArrowCoordinates(rayTip, lineStart);
+            if (coords.length === 3) {
+                figures.push({
+                    key: 'ray_arrow_left',
+                    type: 'polygon',
+                    attrs: { coordinates: coords },
+                    styles: { style: 'fill', color: lineColor },
+                    ignoreEvent: true
+                });
+            }
+        }
         // ─── Price label at the origin anchor ───
         if (ext.showPriceLabels === true || ext.showPriceLabel === true) {
-            pushAnchorPriceLabel(figures, 'ray_price0', c1, (_d = points[0]) === null || _d === void 0 ? void 0 : _d.value, lineColor, precision);
+            pushAnchorPriceLabel(figures, 'ray_price0', c1, (_e = points[0]) === null || _e === void 0 ? void 0 : _e.value, lineColor, precision);
         }
         if (labelLayout !== null) {
             figures.push(labelLayout.figure);
@@ -46903,8 +48242,8 @@ var straightLine = {
         var lineWidth = lineSizeOf(overlay, chart, ext.lineWidth);
         var isActive = (isSelected !== null && isSelected !== void 0 ? isSelected : false) || (isHovered !== null && isHovered !== void 0 ? isHovered : false);
         var figures = [];
-        // ─── Always extended to both pane edges ───
-        var _h = __read(getExtendedCoordinates(c1, c2, bounding.width, bounding.height, true, true), 2), lineStart = _h[0], lineEnd = _h[1];
+        // ─── Extended to pane edges — both default true, each toggleable (TV) ───
+        var _h = __read(getExtendedCoordinates(c1, c2, bounding.width, bounding.height, ext.extendLeft !== false, ext.extendRight !== false), 2), lineStart = _h[0], lineEnd = _h[1];
         // ─── Label layout first (may request a gap in the line) ───
         var spec = labelSpecOf(ext);
         var labelLayout = spec !== null
@@ -47800,7 +49139,7 @@ function pinPointIndex(points, dstIndex, srcIndex) {
     }
 }
 /** Guarded single-point → pixel conversion (conversion unions). */
-function pointToCoordinate$1(chart, paneId, point) {
+function pointToCoordinate(chart, paneId, point) {
     var converted = chart.convertToPixel(point, { paneId: paneId });
     var c = isArray(converted) ? converted[0] : converted;
     if (isValid(c) && isNumber(c.x) && isNumber(c.y)) {
@@ -47809,7 +49148,7 @@ function pointToCoordinate$1(chart, paneId, point) {
     return null;
 }
 /** Guarded pixel → point conversion (conversion unions). */
-function coordinateToPoint$1(chart, paneId, coordinate) {
+function coordinateToPoint(chart, paneId, coordinate) {
     var converted = chart.convertFromPixel([coordinate], { paneId: paneId });
     var p = isArray(converted) ? converted[0] : converted;
     return isValid(p) ? p : null;
@@ -48495,7 +49834,7 @@ var parallelStraightLine = {
             pushSidePriceLabel(figures, 'pc_price1', c1, p1.value, 'right', stroke.color, precision);
             if (hasOffset) {
                 pushSidePriceLabel(figures, 'pc_price2', cornerC, p2.value, 'left', stroke.color, precision);
-                var hPoint = coordinateToPoint$1(chart, overlay.paneId, cornerH);
+                var hPoint = coordinateToPoint(chart, overlay.paneId, cornerH);
                 pushSidePriceLabel(figures, 'pc_price3', cornerH, isValid(hPoint) ? hPoint.value : undefined, 'right', stroke.color, precision);
             }
         }
@@ -48578,16 +49917,16 @@ var parallelStraightLine = {
         var prev0 = isValid(params.prevPoints[0]) ? params.prevPoints[0] : {};
         var prev1 = isValid(params.prevPoints[1]) ? params.prevPoints[1] : {};
         var prev2 = isValid(params.prevPoints[2]) ? params.prevPoints[2] : {};
-        var px0 = chart !== undefined ? pointToCoordinate$1(chart, this.paneId, prev0) : null;
-        var px1 = chart !== undefined ? pointToCoordinate$1(chart, this.paneId, prev1) : null;
-        var px2 = chart !== undefined ? pointToCoordinate$1(chart, this.paneId, prev2) : null;
+        var px0 = chart !== undefined ? pointToCoordinate(chart, this.paneId, prev0) : null;
+        var px1 = chart !== undefined ? pointToCoordinate(chart, this.paneId, prev1) : null;
+        var px2 = chart !== undefined ? pointToCoordinate(chart, this.paneId, prev2) : null;
         var hasGesture = px0 !== null && px1 !== null && px2 !== null;
         var offsetPx = hasGesture ? px2.y - px0.y : 0;
         var valueAtPixelY = function (x, y) {
             if (chart === undefined) {
                 return undefined;
             }
-            var point = coordinateToPoint$1(chart, _this.paneId, { x: x, y: y });
+            var point = coordinateToPoint(chart, _this.paneId, { x: x, y: y });
             return isValid(point) ? point.value : undefined;
         };
         if (key === 'pc_mid1' || key === 'pc_mid2') {
@@ -49306,502 +50645,19 @@ var regressionTrend = {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var SHAPE_DASH_MAP = {
-    solid: [],
-    dashed: [8, 4],
-    dotted: [2, 2]
-};
 /**
- * Resolved border for fill-capable shapes. Priority: `overlay.styles`
- * channel for the figure type (kernel settings dialog), then the
- * extendData color channel, then the theme default.
- */
-function shapeStrokeOf(overlay, chart, ext, channel) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
-    var themePoly = chart.getStyles().overlay[channel];
-    var channelStyles = (_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a[channel]) !== null && _b !== void 0 ? _b : {};
-    var extStyle = (_c = ext.borderStyle) !== null && _c !== void 0 ? _c : ext.lineStyle;
-    var style = (_d = channelStyles.borderStyle) !== null && _d !== void 0 ? _d : (extStyle === 'solid' || extStyle === 'dotted' ? extStyle : extStyle !== undefined ? 'dashed' : themePoly.borderStyle);
-    var dashedValue = (_e = channelStyles.borderDashedValue) !== null && _e !== void 0 ? _e : (extStyle !== undefined ? SHAPE_DASH_MAP[extStyle] : themePoly.borderDashedValue);
-    return {
-        color: (_j = (_h = (_g = (_f = channelStyles.borderColor) !== null && _f !== void 0 ? _f : ext.borderColor) !== null && _g !== void 0 ? _g : ext.lineColor) !== null && _h !== void 0 ? _h : ext.color) !== null && _j !== void 0 ? _j : themePoly.borderColor,
-        size: (_m = (_l = (_k = channelStyles.borderSize) !== null && _k !== void 0 ? _k : ext.borderWidth) !== null && _l !== void 0 ? _l : ext.lineWidth) !== null && _m !== void 0 ? _m : themePoly.borderSize,
-        style: style,
-        dashedValue: dashedValue
-    };
-}
-/**
- * Whether the shape body is filled. The consumer `background.enabled`
- * wins over the kernel flat flags; default is filled.
- */
-function shapeFillEnabled(ext) {
-    var _a, _b, _c;
-    var bg = ext.background;
-    if (isValid(bg) && isBoolean(bg.enabled)) {
-        return bg.enabled;
-    }
-    return (_c = (_b = (_a = ext.fillEnabled) !== null && _a !== void 0 ? _a : ext.fillBackground) !== null && _b !== void 0 ? _b : ext.showBackground) !== null && _c !== void 0 ? _c : true;
-}
-function normalizeOpacity(opacity) {
-    // Percent (20 = 20%) vs fraction (0.2 = 20%) — both spellings exist in
-    // the wild, so treat <=1 as a fraction.
-    return Math.max(0, Math.min(1, opacity <= 1 ? opacity : opacity / 100));
-}
-/**
- * Resolved fill color honoring every field casing:
- * `background{color,opacity}` (consumer) → `fillColor`+`fillOpacity`
- * (kernel) → `backgroundColor`+`transparency` (TV) → stroke tint.
- */
-function shapeFillColor(overlay, ext, strokeColor, channel) {
-    var _a, _b;
-    var channelStyles = (_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a[channel]) !== null && _b !== void 0 ? _b : {};
-    if (isValid(channelStyles.color)) {
-        // The kernel settings channel wins outright — string or gradient.
-        return channelStyles.color;
-    }
-    var bg = ext.background;
-    if (isValid(bg) && (isString(bg.color) || isNumber(bg.opacity))) {
-        var color = isString(bg.color) ? bg.color : strokeColor;
-        var opacity = isNumber(bg.opacity) ? bg.opacity : 20;
-        return alphaRgba(color, normalizeOpacity(opacity));
-    }
-    if (isString(ext.backgroundColor)) {
-        if (!ext.backgroundColor.startsWith('#')) {
-            return ext.backgroundColor;
-        }
-        var t_1 = isNumber(ext.transparency) ? ext.transparency : 80;
-        var pct_1 = t_1 <= 1 ? t_1 * 100 : t_1;
-        return alphaRgba(ext.backgroundColor, Math.max(0, Math.min(1, (100 - pct_1) / 100)));
-    }
-    if (isString(ext.fillColor)) {
-        var opacity = isNumber(ext.fillOpacity) ? ext.fillOpacity : 20;
-        return alphaRgba(ext.fillColor, normalizeOpacity(opacity));
-    }
-    var t = isNumber(ext.transparency) ? ext.transparency : 80;
-    var pct = t <= 1 ? t * 100 : t;
-    return alphaRgba(strokeColor, Math.max(0, Math.min(1, (100 - pct) / 100)));
-}
-/**
- * Normalized text spec. Returns null when no text is configured, a master
- * gate (`textEnabled`/`showLabel`) is off, or an external editor owns the
- * text right now (`isEditing`).
- */
-function shapeLabelSpecOf(ext) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;
-    if (ext.isEditing === true) {
-        return null;
-    }
-    if (ext.textEnabled === false || ext.showLabel === false) {
-        return null;
-    }
-    var text = ext.text;
-    if (!isString(text) || text === '') {
-        return null;
-    }
-    var hRaw = (_c = (_b = (_a = ext.horzAlign) !== null && _a !== void 0 ? _a : ext.textHorizontalAlign) !== null && _b !== void 0 ? _b : ext.horzLabelsAlign) !== null && _c !== void 0 ? _c : 'center';
-    var vRaw = (_f = (_e = (_d = ext.vertAlign) !== null && _d !== void 0 ? _d : ext.textVerticalAlign) !== null && _e !== void 0 ? _e : ext.vertLabelsAlign) !== null && _f !== void 0 ? _f : 'middle';
-    return {
-        text: text,
-        color: (_g = ext.textColor) !== null && _g !== void 0 ? _g : ext.textcolor,
-        fontSize: (_j = (_h = ext.textSize) !== null && _h !== void 0 ? _h : ext.fontsize) !== null && _j !== void 0 ? _j : 14,
-        bold: (_m = (_l = (_k = ext.isBold) !== null && _k !== void 0 ? _k : ext.bold) !== null && _l !== void 0 ? _l : ext.textBold) !== null && _m !== void 0 ? _m : false,
-        italic: (_q = (_p = (_o = ext.isItalic) !== null && _o !== void 0 ? _o : ext.italic) !== null && _p !== void 0 ? _p : ext.textItalic) !== null && _q !== void 0 ? _q : false,
-        hAlign: hRaw === 'left' || hRaw === 'right' ? hRaw : 'center',
-        vAlign: vRaw === 'top' || vRaw === 'bottom' ? vRaw : 'middle'
-    };
-}
-var TEXT_PAD = 8;
-/**
- * In-box text figure (kernel rect pattern): alignment offsets the anchor
- * inside the box; `width`/`height` clip the text bounds.
- */
-function shapeTextFigure(key, spec, box, fallbackColor) {
-    var _a;
-    var tx = (box.left + box.right) / 2;
-    var ty = (box.top + box.bottom) / 2;
-    if (spec.hAlign === 'left') {
-        tx = box.left + TEXT_PAD;
-    }
-    else if (spec.hAlign === 'right') {
-        tx = box.right - TEXT_PAD;
-    }
-    if (spec.vAlign === 'top') {
-        ty = box.top + TEXT_PAD;
-    }
-    else if (spec.vAlign === 'bottom') {
-        ty = box.bottom - TEXT_PAD;
-    }
-    return {
-        key: key,
-        type: 'text',
-        attrs: {
-            x: tx,
-            y: ty,
-            text: spec.text,
-            align: spec.hAlign,
-            baseline: spec.vAlign === 'middle' ? 'middle' : spec.vAlign,
-            width: Math.max(0, box.right - box.left - TEXT_PAD * 2),
-            height: Math.max(0, box.bottom - box.top - TEXT_PAD * 2)
-        },
-        styles: {
-            color: (_a = spec.color) !== null && _a !== void 0 ? _a : fallbackColor,
-            size: spec.fontSize,
-            weight: spec.bold ? 'bold' : '600',
-            // `style` on a text figure is the fill/stroke draw mode — italic goes
-            // through fontStyle or the font string is never italicized.
-            fontStyle: spec.italic ? 'italic' : undefined,
-            backgroundColor: 'transparent'
-        },
-        ignoreEvent: true
-    };
-}
-/** "+ Add text" placeholder (kernel rect parity) for selected empty-text shapes. */
-function shapeTextPlaceholderFigure(key, box, color) {
-    return {
-        key: key,
-        type: 'text',
-        attrs: {
-            x: (box.left + box.right) / 2,
-            y: (box.top + box.bottom) / 2,
-            text: '+ Add text',
-            align: 'center',
-            baseline: 'middle'
-        },
-        styles: {
-            color: color,
-            size: 13,
-            weight: 'normal',
-            style: 'normal',
-            backgroundColor: 'transparent'
-        },
-        cursor: 'text'
-    };
-}
-/**
- * Square drag handle at an arbitrary pixel position (computed corners,
- * edge midpoints, generated controls — the channelCommon precedent). The
- * factory `createAnchorFigures` only anchors at stored coordinates, so
- * handles whose pixel position differs from `points[i]` are built here.
- */
-function shapeHandleFigure(key, coordinate, options) {
-    var _a, _b;
-    var half = options.isTouch === true ? ANCHOR_HALF_TOUCH : ANCHOR_HALF_MOUSE;
-    var cx = Math.round(coordinate.x) - 0.5;
-    var cy = Math.round(coordinate.y) - 0.5;
-    return {
-        key: key,
-        type: 'rect',
-        attrs: { x: cx - half, y: cy - half, width: half * 2, height: half * 2 },
-        styles: {
-            style: 'stroke_fill',
-            color: '#ffffff',
-            borderColor: '#1592E6',
-            borderSize: 1.5
-        },
-        pointIndex: options.pointIndex,
-        moveDirection: (_a = options.moveDirection) !== null && _a !== void 0 ? _a : 'both',
-        cursor: (_b = options.cursor) !== null && _b !== void 0 ? _b : 'pointer'
-    };
-}
-// ═══════════════════════════════════════
-// Point ↔ pixel helpers (union-narrowed)
-// ═══════════════════════════════════════
-function pointToCoordinate(chart, paneId, point) {
-    var converted = chart.convertToPixel(point, { paneId: paneId });
-    var c = isArray(converted) ? converted[0] : converted;
-    if (isValid(c) && isNumber(c.x) && isNumber(c.y)) {
-        return { x: c.x, y: c.y };
-    }
-    return null;
-}
-function coordinateToPoint(chart, paneId, coordinate) {
-    var converted = chart.convertFromPixel([coordinate], { paneId: paneId });
-    var point = isArray(converted) ? converted[0] : converted;
-    return isValid(point) ? point : null;
-}
-/**
- * Move `target` to the pixel position `prevPx + (dx, dy)` — exact
- * translation regardless of axis scale (log axes included).
- */
-function translatePointByPixelDelta(chart, paneId, target, prevPx, dx, dy) {
-    var point = coordinateToPoint(chart, paneId, { x: prevPx.x + dx, y: prevPx.y + dy });
-    if (point !== null) {
-        target.timestamp = point.timestamp;
-        target.dataIndex = point.dataIndex;
-        target.value = point.value;
-    }
-}
-// ═══════════════════════════════════════
-// Shift constraints
-// ═══════════════════════════════════════
-/** Square constraint: equal pixel extents on both axes, direction kept. */
-function squareCoordinate(to, from) {
-    var dx = to.x - from.x;
-    var dy = to.y - from.y;
-    var side = Math.max(Math.abs(dx), Math.abs(dy));
-    return {
-        x: from.x + (dx < 0 ? -side : side),
-        y: from.y + (dy < 0 ? -side : side)
-    };
-}
-/**
- * Shift (or the persistent align-45 toggle) → rewrite the moving point so
- * its pixel offset from `points[fixedIndex]` is square — TV's Shift-square
- * for rectangle/ellipse drawing. Same call shape as `applySnap45`.
- */
-function applySquareSnap(overlay, params, fixedIndex) {
-    var event = params.event;
-    var chart = lineChartOf(overlay);
-    if (event === undefined || chart === undefined) {
-        return;
-    }
-    if (!isSnap45Active(chart, event) || !isNumber(event.x) || !isNumber(event.y)) {
-        return;
-    }
-    var fixed = params.points[fixedIndex];
-    if (!isValid(fixed)) {
-        return;
-    }
-    var from = pointToCoordinate(chart, overlay.paneId, fixed);
-    if (from === null) {
-        return;
-    }
-    var point = coordinateToPoint(chart, overlay.paneId, squareCoordinate({ x: event.x, y: event.y }, from));
-    var target = params.points[params.performPointIndex];
-    if (point === null || !isValid(target)) {
-        return;
-    }
-    target.timestamp = point.timestamp;
-    target.dataIndex = point.dataIndex;
-    target.value = point.value;
-}
-// ═══════════════════════════════════════
-// Per-period visibility (kernel ellipse parity)
-// ═══════════════════════════════════════
-/**
- * Fails OPEN — no configured range → visible. `enabled === false` hides on
- * that band; otherwise the period span must sit inside [min, max].
- * Mirrors the kernel ellipse `isEllipseVisibleAtPeriod` gate.
- */
-function hiddenAtPeriod(ext, period) {
-    if (period === null) {
-        return false;
-    }
-    var key = PERIOD_VIS_KEY[period.type];
-    var range = ext[key];
-    if (!isValid(range)) {
-        return false;
-    }
-    if (range.enabled === false) {
-        return true;
-    }
-    if (!isNumber(period.span)) {
-        return false;
-    }
-    var min = isNumber(range.min) ? range.min : Number.MIN_SAFE_INTEGER;
-    var max = isNumber(range.max) ? range.max : Number.MAX_SAFE_INTEGER;
-    return period.span < min || period.span > max;
-}
-// ═══════════════════════════════════════
-// Curve math
-// ═══════════════════════════════════════
-/**
- * Quadratic Bezier control point that makes the curve pass through the
- * on-curve midpoint `mid`: Pc = 2·mid − 0.5·p1 − 0.5·p2 (reference).
- */
-function quadraticOnCurveControl(p1, mid, p2) {
-    return {
-        x: 2 * mid.x - 0.5 * (p1.x + p2.x),
-        y: 2 * mid.y - 0.5 * (p1.y + p2.y)
-    };
-}
-/** Sample a quadratic Bezier into `segments` line-ready coordinates. */
-function sampleQuadratic(p0, pc, p1, segments) {
-    var steps = Math.max(2, Math.floor(segments));
-    var pts = [];
-    for (var i = 0; i <= steps; i++) {
-        var t = i / steps;
-        var mt = 1 - t;
-        pts.push({
-            x: mt * mt * p0.x + 2 * mt * t * pc.x + t * t * p1.x,
-            y: mt * mt * p0.y + 2 * mt * t * pc.y + t * t * p1.y
-        });
-    }
-    return pts;
-}
-function catmullRom(t, p0, p1, p2, p3) {
-    var t2 = t * t;
-    var t3 = t2 * t;
-    return 0.5 * (2 * p1 +
-        (-p0 + p2) * t +
-        (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
-        (-p0 + 3 * p1 - 3 * p2 + p3) * t3);
-}
-/**
- * Catmull-Rom spline through all four control points (the curve passes
- * through every anchor — reference doubleCurve renderer). Phantom
- * endpoints mirror the boundary tangents.
- */
-function sampleCatmullRom4(p0, p1, p2, p3, segments) {
-    var per = Math.max(1, Math.floor(segments / 3));
-    var phantom0 = {
-        x: p0.x - (p1.x - p0.x),
-        y: p0.y - (p1.y - p0.y)
-    };
-    var phantom3 = {
-        x: p3.x + (p3.x - p2.x),
-        y: p3.y + (p3.y - p2.y)
-    };
-    var pts = [];
-    for (var i = 0; i <= per; i++) {
-        var t = i / per;
-        pts.push({
-            x: catmullRom(t, phantom0.x, p0.x, p1.x, p2.x),
-            y: catmullRom(t, phantom0.y, p0.y, p1.y, p2.y)
-        });
-    }
-    for (var i = 1; i <= per; i++) {
-        var t = i / per;
-        pts.push({
-            x: catmullRom(t, p0.x, p1.x, p2.x, p3.x),
-            y: catmullRom(t, p0.y, p1.y, p2.y, p3.y)
-        });
-    }
-    for (var i = 1; i <= per; i++) {
-        var t = i / per;
-        pts.push({
-            x: catmullRom(t, p1.x, p2.x, p3.x, phantom3.x),
-            y: catmullRom(t, p1.y, p2.y, p3.y, phantom3.y)
-        });
-    }
-    return pts;
-}
-/**
- * S-curve intermediates between the two endpoints (reference doubleCurve
- * generation): 1/3 and 2/3 along the segment, offset ±0.25·len along the
- * perpendicular. Position-invariant (unlike TV's raw `e.add(t).scaled`).
- */
-function sCurveIntermediates(p0, p3) {
-    var dx = p3.x - p0.x;
-    var dy = p3.y - p0.y;
-    var len = Math.sqrt(dx * dx + dy * dy);
-    var px = len > 0 ? -dy / len : 0;
-    var py = len > 0 ? dx / len : 0;
-    var offset = len * 0.25;
-    return [
-        { x: p0.x + dx / 3 + px * offset, y: p0.y + dy / 3 + py * offset },
-        { x: p0.x + (2 * dx) / 3 - px * offset, y: p0.y + (2 * dy) / 3 - py * offset }
-    ];
-}
-/**
- * Quadratic-Bezier control midpoint + perpendicular offset (TV
- * BezierQuadro generation): mid(p1,p2) + 0.15·len perpendicular.
- */
-function quadControlOffset(p1, p2) {
-    var dx = p2.x - p1.x;
-    var dy = p2.y - p1.y;
-    var len = Math.sqrt(dx * dx + dy * dy);
-    var px = len > 0 ? -dy / len : 0;
-    var py = len > 0 ? dx / len : 0;
-    var offset = len * 0.15;
-    return {
-        x: (p1.x + p2.x) / 2 + px * offset,
-        y: (p1.y + p2.y) / 2 + py * offset
-    };
-}
-// ═══════════════════════════════════════
-// Rotated rectangle / parallelogram corners
-// ═══════════════════════════════════════
-/**
- * The four corners of the rotated rectangle: `p1`→`p2` is the reference
- * edge, `p3` projects onto the edge normal giving the width.
- * Order: [p1, p2, p2+off, p1+off].
- */
-function rotatedRectCorners(p1, p2, p3) {
-    var ex = p2.x - p1.x;
-    var ey = p2.y - p1.y;
-    var len = Math.sqrt(ex * ex + ey * ey);
-    if (len === 0) {
-        return [p1, p1, p1, p1];
-    }
-    var nx = -ey / len;
-    var ny = ex / len;
-    var width = (p3.x - p1.x) * nx + (p3.y - p1.y) * ny;
-    var ox = nx * width;
-    var oy = ny * width;
-    return [
-        p1,
-        p2,
-        { x: p2.x + ox, y: p2.y + oy },
-        { x: p1.x + ox, y: p1.y + oy }
-    ];
-}
-// ═══════════════════════════════════════
-// Unlimited-step restore settle
-// ═══════════════════════════════════════
-/**
- * Overlays armed through `onDrawStart` — i.e. created empty for a live
- * draw. Restored overlays never fire onDrawStart (`override` advances
- * `currentStep` past START before createOverlay reaches the hook), so the
- * set distinguishes "user is drawing right now" from "deserialized into a
- * drawing state" — a distinction persisted data alone cannot express.
- */
-var ARMED_DRAWS = new WeakSet();
-/** Mark an overlay as a live draw — call from the template's `onDrawStart`. */
-function markDrawArmed(overlay) {
-    ARMED_DRAWS.add(overlay);
-}
-/**
- * Kernel gap workaround for `totalStep: MAX_SAFE_INTEGER` tools: a
- * restored overlay lands in the drawing-progress slot (`override` can
- * never satisfy `points.length >= totalStep - 1`), eats the user's next
- * click, and is skipped by the serializer. When such an overlay owns the
- * slot and is NOT a live draw (never armed through onDrawStart), finish it
- * and hand it to the committed overlay list.
- *
- * Called from createPointFigures — the earliest hook that runs after
- * restore, with a live `chart`. Degenerate restores (< 2 points) are left
- * in place rather than removed mid-render.
- */
-function settleRestoredUnlimited(overlay, chart) {
-    var _a;
-    if (!overlay.isDrawing() || overlay.isStart() || ARMED_DRAWS.has(overlay)) {
-        return;
-    }
-    if (overlay.points.length < 2) {
-        return;
-    }
-    var store = chart.getChartStore();
-    if (((_a = store.getProgressOverlayInfo()) === null || _a === void 0 ? void 0 : _a.overlay) !== overlay) {
-        return;
-    }
-    overlay.forceComplete();
-    store.progressOverlayComplete();
-}
-/** Minimum rendered radius for the circle tool (kernel constant). */
-var MIN_RADIUS_PX = 5;
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-/**
- * 'arc' — TradingView Arc (3 points, reference port). P1/P2 are the arc
- * endpoints; P3 is ON-CURVE — the quadratic control point is derived as
- * Pc = 2·P3 − (P1+P2)/2 so the rendered arc passes exactly through the
- * third click. The fill closes the arc region along the P2→P1 chord
- * (consumer behavior). Improvements over the reference: anchor factory
- * (locked outline, draw suppression), resize cursors, theme-aware stroke
- * and shared fill/border resolution.
+ * 'arc' — TradingView Arc (3 points). P1→P2 is the chord; P3 sets the
+ * SIGNED perpendicular distance `d` of the arc apex from the chord
+ * midpoint — TV draws the 60° circular arc of radius |chord| centered
+ * on the perpendicular bisector, then scales it perpendicular to the
+ * chord so the apex lands at mid + n̂·d (an affine-stretched elliptical
+ * arc through P1, apex, P2 — TradingView's exact translate/rotate/scale
+ * draw, not a quadratic Bezier with a free control point). |d| < 1 px
+ * renders as the bare chord (TV's degenerate fallback). The fill closes
+ * the arc region along the chord. Anchors: P1, P2 plus the apex handle
+ * at mid + n̂·d — it drags perpendicular distance on the cursor's side;
+ * endpoint drags preserve the gesture-start signed distance (TradingView
+ * startChanging/setPoint parity).
  */
 var ARC_SEGMENTS = 40;
 var arc = {
@@ -49840,7 +50696,7 @@ var arc = {
         var hasMid = coordinates.length >= 3;
         var figures = [];
         if (!hasMid) {
-            // Chord preview while the on-curve point is unplaced.
+            // Chord preview while the apex point is unplaced.
             figures.push({
                 key: 'arc_chord',
                 type: 'line',
@@ -49854,9 +50710,9 @@ var arc = {
             });
         }
         else {
-            var control = quadraticOnCurveControl(p1, coordinates[2], p2);
-            var arcPoints = sampleQuadratic(p1, control, p2, ARC_SEGMENTS);
-            if (shapeFillEnabled(ext)) {
+            // |d| < 1 samples to the bare chord — same figure either way.
+            var arcPoints = sampleTVArc(p1, p2, coordinates[2], ARC_SEGMENTS);
+            if (shapeFillEnabled(ext) && arcPoints.length > 2) {
                 // Region bounded by the arc and its chord — stays interactive so
                 // the filled area participates in body dragging.
                 figures.push({
@@ -49881,21 +50737,121 @@ var arc = {
                 }
             });
         }
-        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
-            coordinates: coordinates,
-            isSelected: isSelected,
-            isHovered: isHovered,
-            isDrawing: overlay.isDrawing(),
-            lock: overlay.lock,
-            isTouch: isTouch,
-            cursors: [
-                computeResizeCursor(p2, p1),
-                computeResizeCursor(p1, p2),
-                hasMid ? computeResizeCursor(coordinates[2], { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 }) : 'pointer'
-            ]
-        })), false));
+        // ─── Anchors: TV emits [P1, P2, apex(mid + n̂·d)] when complete ───
+        var drawing = overlay.isDrawing();
+        var frame = hasMid ? edgeFrameOf(p1, p2) : null;
+        var interactive = !overlay.lock &&
+            ((isSelected !== null && isSelected !== void 0 ? isSelected : false) || (isHovered !== null && isHovered !== void 0 ? isHovered : false)) &&
+            !drawing;
+        if (frame !== null && (interactive || (overlay.lock && isSelected === true))) {
+            var mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+            var d = signedLineDistance(p1, p2, coordinates[2]);
+            var apex = { x: mid.x + frame.nx * d, y: mid.y + frame.ny * d };
+            if (overlay.lock) {
+                // Locked selection outline at the TV anchor positions.
+                figures.push.apply(figures, __spreadArray([], __read(createSelectionOutlineFigures({ coordinates: [p1, p2, apex], isTouch: isTouch })), false));
+            }
+            else {
+                var perpCursor = computeResizeCursor({ x: mid.x - frame.nx * d, y: mid.y - frame.ny * d }, apex);
+                figures.push(shapeHandleFigure('arc_p1', p1, { pointIndex: 0, cursor: 'pointer', isTouch: isTouch, shape: 'circle' }));
+                figures.push(shapeHandleFigure('arc_p2', p2, { pointIndex: 1, cursor: 'pointer', isTouch: isTouch, shape: 'circle' }));
+                figures.push(shapeHandleFigure('arc_apex', apex, { pointIndex: 2, cursor: perpCursor, isTouch: isTouch, shape: 'circle' }));
+            }
+        }
+        else {
+            // Drawing, degenerate edge, or unselected — factory anchors for the
+            // stored points (in-progress suppression + lock outline built in).
+            figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+                coordinates: coordinates,
+                isSelected: isSelected,
+                isHovered: isHovered,
+                isDrawing: drawing,
+                lock: overlay.lock,
+                isTouch: isTouch,
+                cursors: [
+                    computeResizeCursor(p2, p1),
+                    computeResizeCursor(p1, p2),
+                    'pointer'
+                ]
+            })), false));
+        }
         return figures;
-    })
+    }),
+    performEventPressedMove: function (params) {
+        var _a, _b, _c, _d, _e;
+        // Replayed restores (event === undefined) keep the stored point.
+        if (params.event === undefined || params.points.length < 3) {
+            return;
+        }
+        var chart = lineChartOf(this);
+        if (chart === undefined) {
+            return;
+        }
+        var paneId = this.paneId;
+        var mpi = params.performPointIndex;
+        if (mpi === 2) {
+            // Apex drag: snap the stored point onto the mid-perpendicular on
+            // the cursor's side — P3 := mid + n̂·signedDistance(cursor), the
+            // TradingView setPoint case-2 write (tangential drift is dropped).
+            var c0 = pointToCoordinate$1(chart, paneId, (_a = params.points[0]) !== null && _a !== void 0 ? _a : {});
+            var c1 = pointToCoordinate$1(chart, paneId, (_b = params.points[1]) !== null && _b !== void 0 ? _b : {});
+            var c2 = pointToCoordinate$1(chart, paneId, (_c = params.points[2]) !== null && _c !== void 0 ? _c : {});
+            if (c0 === null || c1 === null || c2 === null) {
+                return;
+            }
+            var frame = edgeFrameOf(c0, c1);
+            var target = params.points[2];
+            if (frame === null || !isValid(target)) {
+                return;
+            }
+            var d = (c2.x - c0.x) * frame.nx + (c2.y - c0.y) * frame.ny;
+            var point = coordinateToPoint$1(chart, paneId, {
+                x: (c0.x + c1.x) / 2 + frame.nx * d,
+                y: (c0.y + c1.y) / 2 + frame.ny * d
+            });
+            if (point === null) {
+                return;
+            }
+            target.timestamp = point.timestamp;
+            target.dataIndex = point.dataIndex;
+            target.value = point.value;
+            return;
+        }
+        if (mpi === 0 || mpi === 1) {
+            // Chord endpoint: rebuild the apex from the gesture-start SIGNED
+            // distance — P3 := mid′ + n̂′·d₀. TradingView startChanging caches
+            // `_dist` (sign included); setPoint rewrites the point — prevPoints
+            // is the same gesture-start snapshot.
+            var prev = params.prevPoints;
+            if (prev.length < 3) {
+                return;
+            }
+            var p0 = pointToCoordinate$1(chart, paneId, isValid(prev[0]) ? prev[0] : {});
+            var p1 = pointToCoordinate$1(chart, paneId, isValid(prev[1]) ? prev[1] : {});
+            var p2 = pointToCoordinate$1(chart, paneId, isValid(prev[2]) ? prev[2] : {});
+            var c0 = pointToCoordinate$1(chart, paneId, (_d = params.points[0]) !== null && _d !== void 0 ? _d : {});
+            var c1 = pointToCoordinate$1(chart, paneId, (_e = params.points[1]) !== null && _e !== void 0 ? _e : {});
+            if (p0 === null || p1 === null || p2 === null || c0 === null || c1 === null) {
+                return;
+            }
+            var d0 = signedLineDistance(p0, p1, p2);
+            var frame = edgeFrameOf(c0, c1);
+            var target = params.points[2];
+            if (frame === null || !isValid(target)) {
+                return;
+            }
+            var point = coordinateToPoint$1(chart, paneId, {
+                x: (c0.x + c1.x) / 2 + frame.nx * d0,
+                y: (c0.y + c1.y) / 2 + frame.ny * d0
+            });
+            if (point === null) {
+                return;
+            }
+            target.timestamp = point.timestamp;
+            target.dataIndex = point.dataIndex;
+            target.value = point.value;
+        }
+    }
 };
 
 /**
@@ -49933,9 +50889,9 @@ function snapEdgeToCenterPixelDelta(overlay, prevPoints, nowPoints) {
     if (chart === undefined) {
         return;
     }
-    var prevCenter = pointToCoordinate(chart, overlay.paneId, isValid(prevPoints[0]) ? prevPoints[0] : {});
-    var prevEdge = pointToCoordinate(chart, overlay.paneId, isValid(prevPoints[1]) ? prevPoints[1] : {});
-    var nowCenter = pointToCoordinate(chart, overlay.paneId, isValid(nowPoints[0]) ? nowPoints[0] : {});
+    var prevCenter = pointToCoordinate$1(chart, overlay.paneId, isValid(prevPoints[0]) ? prevPoints[0] : {});
+    var prevEdge = pointToCoordinate$1(chart, overlay.paneId, isValid(prevPoints[1]) ? prevPoints[1] : {});
+    var nowCenter = pointToCoordinate$1(chart, overlay.paneId, isValid(nowPoints[0]) ? nowPoints[0] : {});
     var target = nowPoints[1];
     if (prevCenter === null || prevEdge === null || nowCenter === null || !isValid(target)) {
         return;
@@ -50038,8 +50994,8 @@ var circle = {
         var leftX = center.x - radius;
         var rightX = center.x + radius;
         var stripWidth = rightX - leftX;
-        var leftPoint = coordinateToPoint(chart, overlay.paneId, { x: leftX, y: 0 });
-        var rightPoint = coordinateToPoint(chart, overlay.paneId, { x: rightX, y: 0 });
+        var leftPoint = coordinateToPoint$1(chart, overlay.paneId, { x: leftX, y: 0 });
+        var rightPoint = coordinateToPoint$1(chart, overlay.paneId, { x: rightX, y: 0 });
         var leftTs = leftPoint === null || leftPoint === void 0 ? void 0 : leftPoint.timestamp;
         var rightTs = rightPoint === null || rightPoint === void 0 ? void 0 : rightPoint.timestamp;
         var figs = [];
@@ -50078,8 +51034,8 @@ var circle = {
         var topY = center.y - radius;
         var bottomY = center.y + radius;
         var stripHeight = bottomY - topY;
-        var topPoint = coordinateToPoint(chart, overlay.paneId, { x: 0, y: topY });
-        var botPoint = coordinateToPoint(chart, overlay.paneId, { x: 0, y: bottomY });
+        var topPoint = coordinateToPoint$1(chart, overlay.paneId, { x: 0, y: topY });
+        var botPoint = coordinateToPoint$1(chart, overlay.paneId, { x: 0, y: bottomY });
         var topVal = topPoint === null || topPoint === void 0 ? void 0 : topPoint.value;
         var bottomVal = botPoint === null || botPoint === void 0 ? void 0 : botPoint.value;
         var figs = [];
@@ -50207,12 +51163,12 @@ var curve = {
         if (overlay.currentStep !== 2 || overlay.points.length < 2) {
             return;
         }
-        var c1 = pointToCoordinate(chart, overlay.paneId, overlay.points[0]);
-        var c2 = pointToCoordinate(chart, overlay.paneId, overlay.points[1]);
+        var c1 = pointToCoordinate$1(chart, overlay.paneId, overlay.points[0]);
+        var c2 = pointToCoordinate$1(chart, overlay.paneId, overlay.points[1]);
         if (c1 === null || c2 === null) {
             return;
         }
-        var gc = coordinateToPoint(chart, overlay.paneId, quadControlOffset(c1, c2));
+        var gc = coordinateToPoint$1(chart, overlay.paneId, quadControlOffset(c1, c2));
         if (gc !== null) {
             overlay.points[2] = gc;
         }
@@ -50335,14 +51291,14 @@ var doubleCurve = {
         if (overlay.currentStep !== 2 || overlay.points.length < 2) {
             return;
         }
-        var c0 = pointToCoordinate(chart, overlay.paneId, overlay.points[0]);
-        var c1 = pointToCoordinate(chart, overlay.paneId, overlay.points[1]);
+        var c0 = pointToCoordinate$1(chart, overlay.paneId, overlay.points[0]);
+        var c1 = pointToCoordinate$1(chart, overlay.paneId, overlay.points[1]);
         if (c0 === null || c1 === null) {
             return;
         }
         var _b = __read(sCurveIntermediates(c0, c1), 2), g1 = _b[0], g2 = _b[1];
-        var gp1 = coordinateToPoint(chart, overlay.paneId, g1);
-        var gp2 = coordinateToPoint(chart, overlay.paneId, g2);
+        var gp1 = coordinateToPoint$1(chart, overlay.paneId, g1);
+        var gp2 = coordinateToPoint$1(chart, overlay.paneId, g2);
         if (gp1 === null || gp2 === null) {
             return;
         }
@@ -50365,25 +51321,31 @@ var doubleCurve = {
  * limitations under the License.
  */
 /**
- * 'ellipse' — TradingView Ellipse. Two diagonal-corner anchors define the
- * axis-aligned bounding box; the ellipse is inscribed (64-sample polygon,
- * point-in-polygon body hit-test). Kernel feature set preserved: fill +
- * border, inscribed text (+ placeholder), per-period visibility gate,
- * selection-driven axis strips with pills. Improvements over the kernel
- * original: `moveDirection`-constrained cardinal handles (no manual
- * axis-restore perform), Shift → square (circle) while drawing, and the
- * anchor factory's locked-outline behavior.
+ * 'ellipse' — TradingView Ellipse (3 points). P1→P2 is the ellipse's
+ * diameter along the drawn direction — NOT a bounding-box corner pair:
+ * the ellipse is centered at mid(P1,P2), rotated by the edge angle with
+ * semi-axis |P1P2|/2 along the edge and perpendicular semi-axis = P3's
+ * unsigned distance to the P1P2 line (TradingView translate/rotate/
+ * scale parity, 64-sample polygon). A perpendicular distance < 1 px
+ * renders the bare chord — TV's degenerate fallback. Kernel feature set
+ * preserved: fill + border, inscribed text rotated by the edge angle
+ * (+ "+ Add text" placeholder), per-period visibility gate, and
+ * selection-driven axis strips over the rotated AABB. Snap improvements
+ * (TradingView snapTo45DegreesAvailable parity): Shift → 45° diameter
+ * while drawing and Shift → circle (radius = half the diameter) on both
+ * the third point and endpoint drags.
  */
 // Pills + strips always use TV blue, regardless of shape color.
 var AXIS_PILL_COLOR = '#2962FF';
 var ellipse = {
     name: 'ellipse',
-    totalStep: 3,
+    totalStep: 4,
     cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
     createPointFigures: function (_a) {
+        var _b;
         var chart = _a.chart, coordinates = _a.coordinates, overlay = _a.overlay, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         rememberLineChart(overlay, chart);
         if (coordinates.length < 2) {
@@ -50394,22 +51356,37 @@ var ellipse = {
         if (hiddenAtPeriod(ext, chart.getPeriod())) {
             return [];
         }
-        var _b = __read(coordinates, 2), c0 = _b[0], c1 = _b[1];
-        var left = Math.min(c0.x, c1.x);
-        var right = Math.max(c0.x, c1.x);
-        var top = Math.min(c0.y, c1.y);
-        var bottom = Math.max(c0.y, c1.y);
-        var cx = (left + right) / 2;
-        var cy = (top + bottom) / 2;
-        var a = (right - left) / 2;
-        var b = (bottom - top) / 2;
+        var _c = __read(coordinates, 2), p1 = _c[0], p2 = _c[1];
+        var frame = edgeFrameOf(p1, p2);
+        var mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+        var hasRadius = coordinates.length >= 3 && frame !== null;
+        var major = (_b = frame === null || frame === void 0 ? void 0 : frame.len) !== null && _b !== void 0 ? _b : 0;
+        var minor = hasRadius ? Math.abs(signedLineDistance(p1, p2, coordinates[2])) : 0;
         var stroke = shapeStrokeOf(overlay, chart, ext, 'circle');
         var fillOn = shapeFillEnabled(ext);
         var fillColor = shapeFillColor(overlay, ext, stroke.color, 'circle');
-        var figures = [{
+        var figures = [];
+        if (!hasRadius || minor < 1) {
+            // Chord preview — TV draws the bare P1→P2 line until the radius
+            // point exists and its distance clears 1 px.
+            figures.push({
+                key: 'ellipse_chord',
+                type: 'line',
+                attrs: { coordinates: [p1, p2] },
+                styles: {
+                    style: stroke.style,
+                    color: stroke.color,
+                    size: stroke.size,
+                    dashedValue: stroke.dashedValue
+                }
+            });
+        }
+        else {
+            var angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+            figures.push({
                 key: 'ellipse_body',
                 type: 'polygon',
-                attrs: { coordinates: sampleEllipsePolygon(cx, cy, a, b, 64) },
+                attrs: { coordinates: sampleRotatedEllipsePolygon(mid.x, mid.y, major / 2, minor, angle, 64) },
                 styles: {
                     style: 'stroke_fill',
                     color: fillOn ? fillColor : 'transparent',
@@ -50418,63 +51395,191 @@ var ellipse = {
                     borderStyle: stroke.style,
                     borderDashedValue: stroke.dashedValue
                 }
-            }];
-        // Inscribed-rect text clip (half-axes a/√2, b/√2) — kernel parity.
-        var spec = shapeLabelSpecOf(ext);
-        var inscribedBox = {
-            left: cx - a / Math.SQRT2,
-            top: cy - b / Math.SQRT2,
-            right: cx + a / Math.SQRT2,
-            bottom: cy + b / Math.SQRT2
-        };
-        if (spec !== null) {
-            figures.push(shapeTextFigure('ellipse_text', spec, inscribedBox, stroke.color));
+            });
+            // Inscribed-rect text (half-axes a/√2, b/√2), rotated by the edge
+            // angle — TradingView `angle: atan(slope)` parity.
+            var spec = shapeLabelSpecOf(ext);
+            var inscribedBox = {
+                left: mid.x - major / (2 * Math.SQRT2),
+                top: mid.y - minor / Math.SQRT2,
+                right: mid.x + major / (2 * Math.SQRT2),
+                bottom: mid.y + minor / Math.SQRT2
+            };
+            var textAngle = Math.atan((p1.y - p2.y) / (p1.x - p2.x));
+            if (spec !== null) {
+                figures.push(shapeTextFigure('ellipse_text', spec, inscribedBox, stroke.color, textAngle));
+            }
+            else if (ext.isEditing !== true &&
+                (!isString(ext.text) || ext.text === '') &&
+                ((isSelected !== null && isSelected !== void 0 ? isSelected : false) || (isHovered !== null && isHovered !== void 0 ? isHovered : false)) &&
+                // Kernel gate: the placeholder appears only when the text tab is on.
+                ext.textEnabled === true) {
+                figures.push(shapeTextPlaceholderFigure('ellipse_text_ph', inscribedBox, stroke.color, textAngle));
+            }
         }
-        else if (ext.isEditing !== true &&
-            (!isString(ext.text) || ext.text === '') &&
-            ((isSelected !== null && isSelected !== void 0 ? isSelected : false) || (isHovered !== null && isHovered !== void 0 ? isHovered : false)) &&
-            // Kernel gate: the placeholder appears only when the text tab is on.
-            ext.textEnabled === true) {
-            figures.push(shapeTextPlaceholderFigure('ellipse_text_ph', inscribedBox, stroke.color));
-        }
-        // ─── Cardinal handles (selected/hovered; locked → outline) ───
+        // ─── Handles (selected/hovered; locked → outline) ───
         if (overlay.lock) {
             if (isSelected === true) {
-                figures.push.apply(figures, __spreadArray([], __read(createSelectionOutlineFigures({
-                    coordinates: [
-                        { x: cx, y: top },
-                        { x: right, y: cy },
-                        { x: cx, y: bottom },
-                        { x: left, y: cy }
-                    ],
+                // Locked selection outline at the TV anchor positions — the two
+                // stored diameter endpoints plus both perpendicular apexes (the
+                // stored coords when the edge is degenerate).
+                var outline = hasRadius
+                    ? [
+                        p1,
+                        p2,
+                        { x: mid.x + frame.nx * minor, y: mid.y + frame.ny * minor },
+                        { x: mid.x - frame.nx * minor, y: mid.y - frame.ny * minor }
+                    ]
+                    : coordinates;
+                figures.push.apply(figures, __spreadArray([], __read(createSelectionOutlineFigures({ coordinates: outline, isTouch: isTouch })), false));
+            }
+        }
+        else if (((isSelected !== null && isSelected !== void 0 ? isSelected : false) || (isHovered !== null && isHovered !== void 0 ? isHovered : false)) && !overlay.isDrawing()) {
+            if (hasRadius) {
+                // TV anchor set: P1(0), P2(1) at the diameter endpoints, then the
+                // two perpendicular apexes. TV routes the +apex to pointIndex 2
+                // and the −apex to a virtual index 3 that shares the same
+                // setPoint branch — the kernel would append a stray point for
+                // index 3, so both apexes drive index 2 (same write path).
+                var apexP = { x: mid.x + frame.nx * minor, y: mid.y + frame.ny * minor };
+                var apexM = { x: mid.x - frame.nx * minor, y: mid.y - frame.ny * minor };
+                var perpCursor = computeResizeCursor(apexM, apexP);
+                figures.push(shapeHandleFigure('ellipse_p1', p1, { pointIndex: 0, cursor: 'pointer', isTouch: isTouch, shape: 'circle' }));
+                figures.push(shapeHandleFigure('ellipse_p2', p2, { pointIndex: 1, cursor: 'pointer', isTouch: isTouch, shape: 'circle' }));
+                figures.push(shapeHandleFigure('ellipse_a1', apexP, { pointIndex: 2, cursor: perpCursor, isTouch: isTouch, shape: 'circle' }));
+                figures.push(shapeHandleFigure('ellipse_a2', apexM, { pointIndex: 2, cursor: perpCursor, isTouch: isTouch, shape: 'circle' }));
+            }
+            else {
+                // Legacy 2-point data or a degenerate diameter — stored-point
+                // anchors only.
+                figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+                    coordinates: coordinates,
+                    isSelected: isSelected,
+                    isHovered: isHovered,
+                    isDrawing: false,
+                    lock: false,
                     isTouch: isTouch
                 })), false));
             }
         }
-        else if (((isSelected !== null && isSelected !== void 0 ? isSelected : false) || (isHovered !== null && isHovered !== void 0 ? isHovered : false)) && !overlay.isDrawing()) {
-            // Ownership-aware slots (kernel ellipse hardcoded t/l→0, b/r→1 which
-            // misroutes when drawn from the bottom-right): each handle writes
-            // the slot owning its edge; moveDirection freezes the other axis.
-            var leftOwner = c0.x <= c1.x ? 0 : 1;
-            var rightOwner = 1 - leftOwner;
-            var topOwner = c0.y <= c1.y ? 0 : 1;
-            var bottomOwner = 1 - topOwner;
-            figures.push(shapeHandleFigure('ellipse_t', { x: cx, y: top }, { pointIndex: topOwner, moveDirection: 'vert', cursor: 'ns-resize', isTouch: isTouch }));
-            figures.push(shapeHandleFigure('ellipse_b', { x: cx, y: bottom }, { pointIndex: bottomOwner, moveDirection: 'vert', cursor: 'ns-resize', isTouch: isTouch }));
-            figures.push(shapeHandleFigure('ellipse_l', { x: left, y: cy }, { pointIndex: leftOwner, moveDirection: 'horz', cursor: 'ew-resize', isTouch: isTouch }));
-            figures.push(shapeHandleFigure('ellipse_r', { x: right, y: cy }, { pointIndex: rightOwner, moveDirection: 'horz', cursor: 'ew-resize', isTouch: isTouch }));
+        // Factory anchors while drawing (in-progress point suppression is
+        // built in).
+        if (overlay.isDrawing()) {
+            figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+                coordinates: coordinates,
+                isSelected: isSelected,
+                isHovered: isHovered,
+                isDrawing: true,
+                lock: false,
+                isTouch: isTouch
+            })), false));
         }
         return figures;
     },
     performEventMoveForDrawing: function (params) {
-        // Shift while placing the second corner → square bbox (a circle).
+        var _a, _b;
         if (params.performPointIndex === 1) {
-            applySquareSnap(this, params, 0);
+            // Shift while placing the diameter endpoint → 45° ray.
+            applySnap45(this, params, 0);
+            return;
+        }
+        if (params.performPointIndex !== 2 || params.event === undefined) {
+            return;
+        }
+        // Shift while placing the radius point → circle: the radius snaps to
+        // half the diameter (TradingView `_calcPoint2` default under snap-45).
+        var chart = lineChartOf(this);
+        if (chart === undefined || !isSnap45Active(chart, params.event)) {
+            return;
+        }
+        var paneId = this.paneId;
+        var c0 = pointToCoordinate$1(chart, paneId, (_a = params.points[0]) !== null && _a !== void 0 ? _a : {});
+        var c1 = pointToCoordinate$1(chart, paneId, (_b = params.points[1]) !== null && _b !== void 0 ? _b : {});
+        if (c0 === null || c1 === null) {
+            return;
+        }
+        var frame = edgeFrameOf(c0, c1);
+        var target = params.points[2];
+        if (frame === null || !isValid(target)) {
+            return;
+        }
+        var point = coordinateToPoint$1(chart, paneId, {
+            x: (c0.x + c1.x) / 2 + frame.nx * (frame.len / 2),
+            y: (c0.y + c1.y) / 2 + frame.ny * (frame.len / 2)
+        });
+        if (point === null) {
+            return;
+        }
+        target.timestamp = point.timestamp;
+        target.dataIndex = point.dataIndex;
+        target.value = point.value;
+    },
+    performEventPressedMove: function (params) {
+        var _a, _b, _c, _d, _e;
+        // Replayed restores (event === undefined) keep the stored point.
+        if (params.event === undefined || params.points.length < 3) {
+            return;
+        }
+        var chart = lineChartOf(this);
+        if (chart === undefined) {
+            return;
+        }
+        var paneId = this.paneId;
+        var mpi = params.performPointIndex;
+        if (mpi === 0 || mpi === 1) {
+            // Diameter endpoint: Shift snaps it to 45° first; the radius point
+            // is then rebuilt at mid′ + n̂′·r — r = the gesture-start distance
+            // (TradingView `_radius2`), or half the new diameter when snapped
+            // (TV `_calcPoint2` default → circle).
+            applySnap45(this, params, 1 - mpi);
+            var c0 = pointToCoordinate$1(chart, paneId, (_a = params.points[0]) !== null && _a !== void 0 ? _a : {});
+            var c1 = pointToCoordinate$1(chart, paneId, (_b = params.points[1]) !== null && _b !== void 0 ? _b : {});
+            if (c0 === null || c1 === null) {
+                return;
+            }
+            var frame = edgeFrameOf(c0, c1);
+            if (frame === null) {
+                return;
+            }
+            var radius = frame.len / 2;
+            if (!isSnap45Active(chart, params.event)) {
+                var prev = params.prevPoints;
+                if (prev.length < 3) {
+                    return;
+                }
+                var p0 = pointToCoordinate$1(chart, paneId, isValid(prev[0]) ? prev[0] : {});
+                var p1 = pointToCoordinate$1(chart, paneId, isValid(prev[1]) ? prev[1] : {});
+                var p2 = pointToCoordinate$1(chart, paneId, isValid(prev[2]) ? prev[2] : {});
+                if (p0 === null || p1 === null || p2 === null) {
+                    return;
+                }
+                radius = Math.abs(signedLineDistance(p0, p1, p2));
+            }
+            writeRadiusPoint(chart, paneId, params.points[2], c0, c1, frame, radius);
+            return;
+        }
+        if (mpi === 2) {
+            // Apex handle: the cursor's perpendicular distance sets the minor
+            // radius; the point is written back onto the mid-perpendicular on
+            // the +left-normal side (TradingView setPoint case 2/3 — both
+            // handles write mid + n̂·unsignedDistance).
+            var c0 = pointToCoordinate$1(chart, paneId, (_c = params.points[0]) !== null && _c !== void 0 ? _c : {});
+            var c1 = pointToCoordinate$1(chart, paneId, (_d = params.points[1]) !== null && _d !== void 0 ? _d : {});
+            var c2 = pointToCoordinate$1(chart, paneId, (_e = params.points[2]) !== null && _e !== void 0 ? _e : {});
+            if (c0 === null || c1 === null || c2 === null) {
+                return;
+            }
+            var frame = edgeFrameOf(c0, c1);
+            if (frame === null) {
+                return;
+            }
+            var radius = Math.abs((c2.x - c0.x) * frame.nx + (c2.y - c0.y) * frame.ny);
+            writeRadiusPoint(chart, paneId, params.points[2], c0, c1, frame, radius);
         }
     },
-    // ─── X axis: bbox strip + edge pills while selected/hovered ───
+    // ─── X axis: rotated-AABB strip + edge pills while selected/hovered ───
     createXAxisFigures: function (_a) {
-        var _b, _c, _d, _e;
+        var _b, _c, _d;
         var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected, isHovered = _a.isHovered;
         if (coordinates.length < 2) {
             return [];
@@ -50486,14 +51591,17 @@ var ellipse = {
         if (isSelected !== true && isHovered !== true) {
             return [];
         }
-        var _f = __read(coordinates, 2), c0 = _f[0], c1 = _f[1];
-        var leftX = Math.min(c0.x, c1.x);
-        var rightX = Math.max(c0.x, c1.x);
+        var _e = __read(coordinates, 2), p1 = _e[0], p2 = _e[1];
+        var frame = edgeFrameOf(p1, p2);
+        var minor = coordinates.length >= 3 ? Math.abs(signedLineDistance(p1, p2, coordinates[2])) : 0;
+        var midX = (p1.x + p2.x) / 2;
+        var a = ((_b = frame === null || frame === void 0 ? void 0 : frame.len) !== null && _b !== void 0 ? _b : 0) / 2;
+        var cos = (_c = frame === null || frame === void 0 ? void 0 : frame.ux) !== null && _c !== void 0 ? _c : 1;
+        var sin = (_d = frame === null || frame === void 0 ? void 0 : frame.uy) !== null && _d !== void 0 ? _d : 0;
+        var hx = Math.sqrt(a * a * cos * cos + minor * minor * sin * sin);
+        var leftX = midX - hx;
+        var rightX = midX + hx;
         var stripWidth = rightX - leftX;
-        var p0 = isValid(overlay.points[0]) ? overlay.points[0] : {};
-        var p1 = isValid(overlay.points[1]) ? overlay.points[1] : {};
-        var earlierTs = Math.min((_b = p0.timestamp) !== null && _b !== void 0 ? _b : 0, (_c = p1.timestamp) !== null && _c !== void 0 ? _c : 0);
-        var laterTs = Math.max((_d = p0.timestamp) !== null && _d !== void 0 ? _d : 0, (_e = p1.timestamp) !== null && _e !== void 0 ? _e : 0);
         var figs = [];
         if (stripWidth > 0) {
             figs.push({
@@ -50504,8 +51612,12 @@ var ellipse = {
                 ignoreEvent: true
             });
         }
-        var dLeft = formatDate(earlierTs);
-        var dRight = formatDate(laterTs);
+        // Pill labels come from the AABB edge positions — converted back to
+        // bar time since the rotated extremes aren't stored points.
+        var leftPoint = coordinateToPoint$1(chart, overlay.paneId, { x: leftX, y: 0 });
+        var rightPoint = coordinateToPoint$1(chart, overlay.paneId, { x: rightX, y: 0 });
+        var dLeft = formatDate(leftPoint === null || leftPoint === void 0 ? void 0 : leftPoint.timestamp);
+        var dRight = formatDate(rightPoint === null || rightPoint === void 0 ? void 0 : rightPoint.timestamp);
         if (dLeft !== '') {
             figs.push(buildXAxisPill(leftX, dLeft, AXIS_PILL_COLOR, 'ellipse_x0'));
         }
@@ -50514,9 +51626,9 @@ var ellipse = {
         }
         return figs;
     },
-    // ─── Y axis: bbox strip + edge pills while selected/hovered ───
+    // ─── Y axis: rotated-AABB strip + edge pills while selected/hovered ───
     createYAxisFigures: function (_a) {
-        var _b, _c, _d, _e;
+        var _b, _c, _d;
         var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered;
         if (coordinates.length < 2) {
             return [];
@@ -50529,14 +51641,17 @@ var ellipse = {
             return [];
         }
         var precision = pricePrecisionOf(chart, overlay, yAxis, ext.pricePrecision);
-        var _f = __read(coordinates, 2), c0 = _f[0], c1 = _f[1];
-        var topY = Math.min(c0.y, c1.y);
-        var bottomY = Math.max(c0.y, c1.y);
+        var _e = __read(coordinates, 2), p1 = _e[0], p2 = _e[1];
+        var frame = edgeFrameOf(p1, p2);
+        var minor = coordinates.length >= 3 ? Math.abs(signedLineDistance(p1, p2, coordinates[2])) : 0;
+        var midY = (p1.y + p2.y) / 2;
+        var a = ((_b = frame === null || frame === void 0 ? void 0 : frame.len) !== null && _b !== void 0 ? _b : 0) / 2;
+        var cos = (_c = frame === null || frame === void 0 ? void 0 : frame.ux) !== null && _c !== void 0 ? _c : 1;
+        var sin = (_d = frame === null || frame === void 0 ? void 0 : frame.uy) !== null && _d !== void 0 ? _d : 0;
+        var hy = Math.sqrt(a * a * sin * sin + minor * minor * cos * cos);
+        var topY = midY - hy;
+        var bottomY = midY + hy;
         var stripHeight = bottomY - topY;
-        var p0 = isValid(overlay.points[0]) ? overlay.points[0] : {};
-        var p1 = isValid(overlay.points[1]) ? overlay.points[1] : {};
-        var topVal = Math.max((_b = p0.value) !== null && _b !== void 0 ? _b : 0, (_c = p1.value) !== null && _c !== void 0 ? _c : 0);
-        var bottomVal = Math.min((_d = p0.value) !== null && _d !== void 0 ? _d : 0, (_e = p1.value) !== null && _e !== void 0 ? _e : 0);
         var figs = [];
         if (stripHeight > 0) {
             figs.push({
@@ -50547,12 +51662,14 @@ var ellipse = {
                 ignoreEvent: true
             });
         }
-        var pillTop = buildYAxisPill(topY, topVal, AXIS_PILL_COLOR, precision, bounding, yAxis !== null && yAxis !== void 0 ? yAxis : undefined, 'ellipse_y0');
+        var topPoint = coordinateToPoint$1(chart, overlay.paneId, { x: 0, y: topY });
+        var bottomPoint = coordinateToPoint$1(chart, overlay.paneId, { x: 0, y: bottomY });
+        var pillTop = buildYAxisPill(topY, topPoint === null || topPoint === void 0 ? void 0 : topPoint.value, AXIS_PILL_COLOR, precision, bounding, yAxis !== null && yAxis !== void 0 ? yAxis : undefined, 'ellipse_y0');
         if (pillTop != null) {
             figs.push(pillTop);
         }
         if (bottomY !== topY) {
-            var pillBot = buildYAxisPill(bottomY, bottomVal, AXIS_PILL_COLOR, precision, bounding, yAxis !== null && yAxis !== void 0 ? yAxis : undefined, 'ellipse_y1');
+            var pillBot = buildYAxisPill(bottomY, bottomPoint === null || bottomPoint === void 0 ? void 0 : bottomPoint.value, AXIS_PILL_COLOR, precision, bounding, yAxis !== null && yAxis !== void 0 ? yAxis : undefined, 'ellipse_y1');
             if (pillBot != null) {
                 figs.push(pillBot);
             }
@@ -50560,6 +51677,25 @@ var ellipse = {
         return figs;
     }
 };
+/**
+ * Write `mid(c0,c1) + n̂·radius` (pixel space) back into `target` as data
+ * coordinates — the shared tail of both radius-point rewrites.
+ */
+function writeRadiusPoint(chart, paneId, target, c0, c1, frame, radius) {
+    if (!isValid(target)) {
+        return;
+    }
+    var point = coordinateToPoint$1(chart, paneId, {
+        x: (c0.x + c1.x) / 2 + frame.nx * radius,
+        y: (c0.y + c1.y) / 2 + frame.ny * radius
+    });
+    if (point === null) {
+        return;
+    }
+    target.timestamp = point.timestamp;
+    target.dataIndex = point.dataIndex;
+    target.value = point.value;
+}
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -50794,6 +51930,34 @@ var path = {
     onDrawStart: function (_a) {
         var overlay = _a.overlay;
         markDrawArmed(overlay);
+    },
+    onDrawing: function (_a) {
+        var chart = _a.chart, overlay = _a.overlay, event = __rest(_a, ["chart", "overlay"]);
+        // TradingView: clicking near the LAST committed vertex finishes the
+        // path instead of appending a degenerate segment. The in-progress
+        // final point holds the click position — compare in pixel space.
+        var points = overlay.points;
+        if (!overlay.isDrawing() || points.length < 3) {
+            return;
+        }
+        var x = event.x;
+        var y = event.y;
+        if (x === undefined || y === undefined) {
+            return;
+        }
+        var prev = chart.convertToPixel(points[points.length - 2], { paneId: overlay.paneId });
+        var prevCoord = Array.isArray(prev) ? prev[0] : prev;
+        if (prevCoord.x === undefined || prevCoord.y === undefined) {
+            return;
+        }
+        var dx = x - prevCoord.x;
+        var dy = y - prevCoord.y;
+        if (dx * dx + dy * dy <= 144) {
+            // ~12px — inside the vertex grab range. Drop the just-committed
+            // tail point and finish at the previous vertex.
+            points.pop();
+            overlay.forceComplete();
+        }
     }
 };
 
@@ -50839,7 +52003,9 @@ var polyline = {
         var ext = isValid(overlay.extendData) ? overlay.extendData : {};
         var stroke = shapeStrokeOf(overlay, chart, ext, 'polygon');
         var figures = [];
-        if (coordinates.length >= 3) {
+        // TradingView keeps the polyline OPEN while it is being drawn — the
+        // closing edge/fill only appears once the gesture is finished.
+        if (coordinates.length >= 3 && !overlay.isDrawing()) {
             figures.push({
                 key: 'pl_body',
                 type: 'polygon',
@@ -51027,10 +52193,11 @@ var rect = {
             var rightOwner = 1 - leftOwner;
             var topOwner = c0.y <= c1.y ? 0 : 1;
             var bottomOwner = 1 - topOwner;
-            figures.push(shapeHandleFigure('rect_tl', { x: left, y: top }, { pointIndex: leftOwner, cursor: 'nwse-resize', isTouch: isTouch }));
-            figures.push(shapeHandleFigure('rect_tr', { x: right, y: top }, { pointIndex: rightOwner, cursor: 'nesw-resize', isTouch: isTouch }));
-            figures.push(shapeHandleFigure('rect_br', { x: right, y: bottom }, { pointIndex: rightOwner, cursor: 'nwse-resize', isTouch: isTouch }));
-            figures.push(shapeHandleFigure('rect_bl', { x: left, y: bottom }, { pointIndex: leftOwner, cursor: 'nesw-resize', isTouch: isTouch }));
+            // TradingView: corner handles are round, edge-mid handles are square.
+            figures.push(shapeHandleFigure('rect_tl', { x: left, y: top }, { pointIndex: leftOwner, cursor: 'nwse-resize', isTouch: isTouch, shape: 'circle' }));
+            figures.push(shapeHandleFigure('rect_tr', { x: right, y: top }, { pointIndex: rightOwner, cursor: 'nesw-resize', isTouch: isTouch, shape: 'circle' }));
+            figures.push(shapeHandleFigure('rect_br', { x: right, y: bottom }, { pointIndex: rightOwner, cursor: 'nwse-resize', isTouch: isTouch, shape: 'circle' }));
+            figures.push(shapeHandleFigure('rect_bl', { x: left, y: bottom }, { pointIndex: leftOwner, cursor: 'nesw-resize', isTouch: isTouch, shape: 'circle' }));
             // Edge mids: axis-constrained by moveDirection — 'vert' keeps the
             // dragged point's time/index, 'horz' keeps its value.
             figures.push(shapeHandleFigure('rect_mt', { x: midX, y: top }, { pointIndex: topOwner, moveDirection: 'vert', cursor: 'ns-resize', isTouch: isTouch }));
@@ -51063,8 +52230,8 @@ var rect = {
         // the emitted handles used (the kernel wrote the raw cursor into the
         // x-owner slot; the y-owner may be the sibling).
         var chart = lineChartOf(this);
-        var px0 = chart === undefined ? null : pointToCoordinate(chart, this.paneId, isValid(prev[0]) ? prev[0] : {});
-        var px1 = chart === undefined ? null : pointToCoordinate(chart, this.paneId, isValid(prev[1]) ? prev[1] : {});
+        var px0 = chart === undefined ? null : pointToCoordinate$1(chart, this.paneId, isValid(prev[0]) ? prev[0] : {});
+        var px1 = chart === undefined ? null : pointToCoordinate$1(chart, this.paneId, isValid(prev[1]) ? prev[1] : {});
         // Shift during a corner drag → square, measured from the
         // diagonally-opposite corner at gesture start (pixel space).
         var event = params.event;
@@ -51079,7 +52246,7 @@ var rect = {
                 x: cornerSpec.x === 'right' ? right : left,
                 y: cornerSpec.y === 'bottom' ? bottom : top_1
             };
-            var point = coordinateToPoint(chart, this.paneId, squareCoordinate({ x: event.x, y: event.y }, opposite));
+            var point = coordinateToPoint$1(chart, this.paneId, squareCoordinate({ x: event.x, y: event.y }, opposite));
             if (point !== null) {
                 ts = point.timestamp;
                 di = point.dataIndex;
@@ -51134,13 +52301,16 @@ var rect = {
  * limitations under the License.
  */
 /**
- * 'rotatedRect' — TradingView Rotated Rectangle (3 points). P1→P2 defines
- * one edge (position + angle); P3 projects onto the edge normal giving the
- * rect width. While placing the edge a line previews it; once P3 lands the
- * full 4-corner polygon renders. Finished overlays get 4 corner handles —
- * the two far corners both drive the width point (index 2), so each corner
- * stays grabbable regardless of which side the user pulled the width to.
- * Dragging the edge endpoints re-angles the rect; body drag translates.
+ * 'rotatedRect' — TradingView Rotated Rectangle (3 points). P1→P2 is the
+ * rectangle's CENTERLINE: the quad expands symmetrically by the unsigned
+ * perpendicular distance of P3 to the P1P2 line on BOTH sides (full
+ * width = 2·distance — TradingView `distanceToLine` parity). While
+ * placing the edge a line previews it; once P3 lands the 4-corner
+ * polygon renders. Finished overlays get 6 handles — the two stored
+ * edge-mid anchors (re-angle the rect, preserving the gesture-start
+ * width exactly like TV's startChanging/setPoint) plus the 4 quad
+ * corners, which all drive the width point (index 2) so every corner
+ * stays grabbable on either side. Body drag translates.
  */
 var rotatedRect = {
     name: 'rotatedRect',
@@ -51181,18 +52351,21 @@ var rotatedRect = {
             });
             if (overlay.lock) {
                 if (isSelected === true) {
-                    figures.push.apply(figures, __spreadArray([], __read(createSelectionOutlineFigures({ coordinates: corners, isTouch: isTouch })), false));
+                    // Locked selection outline over the TV anchor positions.
+                    figures.push.apply(figures, __spreadArray([], __read(createSelectionOutlineFigures({ coordinates: __spreadArray([p1, p2], __read(corners), false), isTouch: isTouch })), false));
                 }
             }
             else if (((isSelected !== null && isSelected !== void 0 ? isSelected : false) || (isHovered !== null && isHovered !== void 0 ? isHovered : false)) && !overlay.isDrawing()) {
-                // Corner handles: c1/c2 move their own point; c3/c4 both write
-                // the width point (index 2 — only its normal component shapes the
-                // rect, so a tangential drift is harmless).
-                var _c = __read(corners, 4), c1 = _c[0], c2 = _c[1], c3 = _c[2], c4 = _c[3];
-                figures.push(shapeHandleFigure('rr_c1', c1, { pointIndex: 0, cursor: computeResizeCursor(c1, c3), isTouch: isTouch }));
-                figures.push(shapeHandleFigure('rr_c2', c2, { pointIndex: 1, cursor: computeResizeCursor(c2, c4), isTouch: isTouch }));
-                figures.push(shapeHandleFigure('rr_c3', c3, { pointIndex: 2, cursor: computeResizeCursor(c1, c3), isTouch: isTouch }));
-                figures.push(shapeHandleFigure('rr_c4', c4, { pointIndex: 2, cursor: computeResizeCursor(c2, c4), isTouch: isTouch }));
+                // TV anchor set: the two stored edge-mid anchors (idx 0/1, default
+                // cursor) then the 4 quad corners — every corner routes to the
+                // width point (idx 2) with the perpendicular resize cursor.
+                var perpCursor = computeResizeCursor(corners[3], corners[0]);
+                figures.push(shapeHandleFigure('rr_p1', p1, { pointIndex: 0, cursor: 'pointer', isTouch: isTouch, shape: 'circle' }));
+                figures.push(shapeHandleFigure('rr_p2', p2, { pointIndex: 1, cursor: 'pointer', isTouch: isTouch, shape: 'circle' }));
+                figures.push(shapeHandleFigure('rr_c1', corners[0], { pointIndex: 2, cursor: perpCursor, isTouch: isTouch, shape: 'circle' }));
+                figures.push(shapeHandleFigure('rr_c2', corners[1], { pointIndex: 2, cursor: perpCursor, isTouch: isTouch, shape: 'circle' }));
+                figures.push(shapeHandleFigure('rr_c3', corners[2], { pointIndex: 2, cursor: perpCursor, isTouch: isTouch, shape: 'circle' }));
+                figures.push(shapeHandleFigure('rr_c4', corners[3], { pointIndex: 2, cursor: perpCursor, isTouch: isTouch, shape: 'circle' }));
             }
         }
         else {
@@ -51210,8 +52383,8 @@ var rotatedRect = {
             });
         }
         // Factory anchors for the stored points (drawing suppression for the
-        // in-progress one is built in). While finished the corner handles
-        // above replace them — point 2's raw anchor would float mid-face.
+        // in-progress one is built in). While finished the handle set above
+        // replaces them — the raw P3 anchor would float off the quad.
         if (!complete || overlay.isDrawing()) {
             figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
                 coordinates: coordinates,
@@ -51235,12 +52408,53 @@ var rotatedRect = {
         }
     },
     performEventPressedMove: function (params) {
+        var _a, _b;
         // Edge-endpoint handles (indexes 0/1) snap the same way relative to
-        // the fixed endpoint. The width point (2) and replayed restores
-        // (event === undefined) pass through untouched.
-        if (params.performPointIndex <= 1 && params.points.length >= 2) {
-            applySnap45(this, params, 1 - params.performPointIndex);
+        // the fixed endpoint, then rebuild the width point from the
+        // gesture-start distance — P3 := P1′ + rightNormal(edge′)·d₀, the
+        // TradingView startChanging/setPoint pair (`_distance` cached at
+        // drag start ≈ `prevPoints`). Corner handles (idx 2) and replayed
+        // restores (event === undefined) pass through untouched.
+        if (params.performPointIndex > 1 ||
+            params.event === undefined ||
+            params.points.length < 3) {
+            return;
         }
+        applySnap45(this, params, 1 - params.performPointIndex);
+        var chart = lineChartOf(this);
+        var prev = params.prevPoints;
+        if (chart === undefined || prev.length < 3) {
+            return;
+        }
+        var paneId = this.paneId;
+        var prevP1 = pointToCoordinate$1(chart, paneId, isValid(prev[0]) ? prev[0] : {});
+        var prevP2 = pointToCoordinate$1(chart, paneId, isValid(prev[1]) ? prev[1] : {});
+        var prevP3 = pointToCoordinate$1(chart, paneId, isValid(prev[2]) ? prev[2] : {});
+        var curP1 = pointToCoordinate$1(chart, paneId, (_a = params.points[0]) !== null && _a !== void 0 ? _a : {});
+        var curP2 = pointToCoordinate$1(chart, paneId, (_b = params.points[1]) !== null && _b !== void 0 ? _b : {});
+        if (prevP1 === null || prevP2 === null || prevP3 === null ||
+            curP1 === null || curP2 === null) {
+            return;
+        }
+        var half = Math.abs(signedLineDistance(prevP1, prevP2, prevP3));
+        var frame = edgeFrameOf(curP1, curP2);
+        var target = params.points[2];
+        if (frame === null || !isValid(target)) {
+            return;
+        }
+        // TV writes the width point onto the right-normal side of the new
+        // edge (Point(dy, -dx)·distance) — the symmetric polygon renders
+        // identically either way; the sign just keeps the stored point tidy.
+        var point = coordinateToPoint$1(chart, paneId, {
+            x: curP1.x - frame.nx * half,
+            y: curP1.y - frame.ny * half
+        });
+        if (point === null) {
+            return;
+        }
+        target.timestamp = point.timestamp;
+        target.dataIndex = point.dataIndex;
+        target.value = point.value;
     }
 };
 
@@ -52971,6 +54185,47 @@ function arrowMarkFigure(key, point, direction, extendData, defaultColor) {
         bounds: markBounds(coordinates)
     };
 }
+/**
+ * Label figure for a directional arrow mark — TradingView places the text
+ * on the TAIL side of the silhouette (below an up-arrow, above a down,
+ * left of a right, right of a left), centered on the anchor's axis.
+ */
+function arrowMarkLabelFigure(key, point, direction, extendData, defaultColor) {
+    var _a, _b;
+    var ext = isValid(extendData) ? extendData : {};
+    if (ext.text === undefined || ext.text === '' || ext.showLabel === false) {
+        return null;
+    }
+    var size = isNumber(ext.size) && ext.size > 0 ? ext.size : 1;
+    var color = (_a = ext.color) !== null && _a !== void 0 ? _a : defaultColor;
+    var fontSize = isNumber(ext.fontSize) && ext.fontSize > 0 ? ext.fontSize : 14;
+    var tail = (HEAD_LEN + STEM_LEN) * size + 6;
+    var offset = direction === 'up'
+        ? { x: 0, y: tail }
+        : direction === 'down'
+            ? { x: 0, y: -tail }
+            : direction === 'right'
+                ? { x: -tail, y: 0 }
+                : { x: tail, y: 0 };
+    return {
+        key: key,
+        type: 'text',
+        attrs: {
+            x: point.x + offset.x,
+            y: point.y + offset.y,
+            text: ext.text,
+            align: 'center',
+            baseline: 'middle'
+        },
+        styles: {
+            color: (_b = ext.textColor) !== null && _b !== void 0 ? _b : color,
+            size: fontSize,
+            weight: ext.bold === true ? 'bold' : 'normal',
+            fontStyle: ext.italic === true ? 'italic' : 'normal'
+        },
+        ignoreEvent: true
+    };
+}
 // TV raw/line-tool-arrow-marker: head length is G(len) — 18 for short arrows,
 // 0.25·len clamped to [18, 106] and at most 0.9·len for long ones. The shaft
 // is extended so the arrow never renders shorter than 22px; the tip is `end`.
@@ -53028,6 +54283,79 @@ function arrowMarkerCoordinates(start, end) {
         at(bodyEnd, -bodyHalf)
     ];
 }
+// ═══════════════════════════════════════
+// Freehand strokes (brush / highlighter)
+// ═══════════════════════════════════════
+/** TV default smoothing radius (properties.smooth, default 5). */
+var BRUSH_DEFAULT_SMOOTH = 5;
+/**
+ * TradingView BrushBasePaneView smoothing: densify consecutive points so
+ * no segment exceeds ~`smooth` px (max 5 subdivisions per segment), then
+ * box-blur with radius `smooth` — each output point is the mean of its
+ * ±smooth neighbors — and re-append the exact final point so the stroke
+ * keeps its true end.
+ */
+function smoothStrokeCoordinates(coordinates, smooth) {
+    if (coordinates.length < 2 || smooth <= 0) {
+        return coordinates;
+    }
+    var dense = [coordinates[0]];
+    for (var i = 1; i < coordinates.length; i++) {
+        var prev = coordinates[i - 1];
+        var cur = coordinates[i];
+        var dx = cur.x - prev.x;
+        var dy = cur.y - prev.y;
+        var len = Math.sqrt(dx * dx + dy * dy);
+        var sub = Math.min(5, Math.floor(len / smooth));
+        for (var s = 1; s < sub; s++) {
+            dense.push({ x: prev.x + (dx * s) / sub, y: prev.y + (dy * s) / sub });
+        }
+        dense.push(cur);
+    }
+    if (dense.length < 2) {
+        return dense;
+    }
+    var blurred = [];
+    for (var i = 0; i < dense.length; i++) {
+        var sx = 0;
+        var sy = 0;
+        for (var k = 0; k < smooth; k++) {
+            sx += dense[Math.max(i - k, 0)].x + dense[Math.min(i + k, dense.length - 1)].x;
+            sy += dense[Math.max(i - k, 0)].y + dense[Math.min(i + k, dense.length - 1)].y;
+        }
+        blurred.push({ x: (sx * 0.5) / smooth, y: (sy * 0.5) / smooth });
+    }
+    blurred.push(dense[dense.length - 1]);
+    return blurred;
+}
+/**
+ * TV SelectionRenderer-equivalent: round selection markers at the first
+ * and last rendered point, shown once the stroke is finished and its
+ * anchors are visible (selected or hovered-unlocked).
+ */
+function strokeEndMarkers(keyPrefix, rendered, opts) {
+    var _a, _b;
+    if (opts.isDrawing === true ||
+        opts.lock === true ||
+        !(((_a = opts.isSelected) !== null && _a !== void 0 ? _a : false) || ((_b = opts.isHovered) !== null && _b !== void 0 ? _b : false)) ||
+        rendered.length === 0) {
+        return [];
+    }
+    var half = opts.isTouch === true ? 13 : 6;
+    var ends = rendered.length === 1 ? [rendered[0]] : [rendered[0], rendered[rendered.length - 1]];
+    return ends.map(function (p, i) { return ({
+        key: "".concat(keyPrefix, "_end").concat(i),
+        type: 'circle',
+        attrs: { x: Math.round(p.x) - 0.5, y: Math.round(p.y) - 0.5, r: half },
+        styles: {
+            style: 'stroke_fill',
+            color: '#ffffff',
+            borderColor: '#1592E6',
+            borderSize: 1.5
+        },
+        cursor: 'move'
+    }); });
+}
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -53059,8 +54387,12 @@ var arrowMarkDown = {
             return [];
         }
         var figures = [
-            arrowMarkFigure('arrow_mark', coordinates[0], 'down', overlay.extendData, '#F7525F')
+            arrowMarkFigure('arrow_mark', coordinates[0], 'down', overlay.extendData, '#F23645')
         ];
+        var label = arrowMarkLabelFigure('arrow_mark_label', coordinates[0], 'down', overlay.extendData, '#F23645');
+        if (label !== null) {
+            figures.push(label);
+        }
         figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
             coordinates: coordinates,
             isSelected: isSelected,
@@ -53094,14 +54426,14 @@ var arrowMarker = {
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
     createPointFigures: withPerfPipeline(function (_a) {
-        var _b;
+        var _b, _c;
         var coordinates = _a.coordinates, overlay = _a.overlay, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         if (coordinates.length < 2) {
             return [];
         }
         var ext = isValid(overlay.extendData) ? overlay.extendData : {};
         var color = (_b = ext.color) !== null && _b !== void 0 ? _b : DEFAULT_COLOR$1;
-        var _c = __read(coordinates, 2), start = _c[0], end = _c[1];
+        var _d = __read(coordinates, 2), start = _d[0], end = _d[1];
         var figures = [];
         var len = Math.hypot(end.x - start.x, end.y - start.y);
         if (len < 0.5) {
@@ -53131,6 +54463,28 @@ var arrowMarker = {
                     cursor: 'move'
                 });
             }
+        }
+        // Label centered above the arrow body (TV parity).
+        if (ext.text !== undefined && ext.text !== '') {
+            var ux = (end.x - start.x) / Math.max(len, 0.001);
+            var uy = (end.y - start.y) / Math.max(len, 0.001);
+            var size = isNumber(ext.fontSize) && ext.fontSize > 0 ? ext.fontSize : 12;
+            figures.push({
+                key: 'am_text',
+                type: 'text',
+                attrs: {
+                    x: (start.x + end.x) / 2 - uy * (size + 8),
+                    y: (start.y + end.y) / 2 + ux * (size + 8),
+                    text: ext.text,
+                    align: 'center',
+                    baseline: 'bottom'
+                },
+                styles: {
+                    color: (_c = ext.textColor) !== null && _c !== void 0 ? _c : color,
+                    size: size
+                },
+                ignoreEvent: true
+            });
         }
         figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
             coordinates: coordinates,
@@ -53176,6 +54530,10 @@ var arrowMarkLeft = {
         var figures = [
             arrowMarkFigure('arrow_mark', coordinates[0], 'left', overlay.extendData, '#2962FF')
         ];
+        var label = arrowMarkLabelFigure('arrow_mark_label', coordinates[0], 'left', overlay.extendData, '#2962FF');
+        if (label !== null) {
+            figures.push(label);
+        }
         figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
             coordinates: coordinates,
             isSelected: isSelected,
@@ -53220,6 +54578,10 @@ var arrowMarkRight = {
         var figures = [
             arrowMarkFigure('arrow_mark', coordinates[0], 'right', overlay.extendData, '#2962FF')
         ];
+        var label = arrowMarkLabelFigure('arrow_mark_label', coordinates[0], 'right', overlay.extendData, '#2962FF');
+        if (label !== null) {
+            figures.push(label);
+        }
         figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
             coordinates: coordinates,
             isSelected: isSelected,
@@ -53264,6 +54626,10 @@ var arrowMarkUp = {
         var figures = [
             arrowMarkFigure('arrow_mark', coordinates[0], 'up', overlay.extendData, '#26A69A')
         ];
+        var label = arrowMarkLabelFigure('arrow_mark_label', coordinates[0], 'up', overlay.extendData, '#26A69A');
+        if (label !== null) {
+            figures.push(label);
+        }
         figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
             coordinates: coordinates,
             isSelected: isSelected,
@@ -53296,10 +54662,10 @@ var brush = {
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
     freehand: true,
-    freehandMinDistance: 3,
+    freehandMinDistance: 2,
     createPointFigures: withPerfPipeline(function (_a) {
         var _b;
-        var chart = _a.chart, coordinates = _a.coordinates, overlay = _a.overlay;
+        var chart = _a.chart, coordinates = _a.coordinates, overlay = _a.overlay, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         settleRestoredUnlimited(overlay, chart);
         if (coordinates.length < 2) {
             return [];
@@ -53310,19 +54676,26 @@ var brush = {
             lineWidth: ext.lineWidth,
             lineStyle: ext.lineStyle
         });
+        var rendered = smoothStrokeCoordinates(coordinates, isNumber(ext.smooth) && ext.smooth >= 0 ? ext.smooth : BRUSH_DEFAULT_SMOOTH);
         var figures = [{
                 key: 'brush_stroke',
                 type: 'line',
-                attrs: { coordinates: coordinates },
+                attrs: { coordinates: rendered },
                 styles: {
                     style: stroke.style,
                     color: stroke.color,
                     size: stroke.size,
-                    dashedValue: stroke.dashedValue,
-                    smooth: true
+                    dashedValue: stroke.dashedValue
                 },
                 cursor: 'move'
             }];
+        figures.push.apply(figures, __spreadArray([], __read(strokeEndMarkers('brush', rendered, {
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            isTouch: isTouch
+        })), false));
         return figures;
     }),
     onDrawStart: function (_a) {
@@ -53344,9 +54717,9 @@ var brush = {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var DEFAULT_COLOR = '#FFE600';
-var DEFAULT_WIDTH = 9;
-var DEFAULT_OPACITY = 0.4;
+var DEFAULT_COLOR = '#F23645';
+var DEFAULT_WIDTH = 20;
+var DEFAULT_OPACITY = 0.2;
 var highlighter = {
     name: 'highlighter',
     totalStep: Number.MAX_SAFE_INTEGER,
@@ -53354,10 +54727,10 @@ var highlighter = {
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
     freehand: true,
-    freehandMinDistance: 3,
+    freehandMinDistance: 2,
     createPointFigures: withPerfPipeline(function (_a) {
         var _b;
-        var chart = _a.chart, coordinates = _a.coordinates, overlay = _a.overlay;
+        var chart = _a.chart, coordinates = _a.coordinates, overlay = _a.overlay, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         settleRestoredUnlimited(overlay, chart);
         if (coordinates.length < 2) {
             return [];
@@ -53366,10 +54739,11 @@ var highlighter = {
         var color = (_b = ext.color) !== null && _b !== void 0 ? _b : DEFAULT_COLOR;
         var width = isNumber(ext.lineWidth) && ext.lineWidth > 0 ? ext.lineWidth : DEFAULT_WIDTH;
         var opacity = isNumber(ext.opacity) ? Math.min(1, Math.max(0, ext.opacity)) : DEFAULT_OPACITY;
+        var rendered = smoothStrokeCoordinates(coordinates, isNumber(ext.smooth) && ext.smooth >= 0 ? ext.smooth : BRUSH_DEFAULT_SMOOTH);
         var figures = [{
                 key: 'hl_stroke',
                 type: 'line',
-                attrs: { coordinates: coordinates },
+                attrs: { coordinates: rendered },
                 styles: {
                     style: 'solid',
                     color: alphaColor(color, opacity),
@@ -53377,6 +54751,13 @@ var highlighter = {
                 },
                 cursor: 'move'
             }];
+        figures.push.apply(figures, __spreadArray([], __read(strokeEndMarkers('hl', rendered, {
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            isTouch: isTouch
+        })), false));
         return figures;
     }),
     onDrawStart: function (_a) {
