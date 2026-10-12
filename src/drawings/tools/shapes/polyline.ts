@@ -59,7 +59,9 @@ const polyline: OverlayTemplate<ShapeExtendData> = {
     const stroke = shapeStrokeOf(overlay, chart, ext, 'polygon')
 
     const figures: OverlayFigure[] = []
-    if (coordinates.length >= 3) {
+    // TradingView keeps the polyline OPEN while it is being drawn — the
+    // closing edge/fill only appears once the gesture is finished.
+    if (coordinates.length >= 3 && !overlay.isDrawing()) {
       figures.push({
         key: 'pl_body',
         type: 'polygon',

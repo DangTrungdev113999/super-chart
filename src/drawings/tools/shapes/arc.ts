@@ -12,30 +12,40 @@
  * limitations under the License.
  */
 
-import type { OverlayFigure, OverlayTemplate } from '../../../component/Overlay'
+import type { Overlay, OverlayFigure, OverlayTemplate } from '../../../component/Overlay'
 
 import { isValid } from '../../../common/utils/typeChecks'
-import { computeResizeCursor, createAnchorFigures } from '../../interaction/anchors'
+import { computeResizeCursor, createAnchorFigures, createSelectionOutlineFigures } from '../../interaction/anchors'
 import { withPerfPipeline } from '../../interaction/perf'
 
 import {
+  coordinateToPoint,
+  edgeFrameOf,
   lineStyleOverrides,
-  quadraticOnCurveControl,
+  pointToCoordinate,
   rememberShapeChart,
-  sampleQuadratic,
+  sampleTVArc,
+  shapeChartOf,
   shapeFillColor,
-  shapeFillEnabled
+  shapeFillEnabled,
+  shapeHandleFigure,
+  signedLineDistance
 } from './shapeCommon'
 import type { ShapeExtendData } from './shapeCommon'
 
 /**
- * 'arc' — TradingView Arc (3 points, reference port). P1/P2 are the arc
- * endpoints; P3 is ON-CURVE — the quadratic control point is derived as
- * Pc = 2·P3 − (P1+P2)/2 so the rendered arc passes exactly through the
- * third click. The fill closes the arc region along the P2→P1 chord
- * (consumer behavior). Improvements over the reference: anchor factory
- * (locked outline, draw suppression), resize cursors, theme-aware stroke
- * and shared fill/border resolution.
+ * 'arc' — TradingView Arc (3 points). P1→P2 is the chord; P3 sets the
+ * SIGNED perpendicular distance `d` of the arc apex from the chord
+ * midpoint — TV draws the 60° circular arc of radius |chord| centered
+ * on the perpendicular bisector, then scales it perpendicular to the
+ * chord so the apex lands at mid + n̂·d (an affine-stretched elliptical
+ * arc through P1, apex, P2 — TradingView's exact translate/rotate/scale
+ * draw, not a quadratic Bezier with a free control point). |d| < 1 px
+ * renders as the bare chord (TV's degenerate fallback). The fill closes
+ * the arc region along the chord. Anchors: P1, P2 plus the apex handle
+ * at mid + n̂·d — it drags perpendicular distance on the cursor's side;
+ * endpoint drags preserve the gesture-start signed distance (TradingView
+ * startChanging/setPoint parity).
  */
 
 const ARC_SEGMENTS = 40
@@ -77,7 +87,7 @@ const arc: OverlayTemplate<ShapeExtendData> = {
     const figures: OverlayFigure[] = []
 
     if (!hasMid) {
-      // Chord preview while the on-curve point is unplaced.
+      // Chord preview while the apex point is unplaced.
       figures.push({
         key: 'arc_chord',
         type: 'line',
@@ -90,10 +100,10 @@ const arc: OverlayTemplate<ShapeExtendData> = {
         }
       })
     } else {
-      const control = quadraticOnCurveControl(p1, coordinates[2], p2)
-      const arcPoints = sampleQuadratic(p1, control, p2, ARC_SEGMENTS)
+      // |d| < 1 samples to the bare chord — same figure either way.
+      const arcPoints = sampleTVArc(p1, p2, coordinates[2], ARC_SEGMENTS)
 
-      if (shapeFillEnabled(ext)) {
+      if (shapeFillEnabled(ext) && arcPoints.length > 2) {
         // Region bounded by the arc and its chord — stays interactive so
         // the filled area participates in body dragging.
         figures.push({
@@ -119,22 +129,126 @@ const arc: OverlayTemplate<ShapeExtendData> = {
       })
     }
 
-    figures.push(...createAnchorFigures({
-      coordinates,
-      isSelected,
-      isHovered,
-      isDrawing: overlay.isDrawing(),
-      lock: overlay.lock,
-      isTouch,
-      cursors: [
-        computeResizeCursor(p2, p1),
-        computeResizeCursor(p1, p2),
-        hasMid ? computeResizeCursor(coordinates[2], { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 }) : 'pointer'
-      ]
-    }))
+    // ─── Anchors: TV emits [P1, P2, apex(mid + n̂·d)] when complete ───
+    const drawing = overlay.isDrawing()
+    const frame = hasMid ? edgeFrameOf(p1, p2) : null
+    const interactive = !overlay.lock &&
+      ((isSelected ?? false) || (isHovered ?? false)) &&
+      !drawing
+
+    if (frame !== null && (interactive || (overlay.lock && isSelected === true))) {
+      const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 }
+      const d = signedLineDistance(p1, p2, coordinates[2])
+      const apex = { x: mid.x + frame.nx * d, y: mid.y + frame.ny * d }
+      if (overlay.lock) {
+        // Locked selection outline at the TV anchor positions.
+        figures.push(...createSelectionOutlineFigures({ coordinates: [p1, p2, apex], isTouch }))
+      } else {
+        const perpCursor = computeResizeCursor(
+          { x: mid.x - frame.nx * d, y: mid.y - frame.ny * d },
+          apex
+        )
+        figures.push(shapeHandleFigure('arc_p1', p1, { pointIndex: 0, cursor: 'pointer', isTouch, shape: 'circle' }))
+        figures.push(shapeHandleFigure('arc_p2', p2, { pointIndex: 1, cursor: 'pointer', isTouch, shape: 'circle' }))
+        figures.push(shapeHandleFigure('arc_apex', apex, { pointIndex: 2, cursor: perpCursor, isTouch, shape: 'circle' }))
+      }
+    } else {
+      // Drawing, degenerate edge, or unselected — factory anchors for the
+      // stored points (in-progress suppression + lock outline built in).
+      figures.push(...createAnchorFigures({
+        coordinates,
+        isSelected,
+        isHovered,
+        isDrawing: drawing,
+        lock: overlay.lock,
+        isTouch,
+        cursors: [
+          computeResizeCursor(p2, p1),
+          computeResizeCursor(p1, p2),
+          'pointer'
+        ]
+      }))
+    }
 
     return figures
-  })
+  }),
+
+  performEventPressedMove: function (this: Overlay<ShapeExtendData>, params) {
+    // Replayed restores (event === undefined) keep the stored point.
+    if (params.event === undefined || params.points.length < 3) {
+      return
+    }
+    const chart = shapeChartOf(this)
+    if (chart === undefined) {
+      return
+    }
+    const paneId = this.paneId
+    const mpi = params.performPointIndex
+
+    if (mpi === 2) {
+      // Apex drag: snap the stored point onto the mid-perpendicular on
+      // the cursor's side — P3 := mid + n̂·signedDistance(cursor), the
+      // TradingView setPoint case-2 write (tangential drift is dropped).
+      const c0 = pointToCoordinate(chart, paneId, params.points[0] ?? {})
+      const c1 = pointToCoordinate(chart, paneId, params.points[1] ?? {})
+      const c2 = pointToCoordinate(chart, paneId, params.points[2] ?? {})
+      if (c0 === null || c1 === null || c2 === null) {
+        return
+      }
+      const frame = edgeFrameOf(c0, c1)
+      const target = params.points[2]
+      if (frame === null || !isValid(target)) {
+        return
+      }
+      const d = (c2.x - c0.x) * frame.nx + (c2.y - c0.y) * frame.ny
+      const point = coordinateToPoint(chart, paneId, {
+        x: (c0.x + c1.x) / 2 + frame.nx * d,
+        y: (c0.y + c1.y) / 2 + frame.ny * d
+      })
+      if (point === null) {
+        return
+      }
+      target.timestamp = point.timestamp
+      target.dataIndex = point.dataIndex
+      target.value = point.value
+      return
+    }
+
+    if (mpi === 0 || mpi === 1) {
+      // Chord endpoint: rebuild the apex from the gesture-start SIGNED
+      // distance — P3 := mid′ + n̂′·d₀. TradingView startChanging caches
+      // `_dist` (sign included); setPoint rewrites the point — prevPoints
+      // is the same gesture-start snapshot.
+      const prev = params.prevPoints
+      if (prev.length < 3) {
+        return
+      }
+      const p0 = pointToCoordinate(chart, paneId, isValid(prev[0]) ? prev[0] : {})
+      const p1 = pointToCoordinate(chart, paneId, isValid(prev[1]) ? prev[1] : {})
+      const p2 = pointToCoordinate(chart, paneId, isValid(prev[2]) ? prev[2] : {})
+      const c0 = pointToCoordinate(chart, paneId, params.points[0] ?? {})
+      const c1 = pointToCoordinate(chart, paneId, params.points[1] ?? {})
+      if (p0 === null || p1 === null || p2 === null || c0 === null || c1 === null) {
+        return
+      }
+      const d0 = signedLineDistance(p0, p1, p2)
+      const frame = edgeFrameOf(c0, c1)
+      const target = params.points[2]
+      if (frame === null || !isValid(target)) {
+        return
+      }
+      const point = coordinateToPoint(chart, paneId, {
+        x: (c0.x + c1.x) / 2 + frame.nx * d0,
+        y: (c0.y + c1.y) / 2 + frame.ny * d0
+      })
+      if (point === null) {
+        return
+      }
+      target.timestamp = point.timestamp
+      target.dataIndex = point.dataIndex
+      target.value = point.value
+    }
+  }
 }
 
 export default arc

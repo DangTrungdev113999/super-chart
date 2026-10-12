@@ -17,7 +17,7 @@ import type { OverlayFigure, OverlayTemplate } from '../../../component/Overlay'
 import { createAnchorFigures } from '../../interaction/anchors'
 import { withPerfPipeline } from '../../interaction/perf'
 
-import { arrowMarkFigure } from './marksCommon'
+import { arrowMarkFigure, arrowMarkLabelFigure } from './marksCommon'
 import type { ArrowMarkExtendData } from './marksCommon'
 
 /**
@@ -37,8 +37,12 @@ const arrowMarkDown: OverlayTemplate<ArrowMarkExtendData> = {
       return []
     }
     const figures: OverlayFigure[] = [
-      arrowMarkFigure('arrow_mark', coordinates[0], 'down', overlay.extendData, '#F7525F')
+      arrowMarkFigure('arrow_mark', coordinates[0], 'down', overlay.extendData, '#F23645')
     ]
+    const label = arrowMarkLabelFigure('arrow_mark_label', coordinates[0], 'down', overlay.extendData, '#F23645')
+    if (label !== null) {
+      figures.push(label)
+    }
     figures.push(...createAnchorFigures({
       coordinates,
       isSelected,

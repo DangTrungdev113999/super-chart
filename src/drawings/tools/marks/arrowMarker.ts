@@ -37,6 +37,12 @@ export interface ArrowMarkerExtendData {
   color?: string
   /** Extra uniform scale multiplier applied on top of the TV sizing. */
   size?: number
+  /** Optional label shown centered above the arrow body (TV `text`). */
+  text?: string
+  /** Label color — falls back to the arrow color. */
+  textColor?: string
+  /** Label font size in px (default 12). */
+  fontSize?: number
 }
 
 const DEFAULT_COLOR = '#1E53E5'
@@ -84,6 +90,29 @@ const arrowMarker: OverlayTemplate<ArrowMarkerExtendData> = {
           cursor: 'move'
         })
       }
+    }
+
+    // Label centered above the arrow body (TV parity).
+    if (ext.text !== undefined && ext.text !== '') {
+      const ux = (end.x - start.x) / Math.max(len, 0.001)
+      const uy = (end.y - start.y) / Math.max(len, 0.001)
+      const size = isNumber(ext.fontSize) && ext.fontSize > 0 ? ext.fontSize : 12
+      figures.push({
+        key: 'am_text',
+        type: 'text',
+        attrs: {
+          x: (start.x + end.x) / 2 - uy * (size + 8),
+          y: (start.y + end.y) / 2 + ux * (size + 8),
+          text: ext.text,
+          align: 'center',
+          baseline: 'bottom'
+        },
+        styles: {
+          color: ext.textColor ?? color,
+          size
+        },
+        ignoreEvent: true
+      })
     }
 
     figures.push(...createAnchorFigures({

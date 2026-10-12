@@ -288,13 +288,16 @@ const TEXT_PAD = 8
 
 /**
  * In-box text figure (kernel rect pattern): alignment offsets the anchor
- * inside the box; `width`/`height` clip the text bounds.
+ * inside the box; `width`/`height` clip the text bounds. `rotation`
+ * (radians around the text anchor) renders rotated labels — the TradingView
+ * ellipse tilts its inscribed text by the edge angle.
  */
 export function shapeTextFigure (
   key: string,
   spec: ShapeLabelSpec,
   box: ShapeTextBox,
-  fallbackColor: string
+  fallbackColor: string,
+  rotation?: number
 ): OverlayFigure {
   let tx = (box.left + box.right) / 2
   let ty = (box.top + box.bottom) / 2
@@ -318,7 +321,8 @@ export function shapeTextFigure (
       align: spec.hAlign,
       baseline: spec.vAlign === 'middle' ? 'middle' : spec.vAlign,
       width: Math.max(0, box.right - box.left - TEXT_PAD * 2),
-      height: Math.max(0, box.bottom - box.top - TEXT_PAD * 2)
+      height: Math.max(0, box.bottom - box.top - TEXT_PAD * 2),
+      rotation
     },
     styles: {
       color: spec.color ?? fallbackColor,
@@ -337,7 +341,8 @@ export function shapeTextFigure (
 export function shapeTextPlaceholderFigure (
   key: string,
   box: ShapeTextBox,
-  color: string
+  color: string,
+  rotation?: number
 ): OverlayFigure {
   return {
     key,
@@ -347,7 +352,8 @@ export function shapeTextPlaceholderFigure (
       y: (box.top + box.bottom) / 2,
       text: '+ Add text',
       align: 'center' as CanvasTextAlign,
-      baseline: 'middle' as CanvasTextBaseline
+      baseline: 'middle' as CanvasTextBaseline,
+      rotation
     },
     styles: {
       color,
@@ -369,6 +375,8 @@ export interface ShapeHandleOptions {
   moveDirection?: OverlayFigureMoveDirection
   cursor?: string
   isTouch?: boolean
+  /** 'circle' = TradingView round handle, 'square' = corner/edge box handle. */
+  shape?: 'circle' | 'square'
 }
 
 /**
@@ -385,10 +393,13 @@ export function shapeHandleFigure (
   const half = options.isTouch === true ? ANCHOR_HALF_TOUCH : ANCHOR_HALF_MOUSE
   const cx = Math.round(coordinate.x) - 0.5
   const cy = Math.round(coordinate.y) - 0.5
+  const shape = options.shape ?? 'square'
   return {
     key,
-    type: 'rect',
-    attrs: { x: cx - half, y: cy - half, width: half * 2, height: half * 2 },
+    type: shape === 'circle' ? 'circle' : 'rect',
+    attrs: shape === 'circle'
+      ? { x: cx, y: cy, r: half }
+      : { x: cx - half, y: cy - half, width: half * 2, height: half * 2 },
     styles: {
       style: 'stroke_fill',
       color: '#ffffff',
@@ -680,9 +691,12 @@ export function quadControlOffset (
 // ═══════════════════════════════════════
 
 /**
- * The four corners of the rotated rectangle: `p1`→`p2` is the reference
- * edge, `p3` projects onto the edge normal giving the width.
- * Order: [p1, p2, p2+off, p1+off].
+ * The four corners of the rotated rectangle (TradingView
+ * LineToolRotatedRectangle): `p1`→`p2` is the quad's CENTERLINE — the
+ * rectangle expands symmetrically by the unsigned perpendicular
+ * distance of `p3` to the p1p2 line on BOTH sides (full width =
+ * 2·distance). `n` is TV's right normal Point(edge.y, -edge.x)·dist.
+ * Order: [p1+n, p2+n, p2−n, p1−n].
  */
 export function rotatedRectCorners (
   p1: Coordinate,
@@ -695,17 +709,128 @@ export function rotatedRectCorners (
   if (len === 0) {
     return [p1, p1, p1, p1]
   }
-  const nx = -ey / len
-  const ny = ex / len
-  const width = (p3.x - p1.x) * nx + (p3.y - p1.y) * ny
-  const ox = nx * width
-  const oy = ny * width
+  const nx = ey / len
+  const ny = -ex / len
+  const half = Math.abs((p3.x - p1.x) * nx + (p3.y - p1.y) * ny)
+  const ox = nx * half
+  const oy = ny * half
   return [
-    p1,
-    p2,
+    { x: p1.x + ox, y: p1.y + oy },
     { x: p2.x + ox, y: p2.y + oy },
-    { x: p1.x + ox, y: p1.y + oy }
+    { x: p2.x - ox, y: p2.y - oy },
+    { x: p1.x - ox, y: p1.y - oy }
   ]
+}
+
+// ═══════════════════════════════════════
+// Chord-frame geometry (TV ellipse / arc)
+// ═══════════════════════════════════════
+
+/** Unit edge direction + left-hand normal of segment `a`→`b`. */
+export interface EdgeFrame {
+  /** Unit vector along a→b. */
+  ux: number
+  uy: number
+  /** Unit left normal — TradingView's `Point(-edge.y, edge.x).normalized()`. */
+  nx: number
+  ny: number
+  /** Segment length in px. */
+  len: number
+}
+
+/** Frame for segment `a`→`b`; null when the edge is degenerate (<1e-9 px). */
+export function edgeFrameOf (a: Coordinate, b: Coordinate): EdgeFrame | null {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const len = Math.sqrt(dx * dx + dy * dy)
+  if (len < 1e-9) {
+    return null
+  }
+  return { ux: dx / len, uy: dy / len, nx: -dy / len, ny: dx / len, len }
+}
+
+/**
+ * Signed perpendicular distance from `p` to the infinite line `a`→`b` in
+ * left-normal units. `Math.abs()` reproduces TradingView's unsigned
+ * `distanceToLine().distance`; the sign reports which side `p` sits on
+ * (positive = the Point(-dy, dx) side). Degenerate edges → 0.
+ */
+export function signedLineDistance (
+  a: Coordinate,
+  b: Coordinate,
+  p: Coordinate
+): number {
+  const frame = edgeFrameOf(a, b)
+  if (frame === null) {
+    return 0
+  }
+  return (p.x - a.x) * frame.nx + (p.y - a.y) * frame.ny
+}
+
+/**
+ * N-sample perimeter of a rotated ellipse: semi-axis `a` along `angle`
+ * (radians), semi-axis `b` perpendicular — the TradingView
+ * translate/rotate/scale ellipse, rendered as a polygon so it also
+ * serves as the point-in-polygon hit target.
+ */
+export function sampleRotatedEllipsePolygon (
+  cx: number,
+  cy: number,
+  a: number,
+  b: number,
+  angle: number,
+  n = 64
+): Coordinate[] {
+  const cos = Math.cos(angle)
+  const sin = Math.sin(angle)
+  const steps = Math.max(3, Math.floor(n))
+  const pts: Coordinate[] = []
+  for (let i = 0; i < steps; i++) {
+    const t = (2 * Math.PI * i) / steps
+    const u = a * Math.cos(t)
+    const v = b * Math.sin(t)
+    pts.push({ x: cx + u * cos - v * sin, y: cy + u * sin + v * cos })
+  }
+  return pts
+}
+
+/**
+ * TradingView LineToolArc curve. TV draws a 60° circular arc — radius
+ * `u` (the chord length) centered on the chord's perpendicular bisector
+ * at ∓(√3/2)·u — then scales it perpendicular to the chord so the apex
+ * lands at signed distance `d`, i.e. an affine-stretched (elliptical)
+ * arc through p1, apex = mid + n̂·d, p2. `d` is `p3`'s signed
+ * left-normal distance; |d| < 1 or a degenerate chord renders as the
+ * bare chord (TV's `distance < 1 → line` fallback).
+ */
+export function sampleTVArc (
+  p1: Coordinate,
+  p2: Coordinate,
+  p3: Coordinate,
+  segments: number
+): Coordinate[] {
+  const frame = edgeFrameOf(p1, p2)
+  if (frame === null) {
+    return [p1, p2]
+  }
+  const d = signedLineDistance(p1, p2, p3)
+  if (Math.abs(d) < 1) {
+    return [p1, p2]
+  }
+  const u = frame.len
+  const k = d / (u * (1 - Math.sqrt(3) / 2))
+  const steps = Math.max(2, Math.floor(segments))
+  const pts: Coordinate[] = []
+  for (let i = 0; i <= steps; i++) {
+    const theta = (2 * Math.PI) / 3 - (i / steps) * (Math.PI / 3)
+    const xl = u / 2 + u * Math.cos(theta)
+    const yl = (u * Math.sin(theta) - (u * Math.sqrt(3)) / 2) * k
+    pts.push({
+      x: p1.x + xl * frame.ux + yl * frame.nx,
+      y: p1.y + xl * frame.uy + yl * frame.ny
+    })
+  }
+  return pts
 }
 
 // ═══════════════════════════════════════

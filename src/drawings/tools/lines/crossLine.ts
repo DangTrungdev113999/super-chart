@@ -21,7 +21,7 @@ import {
   buildYAxisPill,
   formatDate,
   lineColorOf,
-  lineSizeOf,
+  lineStyleOverrides,
   pricePrecisionOf
 } from './lineCommon'
 
@@ -48,21 +48,20 @@ const crossLine: OverlayTemplate<CrossLineExtendData> = {
 
     const [c1] = coordinates
     const ext: CrossLineExtendData = isValid(overlay.extendData) ? overlay.extendData : {}
-    const lineColor = lineColorOf(overlay, chart, ext.lineColor ?? ext.color)
-    const lineWidth = lineSizeOf(overlay, chart, ext.lineWidth)
+    const stroke = lineStyleOverrides(overlay, chart, ext)
 
     const figures: OverlayFigure[] = [
       {
         key: 'cl_v',
         type: 'line',
         attrs: { coordinates: [{ x: c1.x, y: 0 }, { x: c1.x, y: bounding.height }] },
-        styles: { style: 'solid', color: lineColor, size: lineWidth }
+        styles: { style: stroke.style, color: stroke.color, size: stroke.size, dashedValue: stroke.dashedValue }
       },
       {
         key: 'cl_h',
         type: 'line',
         attrs: { coordinates: [{ x: 0, y: c1.y }, { x: bounding.width, y: c1.y }] },
-        styles: { style: 'solid', color: lineColor, size: lineWidth }
+        styles: { style: stroke.style, color: stroke.color, size: stroke.size, dashedValue: stroke.dashedValue }
       }
     ]
 

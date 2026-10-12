@@ -123,6 +123,34 @@ const path: OverlayTemplate<ShapeExtendData> = {
   // same name is still recognized as settleable (see shapeCommon).
   onDrawStart: ({ overlay }) => {
     markDrawArmed(overlay)
+  },
+
+  onDrawing: ({ chart, overlay, ...event }) => {
+    // TradingView: clicking near the LAST committed vertex finishes the
+    // path instead of appending a degenerate segment. The in-progress
+    // final point holds the click position — compare in pixel space.
+    const points = overlay.points
+    if (!overlay.isDrawing() || points.length < 3) {
+      return
+    }
+    const x = (event as { x?: number }).x
+    const y = (event as { y?: number }).y
+    if (x === undefined || y === undefined) {
+      return
+    }
+    const prev = chart.convertToPixel(points[points.length - 2], { paneId: overlay.paneId })
+    const prevCoord = Array.isArray(prev) ? prev[0] : prev
+    if (prevCoord.x === undefined || prevCoord.y === undefined) {
+      return
+    }
+    const dx = x - prevCoord.x
+    const dy = y - prevCoord.y
+    if (dx * dx + dy * dy <= 144) {
+      // ~12px — inside the vertex grab range. Drop the just-committed
+      // tail point and finish at the previous vertex.
+      points.pop()
+      overlay.forceComplete()
+    }
   }
 }
 

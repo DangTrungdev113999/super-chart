@@ -74,21 +74,44 @@ const rayLine: OverlayTemplate<RayLineExtendData> = {
         ? { x: 0, y: getLinearYFromCoordinates(c1, c2, { x: 0, y: c1.y }) }
         : { x: bounding.width, y: getLinearYFromCoordinates(c1, c2, { x: bounding.width, y: c1.y }) }
 
+    // ─── Optional backward extension through P1 (TradingView extendLeft) ───
+    const extendLeft = ext.extendLeft === true
+    const lineStart: Coordinate = extendLeft
+      ? c1.x === c2.x && c1.y !== c2.y
+        ? { x: c1.x, y: c1.y < c2.y ? 0 : bounding.height }
+        : c1.x > c2.x
+          ? { x: bounding.width, y: getLinearYFromCoordinates(c1, c2, { x: bounding.width, y: c1.y }) }
+          : { x: 0, y: getLinearYFromCoordinates(c1, c2, { x: 0, y: c1.y }) }
+      : c1
+
     // ─── Label layout first (may request a gap in the line) ───
     const spec = labelSpecOf(ext)
     const labelLayout = spec !== null
-      ? layoutDiagonalLabel('ray_label', spec, c1, rayTip, lineColor, lineWidth)
+      ? layoutDiagonalLabel('ray_label', spec, lineStart, rayTip, lineColor, lineWidth)
       : null
 
-    pushLineWithGap(figures, 'ray', c1, rayTip, labelLayout?.gap)
+    pushLineWithGap(figures, 'ray', lineStart, rayTip, labelLayout?.gap)
 
-    // ─── Arrow at the ray tip (on by default, TradingView parity) ───
-    const rightEnd = ext.rightEnd ?? 1
+    // ─── End caps (TradingView: both default to Normal — no arrow) ───
+    const rightEnd = ext.rightEnd ?? 0
     if (rightEnd === 1) {
       const coords = getArrowCoordinates(c1, rayTip)
       if (coords.length === 3) {
         figures.push({
           key: 'ray_arrow',
+          type: 'polygon',
+          attrs: { coordinates: coords },
+          styles: { style: 'fill', color: lineColor },
+          ignoreEvent: true
+        })
+      }
+    }
+    const leftEnd = ext.leftEnd ?? 0
+    if (leftEnd === 1 && extendLeft) {
+      const coords = getArrowCoordinates(rayTip, lineStart)
+      if (coords.length === 3) {
+        figures.push({
+          key: 'ray_arrow_left',
           type: 'polygon',
           attrs: { coordinates: coords },
           styles: { style: 'fill', color: lineColor },

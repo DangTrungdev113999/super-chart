@@ -164,10 +164,11 @@ const rect: OverlayTemplate<ShapeExtendData> = {
       const rightOwner = 1 - leftOwner
       const topOwner = c0.y <= c1.y ? 0 : 1
       const bottomOwner = 1 - topOwner
-      figures.push(shapeHandleFigure('rect_tl', { x: left, y: top }, { pointIndex: leftOwner, cursor: 'nwse-resize', isTouch }))
-      figures.push(shapeHandleFigure('rect_tr', { x: right, y: top }, { pointIndex: rightOwner, cursor: 'nesw-resize', isTouch }))
-      figures.push(shapeHandleFigure('rect_br', { x: right, y: bottom }, { pointIndex: rightOwner, cursor: 'nwse-resize', isTouch }))
-      figures.push(shapeHandleFigure('rect_bl', { x: left, y: bottom }, { pointIndex: leftOwner, cursor: 'nesw-resize', isTouch }))
+      // TradingView: corner handles are round, edge-mid handles are square.
+      figures.push(shapeHandleFigure('rect_tl', { x: left, y: top }, { pointIndex: leftOwner, cursor: 'nwse-resize', isTouch, shape: 'circle' }))
+      figures.push(shapeHandleFigure('rect_tr', { x: right, y: top }, { pointIndex: rightOwner, cursor: 'nesw-resize', isTouch, shape: 'circle' }))
+      figures.push(shapeHandleFigure('rect_br', { x: right, y: bottom }, { pointIndex: rightOwner, cursor: 'nwse-resize', isTouch, shape: 'circle' }))
+      figures.push(shapeHandleFigure('rect_bl', { x: left, y: bottom }, { pointIndex: leftOwner, cursor: 'nesw-resize', isTouch, shape: 'circle' }))
       // Edge mids: axis-constrained by moveDirection — 'vert' keeps the
       // dragged point's time/index, 'horz' keeps its value.
       figures.push(shapeHandleFigure('rect_mt', { x: midX, y: top }, { pointIndex: topOwner, moveDirection: 'vert', cursor: 'ns-resize', isTouch }))

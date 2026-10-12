@@ -43,6 +43,9 @@ export interface ContextMenuOptions {
   onSettings?: (overlay: Overlay) => void
   /** Copy sink — the api forwards its internal drawing clipboard. */
   onCopy?: (drawing: ReturnType<typeof serializeOverlay>) => void
+  /** Paste from the same clipboard (`canPaste` gates the row's enabled state). */
+  onPaste?: () => boolean
+  canPaste?: () => boolean
   /** Host extra rows appended above the Remove separator. */
   extraItems?: (overlay: Overlay) => ContextMenuItem[]
   /** Host veto — return false to suppress the menu for this overlay (e.g.
@@ -131,6 +134,26 @@ export function attachContextMenu (chart: Chart, manager: DrawingManager, option
     return edge + dir
   }
 
+  /** One-step z-order: swap zLevel with the next drawing above/below. */
+  function zStep (overlay: Overlay, dir: 1 | -1): void {
+    const mine = overlay.zLevel
+    let next: Overlay | null = null
+    for (const o of chart.getOverlays({ groupId: 'drawings' })) {
+      if (o.id === overlay.id) {
+        continue
+      }
+      const z = o.zLevel
+      if ((dir === 1 ? z > mine : z < mine) && (next === null || (dir === 1 ? z < next.zLevel : z > next.zLevel))) {
+        next = o
+      }
+    }
+    if (next === null) {
+      return
+    }
+    manager.update(overlay.id, { zLevel: next.zLevel })
+    manager.update(next.id, { zLevel: mine })
+  }
+
   function separator (): HTMLElement {
     const sep = createDom('div')
     sep.className = 'sc-drw-menu-sep'
@@ -146,9 +169,15 @@ export function attachContextMenu (chart: Chart, manager: DrawingManager, option
       items.push({ id: 'settings', label: 'Settings…', icon: 'settings', onSelect: o => options.onSettings?.(o) })
     }
     items.push(
-      { id: 'duplicate', label: 'Duplicate', icon: 'clone', disabled: locked, onSelect: clone },
+      { id: 'cut', label: 'Cut', icon: 'cut', disabled: locked, onSelect: o => { copy(o); manager.remove(o.id) } },
       { id: 'copy', label: 'Copy', icon: 'copy', disabled: locked, onSelect: copy },
+      ...(options?.onPaste !== undefined
+        ? [{ id: 'paste', label: 'Paste', icon: 'paste', disabled: options.canPaste !== undefined ? !options.canPaste() : false, onSelect: () => { options.onPaste?.() } }]
+        : []),
+      { id: 'duplicate', label: 'Duplicate', icon: 'clone', disabled: locked, onSelect: clone },
       'sep',
+      { id: 'bringForward', label: 'Bring forward', icon: 'bringForward', disabled: locked, onSelect: o => { zStep(o, 1) } },
+      { id: 'sendBackward', label: 'Send backward', icon: 'sendBackward', disabled: locked, onSelect: o => { zStep(o, -1) } },
       { id: 'bringToFront', label: 'Bring to front', icon: 'bringToFront', disabled: locked, onSelect: o => { manager.update(o.id, { zLevel: zLevelEdge(1) }) } },
       { id: 'sendToBack', label: 'Send to back', icon: 'sendToBack', disabled: locked, onSelect: o => { manager.update(o.id, { zLevel: zLevelEdge(-1) }) } },
       'sep',

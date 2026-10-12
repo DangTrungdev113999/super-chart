@@ -163,6 +163,17 @@ const fibRetracement: OverlayTemplate<FibRetracementExtendData> = {
       })
     })
 
+    figures.push(...createAnchorFigures({
+      coordinates,
+      isSelected,
+      isHovered,
+      isTouch,
+      isDrawing: overlay.isDrawing(),
+      lock: overlay.lock,
+      keyPrefix: 'anchor_',
+      midPoint: true
+    }))
+
     return figures
   }
 }

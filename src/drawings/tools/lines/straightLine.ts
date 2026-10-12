@@ -66,8 +66,11 @@ const straightLine: OverlayTemplate<StraightLineExtendData> = {
 
     const figures: OverlayFigure[] = []
 
-    // ─── Always extended to both pane edges ───
-    const [lineStart, lineEnd] = getExtendedCoordinates(c1, c2, bounding.width, bounding.height, true, true)
+    // ─── Extended to pane edges — both default true, each toggleable (TV) ───
+    const [lineStart, lineEnd] = getExtendedCoordinates(
+      c1, c2, bounding.width, bounding.height,
+      ext.extendLeft !== false, ext.extendRight !== false
+    )
 
     // ─── Label layout first (may request a gap in the line) ───
     const spec = labelSpecOf(ext)

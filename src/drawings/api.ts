@@ -361,7 +361,20 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
       label: labelOpt,
       onSettings: overlay => { settingsDialog.open(overlay) },
       ...(typeof ctxMenuOpt === 'object' ? ctxMenuOpt : {}),
-      onCopy: drawing => { clipboard = drawing }
+      onCopy: drawing => { clipboard = drawing },
+      canPaste: () => clipboard !== null,
+      onPaste: () => {
+        if (clipboard === null) {
+          return false
+        }
+        const create = serializedToOverlayCreate(clipboard)
+        if (create === null) {
+          return false
+        }
+        delete (create as { id?: string }).id
+        manager.create(create)
+        return true
+      }
     })
 
   function resolveToolName (tool: string): string {

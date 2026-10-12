@@ -24,23 +24,31 @@ import { withPerfPipeline } from '../../interaction/perf'
 import { applySnap45 } from '../lines/lineCommon'
 
 import {
+  coordinateToPoint,
+  edgeFrameOf,
+  pointToCoordinate,
   rememberShapeChart,
   rotatedRectCorners,
+  shapeChartOf,
   shapeFillColor,
   shapeFillEnabled,
   shapeHandleFigure,
-  shapeStrokeOf
+  shapeStrokeOf,
+  signedLineDistance
 } from './shapeCommon'
 import type { ShapeExtendData } from './shapeCommon'
 
 /**
- * 'rotatedRect' — TradingView Rotated Rectangle (3 points). P1→P2 defines
- * one edge (position + angle); P3 projects onto the edge normal giving the
- * rect width. While placing the edge a line previews it; once P3 lands the
- * full 4-corner polygon renders. Finished overlays get 4 corner handles —
- * the two far corners both drive the width point (index 2), so each corner
- * stays grabbable regardless of which side the user pulled the width to.
- * Dragging the edge endpoints re-angles the rect; body drag translates.
+ * 'rotatedRect' — TradingView Rotated Rectangle (3 points). P1→P2 is the
+ * rectangle's CENTERLINE: the quad expands symmetrically by the unsigned
+ * perpendicular distance of P3 to the P1P2 line on BOTH sides (full
+ * width = 2·distance — TradingView `distanceToLine` parity). While
+ * placing the edge a line previews it; once P3 lands the 4-corner
+ * polygon renders. Finished overlays get 6 handles — the two stored
+ * edge-mid anchors (re-angle the rect, preserving the gesture-start
+ * width exactly like TV's startChanging/setPoint) plus the 4 quad
+ * corners, which all drive the width point (index 2) so every corner
+ * stays grabbable on either side. Body drag translates.
  */
 
 const rotatedRect: OverlayTemplate<ShapeExtendData> = {
@@ -85,17 +93,20 @@ const rotatedRect: OverlayTemplate<ShapeExtendData> = {
 
       if (overlay.lock) {
         if (isSelected === true) {
-          figures.push(...createSelectionOutlineFigures({ coordinates: corners, isTouch }))
+          // Locked selection outline over the TV anchor positions.
+          figures.push(...createSelectionOutlineFigures({ coordinates: [p1, p2, ...corners], isTouch }))
         }
       } else if (((isSelected ?? false) || (isHovered ?? false)) && !overlay.isDrawing()) {
-        // Corner handles: c1/c2 move their own point; c3/c4 both write
-        // the width point (index 2 — only its normal component shapes the
-        // rect, so a tangential drift is harmless).
-        const [c1, c2, c3, c4] = corners
-        figures.push(shapeHandleFigure('rr_c1', c1, { pointIndex: 0, cursor: computeResizeCursor(c1, c3), isTouch }))
-        figures.push(shapeHandleFigure('rr_c2', c2, { pointIndex: 1, cursor: computeResizeCursor(c2, c4), isTouch }))
-        figures.push(shapeHandleFigure('rr_c3', c3, { pointIndex: 2, cursor: computeResizeCursor(c1, c3), isTouch }))
-        figures.push(shapeHandleFigure('rr_c4', c4, { pointIndex: 2, cursor: computeResizeCursor(c2, c4), isTouch }))
+        // TV anchor set: the two stored edge-mid anchors (idx 0/1, default
+        // cursor) then the 4 quad corners — every corner routes to the
+        // width point (idx 2) with the perpendicular resize cursor.
+        const perpCursor = computeResizeCursor(corners[3], corners[0])
+        figures.push(shapeHandleFigure('rr_p1', p1, { pointIndex: 0, cursor: 'pointer', isTouch, shape: 'circle' }))
+        figures.push(shapeHandleFigure('rr_p2', p2, { pointIndex: 1, cursor: 'pointer', isTouch, shape: 'circle' }))
+        figures.push(shapeHandleFigure('rr_c1', corners[0], { pointIndex: 2, cursor: perpCursor, isTouch, shape: 'circle' }))
+        figures.push(shapeHandleFigure('rr_c2', corners[1], { pointIndex: 2, cursor: perpCursor, isTouch, shape: 'circle' }))
+        figures.push(shapeHandleFigure('rr_c3', corners[2], { pointIndex: 2, cursor: perpCursor, isTouch, shape: 'circle' }))
+        figures.push(shapeHandleFigure('rr_c4', corners[3], { pointIndex: 2, cursor: perpCursor, isTouch, shape: 'circle' }))
       }
     } else {
       // Edge preview while P3 is unplaced.
@@ -113,8 +124,8 @@ const rotatedRect: OverlayTemplate<ShapeExtendData> = {
     }
 
     // Factory anchors for the stored points (drawing suppression for the
-    // in-progress one is built in). While finished the corner handles
-    // above replace them — point 2's raw anchor would float mid-face.
+    // in-progress one is built in). While finished the handle set above
+    // replaces them — the raw P3 anchor would float off the quad.
     if (!complete || overlay.isDrawing()) {
       figures.push(...createAnchorFigures({
         coordinates,
@@ -142,11 +153,55 @@ const rotatedRect: OverlayTemplate<ShapeExtendData> = {
 
   performEventPressedMove: function (this: Overlay<ShapeExtendData>, params) {
     // Edge-endpoint handles (indexes 0/1) snap the same way relative to
-    // the fixed endpoint. The width point (2) and replayed restores
-    // (event === undefined) pass through untouched.
-    if (params.performPointIndex <= 1 && params.points.length >= 2) {
-      applySnap45(this, params, 1 - params.performPointIndex)
+    // the fixed endpoint, then rebuild the width point from the
+    // gesture-start distance — P3 := P1′ + rightNormal(edge′)·d₀, the
+    // TradingView startChanging/setPoint pair (`_distance` cached at
+    // drag start ≈ `prevPoints`). Corner handles (idx 2) and replayed
+    // restores (event === undefined) pass through untouched.
+    if (
+      params.performPointIndex > 1 ||
+      params.event === undefined ||
+      params.points.length < 3
+    ) {
+      return
     }
+    applySnap45(this, params, 1 - params.performPointIndex)
+    const chart = shapeChartOf(this)
+    const prev = params.prevPoints
+    if (chart === undefined || prev.length < 3) {
+      return
+    }
+    const paneId = this.paneId
+    const prevP1 = pointToCoordinate(chart, paneId, isValid(prev[0]) ? prev[0] : {})
+    const prevP2 = pointToCoordinate(chart, paneId, isValid(prev[1]) ? prev[1] : {})
+    const prevP3 = pointToCoordinate(chart, paneId, isValid(prev[2]) ? prev[2] : {})
+    const curP1 = pointToCoordinate(chart, paneId, params.points[0] ?? {})
+    const curP2 = pointToCoordinate(chart, paneId, params.points[1] ?? {})
+    if (
+      prevP1 === null || prevP2 === null || prevP3 === null ||
+      curP1 === null || curP2 === null
+    ) {
+      return
+    }
+    const half = Math.abs(signedLineDistance(prevP1, prevP2, prevP3))
+    const frame = edgeFrameOf(curP1, curP2)
+    const target = params.points[2]
+    if (frame === null || !isValid(target)) {
+      return
+    }
+    // TV writes the width point onto the right-normal side of the new
+    // edge (Point(dy, -dx)·distance) — the symmetric polygon renders
+    // identically either way; the sign just keeps the stored point tidy.
+    const point = coordinateToPoint(chart, paneId, {
+      x: curP1.x - frame.nx * half,
+      y: curP1.y - frame.ny * half
+    })
+    if (point === null) {
+      return
+    }
+    target.timestamp = point.timestamp
+    target.dataIndex = point.dataIndex
+    target.value = point.value
   }
 }
 

@@ -78,8 +78,8 @@ const horizontalRayLine: OverlayTemplate<HorizRayLineExtendData> = {
       attrs: { coordinates: [c1, rayTip] }
     })
 
-    // ─── Arrow at the ray tip (on by default) ───
-    const rightEnd = ext.rightEnd ?? 1
+    // ─── Arrow at the ray tip (TV default: Normal — off) ───
+    const rightEnd = ext.rightEnd ?? 0
     if (rightEnd === 1) {
       const coords = getArrowCoordinates(c1, rayTip)
       if (coords.length === 3) {

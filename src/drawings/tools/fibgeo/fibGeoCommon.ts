@@ -58,7 +58,9 @@ export const FIB_COLORS = {
   blue: '#2962ff',
   purple: '#9c27b0',
   pink: '#e91e63',
-  gray: '#787b86'
+  gray: '#787b86',
+  /** TradingView `colorColdGray500` — '#787b86' is the 600/700 shade. */
+  coldGray: '#808080'
 } as const
 
 export function fibLevel (coeff: number, color: string, visible = true, label?: string): FibLevelData {
@@ -140,6 +142,73 @@ export function rayToBoundingEdge (from: Coordinate, through: Coordinate, boundi
   return { x: from.x + dx * t, y: from.y + dy * t }
 }
 
+/**
+ * SVG path for an axis-aligned ellipse (or ring): the outer ellipse is
+ * wound clockwise; when `innerRx`/`innerRy` are positive a same-centre
+ * counter-clockwise ellipse is appended, which the canvas nonzero fill
+ * rule subtracts — the TradingView `EllipseRendererSimple` `wholePoints`
+ * ring fill (ring between a level and the previous visible level).
+ */
+export function ellipseRingPath (cx: number, cy: number, rx: number, ry: number, innerRx = 0, innerRy = 0): string {
+  const r = (v: number): number => Math.round(v * 100) / 100
+  let path = `M${r(cx + rx)} ${r(cy)} A${r(rx)} ${r(ry)} 0 0 1 ${r(cx - rx)} ${r(cy)} A${r(rx)} ${r(ry)} 0 0 1 ${r(cx + rx)} ${r(cy)} Z`
+  if (innerRx > 0 && innerRy > 0) {
+    path += ` M${r(cx + innerRx)} ${r(cy)} A${r(innerRx)} ${r(innerRy)} 0 0 0 ${r(cx - innerRx)} ${r(cy)} A${r(innerRx)} ${r(innerRy)} 0 0 0 ${r(cx + innerRx)} ${r(cy)} Z`
+  }
+  return path
+}
+
+/**
+ * Sutherland–Hodgman clip of `polygon` against the half-plane bounded by
+ * the ray `apex → through`, keeping the side that contains `keep` —
+ * TradingView `clipPolygonByEdge` parity. Returns [] when `keep` lies on
+ * the edge line (the wedge is degenerate).
+ */
+function clipToRaySide (polygon: Coordinate[], apex: Coordinate, through: Coordinate, keep: Coordinate): Coordinate[] {
+  const dx = through.x - apex.x
+  const dy = through.y - apex.y
+  const side = (p: Coordinate): number => (p.x - apex.x) * dy - (p.y - apex.y) * dx
+  const keepSide = side(keep)
+  if (keepSide === 0) {
+    return []
+  }
+  const sign = keepSide > 0 ? 1 : -1
+  const out: Coordinate[] = []
+  for (let i = 0; i < polygon.length; i++) {
+    const a = polygon[i]
+    const b = polygon[(i + 1) % polygon.length]
+    const da = side(a) * sign
+    const db = side(b) * sign
+    if (da >= 0) {
+      out.push(a)
+    }
+    if ((da > 0 && db < 0) || (da < 0 && db > 0)) {
+      const t = da / (da - db)
+      out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t })
+    }
+  }
+  return out
+}
+
+/**
+ * Screen-clipped wedge between two rays sharing `apex`: the pane rect
+ * clipped by each ray's half-plane, keeping the side containing the OTHER
+ * ray's target. Mirrors the TradingView `ChannelRenderer` wedge used for
+ * speed-resistance fan fills (p1 == p3 → the cone through the division
+ * points, unbounded past them to the screen edge).
+ */
+export function rayWedgePolygon (apex: Coordinate, throughA: Coordinate, throughB: Coordinate, bounding: Bounding): Coordinate[] {
+  let polygon: Coordinate[] = [
+    { x: 0, y: 0 },
+    { x: bounding.width, y: 0 },
+    { x: bounding.width, y: bounding.height },
+    { x: 0, y: bounding.height }
+  ]
+  polygon = clipToRaySide(polygon, apex, throughA, throughB)
+  polygon = clipToRaySide(polygon, apex, throughB, throughA)
+  return polygon
+}
+
 export function lineFigure (key: string, segments: Coordinate[][], styles: Partial<LineStyle>, ignoreEvent = false): OverlayFigure {
   const attrs: LineAttrs[] = segments.map(coordinates => ({ coordinates }))
   const figure: OverlayFigure = { key, type: 'line', attrs, styles }
@@ -149,7 +218,7 @@ export function lineFigure (key: string, segments: Coordinate[][], styles: Parti
   return figure
 }
 
-export function labelFigure (key: string, x: number, y: number, text: string, color: string, align: CanvasTextAlign = 'center', baseline: CanvasTextBaseline = 'middle'): OverlayFigure {
+export function labelFigure (key: string, x: number, y: number, text: string, color: string, align: CanvasTextAlign = 'center', baseline: CanvasTextBaseline = 'middle', size = 11): OverlayFigure {
   const attrs: TextAttrs = { x, y, text, align, baseline }
   return {
     key,
@@ -157,7 +226,7 @@ export function labelFigure (key: string, x: number, y: number, text: string, co
     attrs,
     styles: {
       color,
-      size: 11,
+      size,
       weight: 'normal',
       backgroundColor: 'transparent',
       paddingLeft: 0,

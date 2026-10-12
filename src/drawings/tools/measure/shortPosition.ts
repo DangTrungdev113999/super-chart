@@ -12,16 +12,21 @@
  * limitations under the License.
  */
 
-import type { OverlayTemplate } from '../../../component/Overlay'
-
-import { createAnchorFigures } from '../../interaction/anchors'
+import type { Overlay, OverlayTemplate } from '../../../component/Overlay'
 
 import type { PositionToolExtendData } from './positionCommon'
-import { buildPositionFigures, buildPositionYAxisFigures } from './positionCommon'
+import {
+  buildPositionAnchorFigures,
+  buildPositionFigures,
+  buildPositionYAxisFigures,
+  performPositionPressedMove
+} from './positionCommon'
 
 /**
  * 'shortPosition' — TradingView Short Position. Mirror of longPosition:
- * profit zone extends below the entry, stop zone above.
+ * profit zone extends below the entry, stop zone above. Same four
+ * TradingView-parity selection handles (entry re-anchor, right-edge width,
+ * stop/target level handles on the left edge).
  */
 const shortPosition: OverlayTemplate<PositionToolExtendData> = {
   name: 'shortPosition',
@@ -34,18 +39,14 @@ const shortPosition: OverlayTemplate<PositionToolExtendData> = {
 
   createPointFigures: (params) => [
     ...buildPositionFigures(params, 'short'),
-    ...createAnchorFigures({
-      coordinates: params.coordinates,
-      isSelected: params.isSelected,
-      isHovered: params.isHovered,
-      lock: params.overlay.lock,
-      isDrawing: params.overlay.isDrawing(),
-      isTouch: params.isTouch,
-      pointIndexes: [0]
-    })
+    ...buildPositionAnchorFigures(params, 'short')
   ],
 
-  createYAxisFigures: (params) => buildPositionYAxisFigures(params, 'short')
+  createYAxisFigures: (params) => buildPositionYAxisFigures(params, 'short'),
+
+  performEventPressedMove: function (this: Overlay<PositionToolExtendData>, params) {
+    performPositionPressedMove(this, params, 'short')
+  }
 }
 
 export default shortPosition

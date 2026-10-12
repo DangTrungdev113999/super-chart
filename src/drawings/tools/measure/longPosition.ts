@@ -12,18 +12,23 @@
  * limitations under the License.
  */
 
-import type { OverlayTemplate } from '../../../component/Overlay'
-
-import { createAnchorFigures } from '../../interaction/anchors'
+import type { Overlay, OverlayTemplate } from '../../../component/Overlay'
 
 import type { PositionToolExtendData } from './positionCommon'
-import { buildPositionFigures, buildPositionYAxisFigures } from './positionCommon'
+import {
+  buildPositionAnchorFigures,
+  buildPositionFigures,
+  buildPositionYAxisFigures,
+  performPositionPressedMove
+} from './positionCommon'
 
 /**
- * 'longPosition' — TradingView Long Position. One entry anchor; the
+ * 'longPosition' — TradingView Long Position. One stored entry point; the
  * take-profit/stop-loss zone geometry lives in extendData
  * (profitHeight/stopHeight/zoneWidth), so the tool works standalone
- * without the kernel's host-side P2/P3/P4 injection.
+ * without the kernel's host-side P2/P3/P4 injection. Selected: four
+ * TradingView-parity handles — entry re-anchor (left edge), width handle
+ * (right edge at entry level), stop + target level handles (left edge).
  */
 const longPosition: OverlayTemplate<PositionToolExtendData> = {
   name: 'longPosition',
@@ -36,18 +41,14 @@ const longPosition: OverlayTemplate<PositionToolExtendData> = {
 
   createPointFigures: (params) => [
     ...buildPositionFigures(params, 'long'),
-    ...createAnchorFigures({
-      coordinates: params.coordinates,
-      isSelected: params.isSelected,
-      isHovered: params.isHovered,
-      lock: params.overlay.lock,
-      isDrawing: params.overlay.isDrawing(),
-      isTouch: params.isTouch,
-      pointIndexes: [0]
-    })
+    ...buildPositionAnchorFigures(params, 'long')
   ],
 
-  createYAxisFigures: (params) => buildPositionYAxisFigures(params, 'long')
+  createYAxisFigures: (params) => buildPositionYAxisFigures(params, 'long'),
+
+  performEventPressedMove: function (this: Overlay<PositionToolExtendData>, params) {
+    performPositionPressedMove(this, params, 'long')
+  }
 }
 
 export default longPosition

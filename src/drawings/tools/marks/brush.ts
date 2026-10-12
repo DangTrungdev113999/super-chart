@@ -14,7 +14,7 @@
 
 import type { OverlayFigure, OverlayTemplate } from '../../../component/Overlay'
 
-import { isValid } from '../../../common/utils/typeChecks'
+import { isNumber, isValid } from '../../../common/utils/typeChecks'
 import { withPerfPipeline } from '../../interaction/perf'
 
 import {
@@ -22,14 +22,16 @@ import {
   markDrawArmed,
   settleRestoredUnlimited
 } from '../shapes/shapeCommon'
+import { BRUSH_DEFAULT_SMOOTH, smoothStrokeCoordinates, strokeEndMarkers } from './marksCommon'
 
 /**
  * 'brush' — TradingView Brush: a freehand stroke collected for the whole
- * drag (`freehand` + unlimited `totalStep`), smoothed by the kernel's bezier
- * `line` figure. Unlike the measure/ ruler it is PERSISTENT, so
+ * drag (`freehand` + unlimited `totalStep`). The rendered polyline is
+ * densified + box-blurred at radius `extendData.smooth` (default 5, TV
+ * parity) and finished strokes show first/last endpoint selection
+ * markers. Unlike the measure/ ruler it is PERSISTENT, so
  * {@link settleRestoredUnlimited} rescues restored overlays out of the
- * drawing-progress slot. No anchors — the stroke itself is the drag
- * surface (dragging any point on it body-translates all points).
+ * drawing-progress slot. The stroke itself is the drag surface.
  */
 export interface BrushExtendData {
   /** Stroke color (kernel/consumer spelling). */
@@ -37,6 +39,8 @@ export interface BrushExtendData {
   lineColor?: string
   lineWidth?: number
   lineStyle?: 'solid' | 'dashed' | 'dotted'
+  /** Box-blur smoothing radius in px (TV `smooth`, default 5; 0 = raw). */
+  smooth?: number
 }
 
 const brush: OverlayTemplate<BrushExtendData> = {
@@ -46,9 +50,9 @@ const brush: OverlayTemplate<BrushExtendData> = {
   needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: false,
   freehand: true,
-  freehandMinDistance: 3,
+  freehandMinDistance: 2,
 
-  createPointFigures: withPerfPipeline(({ chart, coordinates, overlay }) => {
+  createPointFigures: withPerfPipeline(({ chart, coordinates, overlay, isSelected, isHovered, isTouch }) => {
     settleRestoredUnlimited(overlay, chart)
     if (coordinates.length < 2) {
       return []
@@ -59,19 +63,29 @@ const brush: OverlayTemplate<BrushExtendData> = {
       lineWidth: ext.lineWidth,
       lineStyle: ext.lineStyle
     })
+    const rendered = smoothStrokeCoordinates(
+      coordinates,
+      isNumber(ext.smooth) && ext.smooth >= 0 ? ext.smooth : BRUSH_DEFAULT_SMOOTH
+    )
     const figures: OverlayFigure[] = [{
       key: 'brush_stroke',
       type: 'line',
-      attrs: { coordinates },
+      attrs: { coordinates: rendered },
       styles: {
         style: stroke.style,
         color: stroke.color,
         size: stroke.size,
-        dashedValue: stroke.dashedValue,
-        smooth: true
+        dashedValue: stroke.dashedValue
       },
       cursor: 'move'
     }]
+    figures.push(...strokeEndMarkers('brush', rendered, {
+      isSelected,
+      isHovered,
+      isDrawing: overlay.isDrawing(),
+      lock: overlay.lock,
+      isTouch
+    }))
     return figures
   }),
 

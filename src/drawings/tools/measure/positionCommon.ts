@@ -15,10 +15,14 @@
 import type Coordinate from '../../../common/Coordinate'
 import type Point from '../../../common/Point'
 import type { KLineData } from '../../../common/Data'
-import type { OverlayFigure, OverlayCreateFiguresCallbackParams } from '../../../component/Overlay'
+import type { Overlay, OverlayFigure, OverlayCreateFiguresCallbackParams, OverlayPerformEventParams } from '../../../component/Overlay'
 import type { Chart } from '../../../Chart'
 
-import { isNumber, isValid } from '../../../common/utils/typeChecks'
+import { isArray, isNumber, isObject, isValid } from '../../../common/utils/typeChecks'
+
+import { ANCHOR_KEY_PREFIX, createAnchorFigures } from '../../interaction/anchors'
+import { shapeHandleFigure } from '../shapes/shapeCommon'
+import { lineChartOf, rememberLineChart } from '../lines/lineCommon'
 
 import { rgbaToSolid, fmtNum, signedNum, signedPct, pillFigures, getPricePrecision } from './measureCommon'
 
@@ -26,10 +30,28 @@ import { rgbaToSolid, fmtNum, signedNum, signedPct, pillFigures, getPricePrecisi
  * Shared geometry + stats for 'longPosition' / 'shortPosition'.
  *
  * The kernel originals are 4-point tools whose host injects TP/SL/width
- * points after the single creation click. The rebuild keeps ONE anchor —
- * the entry point — and derives the zones from pixel heights carried in
+ * points after the single creation click. The rebuild keeps ONE stored
+ * point — the entry — and derives the zones from pixel heights carried in
  * `extendData` (`profitHeight` / `stopHeight` / `zoneWidth`), converted
  * px → value through the pane's y-axis. No host injection required.
+ * TradingView's LineToolRiskRewardBase is structurally identical: 2
+ * stored points (entry + close/edge x) plus stop/target levels as
+ * relative tick offsets — px offsets are the equivalent here.
+ *
+ * Selection anchors (TradingView LineAnchorRenderer parity — 4 handles):
+ *   `anchor_0`          — entry point on the left edge. Re-anchored, not
+ *                         translated: vertical re-prices the entry CLAMPED
+ *                         between the fixed stop/target lines; horizontal
+ *                         moves the left edge while the right edge stays.
+ *   `pos_width_handle`  — right edge at entry level, `ew-resize`: writes
+ *                         `zoneWidth` (TV PaneCursorType.HorizontalResize).
+ *   `pos_stop_handle`   — left edge at the stop line, `ns-resize`: writes
+ *                         `stopHeight` (TV PaneCursorType.VerticalResize).
+ *   `pos_target_handle` — left edge at the target line, `ns-resize`:
+ *                         writes `profitHeight`.
+ * Whole-drawing move = body drag on the zone fills (kernel 'other' path);
+ * it translates the entry point and the px-derived zones rigidly, which
+ * matches TV keeping stop/target levels as fixed entry-relative offsets.
  */
 
 export type PositionDirection = 'long' | 'short'
@@ -216,6 +238,9 @@ export function buildPositionFigures (
   direction: PositionDirection
 ): OverlayFigure[] {
   const { chart, overlay, coordinates, isSelected, isHovered } = params
+  // perform* callbacks receive no chart — register per the lineCommon
+  // WeakMap convention so the drag handlers can run px conversions.
+  rememberLineChart(overlay, chart)
   if (coordinates.length < 1) {
     return []
   }
@@ -387,4 +412,304 @@ export function buildPositionYAxisFigures (
   pill('profit', geo.profitY, geo.profitValue, rgbaToSolid(ext.profitBackground))
   pill('stop', geo.stopY, geo.stopValue, rgbaToSolid(ext.stopBackground))
   return figures
+}
+
+// ═══════════════════════════════════════
+// Selection handles + drag routing
+// ═══════════════════════════════════════
+
+const POSITION_WIDTH_HANDLE_KEY = 'pos_width_handle'
+const POSITION_STOP_HANDLE_KEY = 'pos_stop_handle'
+const POSITION_TARGET_HANDLE_KEY = 'pos_target_handle'
+
+/**
+ * Smallest zone a level handle can leave. TradingView clamps stop/target
+ * drags one tick from the entry — 1 screen px is the analogous floor and
+ * also keeps `sanePx` (> 0) from snapping back to defaults.
+ */
+const MIN_ZONE_HEIGHT_PX = 1
+/** Minimum box width — matches the renderer's `Math.max(width, 20)` floor. */
+const MIN_ZONE_WIDTH_PX = 20
+
+/**
+ * Gesture-start geometry for a drag. The zone edges (stop line, target
+ * line, right edge) are FIXED while a handle moves — but `extendData` is
+ * rewritten on every move tick, so the edges must be anchored to the
+ * press-time state instead. `params.prevPoints` is cloned once per press
+ * in `startPressedMove`, so its array identity marks the gesture: the
+ * first perform call of each gesture computes the snapshot from
+ * `prevPoints[0]` + the not-yet-mutated `extendData`.
+ */
+interface PositionGestureSnapshot {
+  /** The `params.prevPoints` array instance this snapshot belongs to. */
+  ref: object
+  entryPx: Coordinate
+  /** Profit-line pixel Y at gesture start. */
+  profitY: number
+  /** Stop-line pixel Y at gesture start. */
+  stopY: number
+  /** Right-edge pixel X at gesture start. */
+  rightX: number
+}
+
+const positionDragSnapshots = new WeakMap<Overlay, PositionGestureSnapshot>()
+
+/** Guarded point → pane-pixel conversion (union-narrowed, throw-safe). */
+function pointToPanePx (
+  chart: Chart,
+  paneId: string,
+  point: Partial<Point>
+): Coordinate | null {
+  try {
+    const converted = chart.convertToPixel(point, { paneId })
+    const c = isArray(converted) ? converted[0] : converted
+    if (isValid(c) && isNumber(c.x) && isNumber(c.y)) {
+      return { x: c.x, y: c.y }
+    }
+  } catch { /* pane/axis missing mid-gesture — treat as unconvertible */ }
+  return null
+}
+
+/** Price → pane-pixel Y, or null when the axis can't convert. */
+function valueToPaneY (chart: Chart, paneId: string, value: number): number | null {
+  try {
+    const converted = chart.convertToPixel({ value }, { paneId })
+    const c = isArray(converted) ? converted[0] : converted
+    return isValid(c) && isNumber(c.y) ? c.y : null
+  } catch {
+    return null
+  }
+}
+
+/** Bar index → pane-pixel X, or null when the axis can't convert. */
+function indexToPaneX (chart: Chart, paneId: string, dataIndex: number): number | null {
+  try {
+    const converted = chart.convertToPixel({ dataIndex }, { paneId })
+    const c = isArray(converted) ? converted[0] : converted
+    return isValid(c) && isNumber(c.x) ? c.x : null
+  } catch {
+    return null
+  }
+}
+
+/** Pane-pixel Y → price, or null when the axis can't convert. */
+function paneYToValue (chart: Chart, paneId: string, y: number): number | null {
+  try {
+    const converted = chart.convertFromPixel([{ y }], { paneId })
+    const p = isArray(converted) ? converted[0] : converted
+    return isValid(p) && isNumber(p.value) ? p.value : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Resolve (and cache) the gesture-start zone edges: entry pixel position,
+ * profit/stop line Ys and the right edge X. Returns null when the press
+ * snapshot can't be converted (fresh restore, missing point fields).
+ */
+function positionGestureSnapshot (
+  overlay: Overlay<PositionToolExtendData>,
+  params: OverlayPerformEventParams,
+  direction: PositionDirection,
+  chart: Chart
+): PositionGestureSnapshot | null {
+  const cached = positionDragSnapshots.get(overlay)
+  if (cached !== undefined && cached.ref === params.prevPoints) {
+    return cached
+  }
+  const prev = params.prevPoints[0]
+  if (!isValid(prev)) {
+    return null
+  }
+  const entryPx = pointToPanePx(chart, overlay.paneId, prev)
+  if (entryPx === null) {
+    return null
+  }
+  const geo = computeZoneGeometry(
+    chart,
+    overlay.paneId,
+    direction,
+    entryPx,
+    getPositionExt(overlay.extendData)
+  )
+  const snapshot: PositionGestureSnapshot = {
+    ref: params.prevPoints,
+    entryPx,
+    profitY: geo.profitY,
+    stopY: geo.stopY,
+    rightX: geo.rightX
+  }
+  positionDragSnapshots.set(overlay, snapshot)
+  return snapshot
+}
+
+/**
+ * Merge a patch into `extendData` and invalidate the figure cache — the
+ * prescribed in-place mutation path for perform* callbacks. A fresh
+ * object is assigned (not mutated) so `shouldUpdate` sees the change.
+ */
+function writePositionExt (
+  overlay: Overlay<PositionToolExtendData>,
+  patch: Partial<PositionToolExtendData>
+): void {
+  const base = isObject(overlay.extendData) ? overlay.extendData : {}
+  overlay.extendData = { ...base, ...patch }
+  overlay.invalidateFigures()
+}
+
+/**
+ * Anchor figures + the three derived handles. The entry anchor comes from
+ * the shared factory; the stop/target/width handles sit at DERIVED pixel
+ * positions (no backing point slot), so they are emitted as
+ * `shapeHandleFigure` squares — TradingView's `square: true` flag on its
+ * resize anchors. They all claim `pointIndex: 0` so the kernel routes
+ * their drags through `performEventPressedMove`, which reroutes the write
+ * into the matching `extendData` field by `figureKey` (the channel
+ * `dc_left` precedent) and restores the entry point.
+ */
+export function buildPositionAnchorFigures (
+  params: OverlayCreateFiguresCallbackParams<PositionToolExtendData>,
+  direction: PositionDirection
+): OverlayFigure[] {
+  const { chart, overlay, coordinates, isSelected, isHovered, isTouch } = params
+  const figures = createAnchorFigures({
+    coordinates,
+    isSelected,
+    isHovered,
+    lock: overlay.lock,
+    isDrawing: overlay.isDrawing(),
+    isTouch,
+    pointIndexes: [0]
+  })
+  // Same visibility rule the anchor factory encodes (selected, or hovered
+  // + unlocked), plus no handles mid-draw — geometry is still forming.
+  const interactive = !overlay.lock && !overlay.isDrawing() &&
+    ((isSelected ?? false) || (isHovered ?? false))
+  if (interactive && coordinates.length >= 1) {
+    const geo = computeZoneGeometry(
+      chart,
+      overlay.paneId,
+      direction,
+      coordinates[0],
+      getPositionExt(overlay.extendData)
+    )
+    // TradingView anchor layout: three handles stacked on the LEFT edge
+    // (target/entry/stop levels) + the width handle on the right edge at
+    // entry level.
+    figures.push(shapeHandleFigure(
+      POSITION_WIDTH_HANDLE_KEY,
+      { x: geo.rightX, y: geo.entryY },
+      { pointIndex: 0, moveDirection: 'horz', cursor: 'ew-resize', isTouch }
+    ))
+    figures.push(shapeHandleFigure(
+      POSITION_STOP_HANDLE_KEY,
+      { x: geo.leftX, y: geo.stopY },
+      { pointIndex: 0, moveDirection: 'vert', cursor: 'ns-resize', isTouch }
+    ))
+    figures.push(shapeHandleFigure(
+      POSITION_TARGET_HANDLE_KEY,
+      { x: geo.leftX, y: geo.profitY },
+      { pointIndex: 0, moveDirection: 'vert', cursor: 'ns-resize', isTouch }
+    ))
+  }
+  return figures
+}
+
+/**
+ * `performEventPressedMove` implementation shared by both position tools.
+ * Routes on `figureKey`:
+ *  - `pos_stop_handle` / `pos_target_handle`: the kernel already wrote the
+ *    cursor's value into `points[0]` ('vert' constraint). Capture it as
+ *    the new level price, restore the entry value, then store the
+ *    direction-aware pixel distance — which inherently clamps the level
+ *    to its own side of the entry (TradingView prepare*Price parity).
+ *  - `pos_width_handle`: 'horz' drag wrote the cursor's index into
+ *    `points[0]`; restore the entry slot and store `zoneWidth` in px.
+ *  - `anchor_0` / API writes (`figureKey` undefined): entry re-anchor —
+ *    TradingView `_changeEntryPoint`. The stop/target lines and the right
+ *    edge keep their gesture-start pixel positions; the entry re-prices
+ *    clamped between them and re-xes the left edge.
+ */
+export function performPositionPressedMove (
+  overlay: Overlay<PositionToolExtendData>,
+  params: OverlayPerformEventParams,
+  direction: PositionDirection
+): void {
+  const entry = params.points[0]
+  const prev = params.prevPoints[0]
+  const chart = lineChartOf(overlay)
+  if (!isValid(entry) || !isValid(prev) || chart === undefined) {
+    return
+  }
+  const paneId = overlay.paneId
+  const sign = direction === 'long' ? 1 : -1
+  const key = params.figureKey
+
+  const snapshot = positionGestureSnapshot(overlay, params, direction, chart)
+
+  if (key === POSITION_STOP_HANDLE_KEY || key === POSITION_TARGET_HANDLE_KEY) {
+    const levelValue = entry.value
+    entry.value = prev.value
+    if (snapshot === null || !isNumber(levelValue)) {
+      return
+    }
+    const levelY = valueToPaneY(chart, paneId, levelValue)
+    if (levelY === null) {
+      return
+    }
+    if (key === POSITION_STOP_HANDLE_KEY) {
+      writePositionExt(overlay, {
+        stopHeight: Math.max(sign * (levelY - snapshot.entryPx.y), MIN_ZONE_HEIGHT_PX)
+      })
+    } else {
+      writePositionExt(overlay, {
+        profitHeight: Math.max(sign * (snapshot.entryPx.y - levelY), MIN_ZONE_HEIGHT_PX)
+      })
+    }
+    return
+  }
+
+  if (key === POSITION_WIDTH_HANDLE_KEY) {
+    const newIndex = entry.dataIndex
+    entry.timestamp = prev.timestamp
+    entry.dataIndex = prev.dataIndex
+    if (snapshot === null || !isNumber(newIndex)) {
+      return
+    }
+    const cursorX = indexToPaneX(chart, paneId, newIndex)
+    if (cursorX === null) {
+      return
+    }
+    writePositionExt(overlay, {
+      zoneWidth: Math.max(cursorX - snapshot.entryPx.x, MIN_ZONE_WIDTH_PX)
+    })
+    return
+  }
+
+  if ((key === undefined || key === `${ANCHOR_KEY_PREFIX}0`) && params.performPointIndex === 0) {
+    if (snapshot === null) {
+      return
+    }
+    const newPx = pointToPanePx(chart, paneId, entry)
+    if (newPx === null) {
+      return
+    }
+    // Clamp the entry inside the stop/target span — TradingView keeps
+    // both levels and bounds the entry between them (±1 tick ≈ ±1 px).
+    const lo = Math.min(snapshot.stopY, snapshot.profitY) + MIN_ZONE_HEIGHT_PX
+    const hi = Math.max(snapshot.stopY, snapshot.profitY) - MIN_ZONE_HEIGHT_PX
+    const entryY = Math.min(Math.max(newPx.y, lo), hi)
+    if (entryY !== newPx.y) {
+      const corrected = paneYToValue(chart, paneId, entryY)
+      if (corrected !== null) {
+        entry.value = corrected
+      }
+    }
+    writePositionExt(overlay, {
+      profitHeight: Math.max(sign * (entryY - snapshot.profitY), MIN_ZONE_HEIGHT_PX),
+      stopHeight: Math.max(sign * (snapshot.stopY - entryY), MIN_ZONE_HEIGHT_PX),
+      zoneWidth: Math.max(snapshot.rightX - newPx.x, MIN_ZONE_WIDTH_PX)
+    })
+  }
 }
