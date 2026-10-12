@@ -334,13 +334,20 @@ export function mountToolPalette (
     menu.className = 'sc-drw-flyout'
     menu.setAttribute('role', 'menu')
     let firstRow: HTMLElement | null = null
+    let sectionIndex = 0
     for (const section of group.sections) {
       if (group.sections.length > 1) {
+        if (sectionIndex > 0) {
+          const sepEl = createDom('div')
+          sepEl.className = 'sc-drw-flyout-sep'
+          menu.appendChild(sepEl)
+        }
         const head = createDom('div')
         head.className = 'sc-drw-menu-label'
         head.textContent = label(`section:${section.id}`, humanize(section.id))
         menu.appendChild(head)
       }
+      sectionIndex += 1
       for (const it of section.items) {
         const row = createDom('button')
         row.type = 'button'
@@ -440,6 +447,8 @@ export function mountToolPalette (
       const caret = createDom('button')
       caret.type = 'button'
       caret.className = 'sc-drw-tools-caret'
+      // TV's right-edge › sliver (viewBox 0 0 10 16, rendered ~5×8).
+      caret.innerHTML = '<svg viewBox="0 0 10 16" width="5" height="8"><path fill="currentColor" d="M0.6 1.4L2 0l8 8-8 8-1.4-1.4 6.4-6.6z"/></svg>'
       caret.setAttribute('aria-label', label('moreTools', 'More tools'))
       caret.setAttribute('aria-haspopup', 'menu')
       caret.setAttribute('aria-expanded', 'false')

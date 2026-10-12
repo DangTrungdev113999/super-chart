@@ -78,6 +78,15 @@ const ICONS: Record<string, string> = {
   hide: `${SVG_OPEN}<path d="M4 14s4-6 10-6 10 6 10 6-4 6-10 6S4 14 4 14z"/><path d="M5 5l18 18"/></svg>`,
   remove: `${SVG_OPEN}<path d="M6 8h16M11 8V5h6v3M9 8l1 14h8l1-14"/></svg>`,
   settings: `${SVG_OPEN}<circle cx="14" cy="14" r="3"/><path d="M14 4v3M14 21v3M4 14h3M21 14h3M6.9 6.9l2.1 2.1M19 19l2.1 2.1M21.1 6.9L19 9M9 19l-2.1 2.1"/></svg>`,
+  more: `${SVG_OPEN}<circle cx="6.5" cy="14" r="1.5" fill="currentColor" stroke="none"/><circle cx="14" cy="14" r="1.5" fill="currentColor" stroke="none"/><circle cx="21.5" cy="14" r="1.5" fill="currentColor" stroke="none"/></svg>`,
+  caretDown: `${SVG_OPEN}<path d="M9 11l5 5 5-5"/></svg>`,
+  caretRight: `${SVG_OPEN}<path fill="currentColor" stroke="none" d="M9.6 6.4l1.4-1.4 8 8-8 8-1.4-1.4 6.4-6.6z"/></svg>`,
+  show: `${SVG_OPEN}<path d="M4 14s4-6 10-6 10 6 10 6-4 6-10 6S4 14 4 14z"/><circle cx="14" cy="14" r="2.5"/></svg>`,
+  clone: `${SVG_OPEN}<rect x="10" y="10" width="14" height="14" rx="2"/><path d="M18 10V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4"/></svg>`,
+  colorLine: `${SVG_OPEN}<path d="M19.4 4.1a1.9 1.9 0 0 1 2.7 0l1.1 1.1a1.9 1.9 0 0 1 0 2.7l-1.4 1.4-3.8-3.8z"/><path d="M17 8l3.8 3.8L10 22.6l-5.3 1.5L6.2 18.8z"/></svg>`,
+  fill: `${SVG_OPEN}<path d="M13 3l9.5 9.5-9.5 9.5L3.5 12.5z"/><path d="M22 20c1.5 2 1.5 4 0 5.2-1.5-1.2-1.5-3.2 0-5.2z" fill="currentColor" stroke="none"/></svg>`,
+  background: `${SVG_OPEN}<rect x="5" y="5" width="18" height="18" rx="2"/></svg>`,
+  stayDrawing: `${SVG_OPEN}<path d="M4 17l1-4 10-10 3 3-10 10-4 1z"/><rect x="16" y="17" width="9" height="7" rx="1.5"/><path d="M18.5 17v-2a2 2 0 0 1 4 0v2"/></svg>`,
   tool: `${SVG_OPEN}<path d="M17 4a5 5 0 0 0-6.6 6.6L5 16l6 6 5.4-5.4A5 5 0 0 0 24 11l-4 4-4-1-1-4 4-4a5 5 0 0 0-2-2z"/></svg>`
 }
 

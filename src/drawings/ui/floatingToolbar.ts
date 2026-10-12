@@ -279,18 +279,27 @@ export function attachFloatingToolbar (
     return node
   }
 
+  /** role → button glyph. TV shows the glyph with a color bar under it. */
+  const COLOR_ROLE_ICONS: Record<string, string> = {
+    line: 'colorLine',
+    fill: 'fill',
+    text: 'text',
+    background: 'background'
+  }
+
   function colorControl (role: 'line' | 'fill' | 'text' | 'background', path: StylePath): HTMLElement {
-    const swatch = createDom('span')
-    swatch.className = 'sc-drw-swatch'
+    const bar = createDom('span')
+    bar.className = 'sc-drw-colorbar'
     const paint = (): void => {
       const v = currentPathValue(path)
-      swatch.style.background = typeof v === 'string' ? v : '#2962ff'
+      bar.style.background = typeof v === 'string' ? v : '#2962ff'
     }
     paint()
     const b = createDom('button')
-    b.className = 'sc-drw-btn'
+    b.className = 'sc-drw-btn sc-drw-colorbtn'
     b.title = `${role} color`
-    b.appendChild(swatch)
+    b.innerHTML = getDrawingIcon(COLOR_ROLE_ICONS[role] ?? 'colorLine')
+    b.appendChild(bar)
     b.addEventListener('click', e => {
       e.stopPropagation()
       openMenu(b, menu => {
@@ -344,24 +353,60 @@ export function attachFloatingToolbar (
     })))
   }
 
+  /**
+   * TV's width control face: a stroke-thickness glyph + the numeric value +
+   * a down caret (e.g. "— 2px"), not a bare icon.
+   */
   function widthControl (path: StylePath): HTMLElement {
-    return dropdownButton('trendLine', 'Line width', LINE_WIDTHS.map(w => ({
-      title: `${w}px`,
-      active: currentPathValue(path) === w,
-      onClick: () => {
-        patchPath(path, w)
-      }
-    })))
+    const b = createDom('button')
+    b.className = 'sc-drw-btn sc-drw-widthbtn'
+    b.title = 'Line width'
+    b.setAttribute('aria-label', 'Line width')
+    const paint = (): void => {
+      const v = Number(currentPathValue(path))
+      const w = Number.isFinite(v) && v > 0 ? v : 1
+      const h = Math.max(1, Math.min(6, w))
+      b.innerHTML = `<svg class="sc-drw-width-line" viewBox="0 0 18 10" width="18" height="10"><rect x="1" y="${5 - h / 2}" width="16" height="${h}" rx="${h / 2}" fill="currentColor"/></svg>` +
+        `<span>${w}px</span><span class="sc-drw-width-caret">${getDrawingIcon('caretDown')}</span>`
+    }
+    paint()
+    b.addEventListener('click', e => {
+      e.stopPropagation()
+      openMenu(b, menu => {
+        LINE_WIDTHS.forEach(w => {
+          menu.appendChild(styleMenuItem(`${w}px`, currentPathValue(path) === w, () => {
+            patchPath(path, w)
+            paint()
+          }))
+        })
+      })
+    })
+    return b
   }
 
   function fontSizeControl (path: StylePath): HTMLElement {
-    return dropdownButton('text', 'Text size', FONT_SIZES.map(s => ({
-      title: `${s}px`,
-      active: currentPathValue(path) === s,
-      onClick: () => {
-        patchPath(path, s)
-      }
-    })))
+    const b = createDom('button')
+    b.className = 'sc-drw-btn sc-drw-widthbtn'
+    b.title = 'Text size'
+    b.setAttribute('aria-label', 'Text size')
+    const paint = (): void => {
+      const v = Number(currentPathValue(path))
+      const s = Number.isFinite(v) && v > 0 ? v : 12
+      b.innerHTML = `<span>${s}</span><span class="sc-drw-width-caret">${getDrawingIcon('caretDown')}</span>`
+    }
+    paint()
+    b.addEventListener('click', e => {
+      e.stopPropagation()
+      openMenu(b, menu => {
+        FONT_SIZES.forEach(s => {
+          menu.appendChild(styleMenuItem(`${s}px`, currentPathValue(path) === s, () => {
+            patchPath(path, s)
+            paint()
+          }))
+        })
+      })
+    })
+    return b
   }
 
   function textStyleControl (): HTMLElement {
@@ -425,7 +470,7 @@ export function attachFloatingToolbar (
   }
 
   function moreMenu (): HTMLElement {
-    const b = btn('settings', 'More', () => {
+    const b = btn('more', 'More', () => {
       openMenu(b, menu => {
         if (current === null) {
           return
@@ -553,12 +598,12 @@ export function attachFloatingToolbar (
           rerender()
         }, overlay.lock)
       case 'visibility':
-        return btn('hide', !overlay.visible ? 'Show' : 'Hide', () => {
+        return btn(overlay.visible ? 'show' : 'hide', !overlay.visible ? 'Show' : 'Hide', () => {
           manager.update(overlay.id, { visible: !overlay.visible })
           rerender()
         }, !overlay.visible)
       case 'clone':
-        return btn('rect', 'Clone', () => {
+        return btn('clone', 'Clone', () => {
           cloneOverlay(overlay)
         })
       case 'settings':
@@ -602,7 +647,7 @@ export function attachFloatingToolbar (
     const grip = createDom('div')
     grip.className = 'sc-drw-btn sc-drw-grip'
     grip.title = 'Drag toolbar'
-    grip.innerHTML = '<svg viewBox="0 0 8 20" width="8" height="20" fill="currentColor"><circle cx="2.5" cy="4" r="1.2"/><circle cx="5.5" cy="4" r="1.2"/><circle cx="2.5" cy="10" r="1.2"/><circle cx="5.5" cy="10" r="1.2"/><circle cx="2.5" cy="16" r="1.2"/><circle cx="5.5" cy="16" r="1.2"/></svg>'
+    grip.innerHTML = '<svg viewBox="0 0 8 14" width="8" height="14" fill="currentColor"><circle cx="2" cy="2.3" r="1.3"/><circle cx="6" cy="2.3" r="1.3"/><circle cx="2" cy="7" r="1.3"/><circle cx="6" cy="7" r="1.3"/><circle cx="2" cy="11.7" r="1.3"/><circle cx="6" cy="11.7" r="1.3"/></svg>'
     grip.addEventListener('mousedown', e => {
       if (element === null) {
         return

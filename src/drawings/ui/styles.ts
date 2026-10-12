@@ -29,21 +29,24 @@ export const PALETTE = [
 ]
 
 const CSS = `
+/* TV-capture tokens — dark theme measured off the real TradingView rail:
+   rail #0f0f0f, surfaces #1f1f1f, hover #2e2e2e, text #dbdbdb, muted #8c8c8c,
+   active tool = light tile #f0f3fa with dark icon. */
 .sc-drw-toolbar {
   position: absolute;
   top: 0;
   left: 0;
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 2px 4px;
-  background: #1e222d;
-  border: 1px solid #2a2e39;
-  border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
-  color: #d1d4dc;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: 11px;
+  height: 38px;
+  padding: 0 2px;
+  background: #1f1f1f;
+  border: none;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+  color: #dbdbdb;
+  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;
+  font-size: 12px;
   line-height: 1;
   user-select: none;
   white-space: nowrap;
@@ -53,91 +56,105 @@ const CSS = `
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 38px;
+  height: 38px;
   padding: 0;
   margin: 0;
   border: none;
-  border-radius: 3px;
+  border-radius: 4px;
   background: transparent;
-  color: #d1d4dc;
+  color: #dbdbdb;
   cursor: pointer;
+  flex: none;
 }
-.sc-drw-btn:hover { background: #2a2e39; color: #ffffff; }
-.sc-drw-btn:active { background: #363c4e; }
+.sc-drw-btn:hover { background: #2e2e2e; }
+.sc-drw-btn:active { background: #363636; }
 .sc-drw-btn[data-on="true"] { color: #2962ff; }
 .sc-drw-btn[data-on="true"]:hover { color: #4c7dff; }
-.sc-drw-btn svg { display: block; width: 16px; height: 16px; }
-.sc-drw-btn--wide { width: auto; padding: 0 6px; font-size: 11px; }
+.sc-drw-btn svg { display: block; width: 28px; height: 28px; }
+.sc-drw-btn--wide { width: auto; padding: 0 8px; font-size: 12px; gap: 4px; }
+.sc-drw-btn--wide svg { width: 16px; height: 16px; }
 .sc-drw-grip {
   cursor: grab;
-  color: #5d6372;
+  color: #8c8c8c;
   width: 14px;
 }
 .sc-drw-grip:active { cursor: grabbing; }
 .sc-drw-sep {
   width: 1px;
   height: 18px;
-  margin: 0 2px;
-  background: #2a2e39;
+  margin: 0 1px;
+  background: rgba(219, 219, 219, 0.14);
+  flex: none;
 }
-.sc-drw-swatch {
-  width: 14px;
-  height: 14px;
-  border-radius: 2px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+/* Color buttons are icon glyphs with a 3px color bar at the foot — TV's
+   "Màu công cụ đường kẻ / Màu văn bản" affordance, not a solid swatch. */
+.sc-drw-colorbtn { position: relative; }
+.sc-drw-colorbtn svg { width: 28px; height: 28px; }
+.sc-drw-colorbar {
+  position: absolute;
+  left: 9px;
+  right: 9px;
+  bottom: 5px;
+  height: 3px;
+  border-radius: 1.5px;
 }
+.sc-drw-widthbtn { width: auto; padding: 0 8px; gap: 5px; font-size: 12px; }
+.sc-drw-widthbtn .sc-drw-width-line { flex: none; }
+.sc-drw-widthbtn .sc-drw-width-caret { display: inline-flex; flex: none; color: #8c8c8c; }
+.sc-drw-widthbtn .sc-drw-width-caret svg { width: 10px; height: 10px; }
 .sc-drw-menu {
   position: absolute;
   top: 0;
   left: 0;
-  min-width: 120px;
+  min-width: 140px;
   padding: 4px;
-  background: #1e222d;
-  border: 1px solid #2a2e39;
-  border-radius: 4px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-  color: #d1d4dc;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: 11px;
+  background: #1f1f1f;
+  border: none;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 8px 20px rgba(0, 0, 0, 0.45);
+  color: #dbdbdb;
+  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;
+  font-size: 13px;
   z-index: 10;
 }
 .sc-drw-menu-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
-  padding: 5px 8px;
+  height: 32px;
+  padding: 0 10px;
   border: none;
-  border-radius: 3px;
+  border-radius: 4px;
   background: transparent;
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
 }
-.sc-drw-menu-item:hover { background: #2a2e39; }
+.sc-drw-menu-item:hover { background: #2e2e2e; }
 .sc-drw-menu-item[data-on="true"] { color: #4c7dff; }
-.sc-drw-menu-item svg { width: 14px; height: 14px; flex: none; }
+.sc-drw-menu-item svg { width: 18px; height: 18px; flex: none; }
 .sc-drw-menu-label {
-  padding: 4px 8px 2px;
-  color: #787b86;
-  font-size: 10px;
+  padding: 8px 12px 4px;
+  color: #8c8c8c;
+  font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.4px;
 }
 .sc-drw-palette {
   display: grid;
-  grid-template-columns: repeat(7, 18px);
-  gap: 4px;
-  padding: 4px;
+  grid-template-columns: repeat(7, 20px);
+  gap: 5px;
+  padding: 6px;
 }
 .sc-drw-palette-cell {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 2px;
+  border-radius: 3px;
   cursor: pointer;
 }
 .sc-drw-palette-cell:hover { transform: scale(1.15); border-color: #ffffff; }
@@ -147,10 +164,10 @@ const CSS = `
   top: 100%;
   left: 0;
   margin-top: 4px;
-  background: #1e222d;
-  border: 1px solid #2a2e39;
-  border-radius: 4px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  background: #1f1f1f;
+  border: none;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 8px 20px rgba(0, 0, 0, 0.45);
   z-index: 5;
 }
 .sc-drw-field:hover .sc-drw-palette--inline { display: grid; }
@@ -158,14 +175,14 @@ const CSS = `
   position: absolute;
   top: 0;
   left: 0;
-  width: 240px;
-  background: #1e222d;
-  border: 1px solid #2a2e39;
+  width: 250px;
+  background: #1f1f1f;
+  border: none;
   border-radius: 6px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
-  color: #d1d4dc;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: 11px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 8px 20px rgba(0, 0, 0, 0.45);
+  color: #dbdbdb;
+  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;
+  font-size: 12px;
   user-select: none;
   will-change: transform;
   z-index: 20;
@@ -174,56 +191,56 @@ const CSS = `
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 8px;
+  padding: 8px 10px;
   font-weight: 600;
   cursor: grab;
-  border-bottom: 1px solid #2a2e39;
+  border-bottom: 1px solid rgba(219, 219, 219, 0.08);
 }
 .sc-drw-dialog-header:active { cursor: grabbing; }
 .sc-drw-dialog-tabs {
   display: flex;
   gap: 2px;
-  padding: 4px 6px 0;
-  border-bottom: 1px solid #2a2e39;
+  padding: 4px 8px 0;
+  border-bottom: 1px solid rgba(219, 219, 219, 0.08);
 }
 .sc-drw-dialog-tab {
-  padding: 4px 8px;
+  padding: 6px 10px;
   border: none;
-  border-radius: 3px 3px 0 0;
+  border-radius: 4px 4px 0 0;
   background: transparent;
-  color: #787b86;
+  color: #8c8c8c;
   font: inherit;
   cursor: pointer;
 }
-.sc-drw-dialog-tab:hover { color: #d1d4dc; }
+.sc-drw-dialog-tab:hover { color: #dbdbdb; }
 .sc-drw-dialog-tab[data-on="true"] {
   color: #ffffff;
-  background: #2a2e39;
+  background: #2e2e2e;
 }
 .sc-drw-dialog-body {
-  max-height: 320px;
+  max-height: 340px;
   overflow-y: auto;
-  padding: 8px;
+  padding: 10px;
 }
 .sc-drw-section {
-  padding: 6px 2px 3px;
-  color: #787b86;
-  font-size: 10px;
+  padding: 8px 2px 4px;
+  color: #8c8c8c;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.4px;
 }
 .sc-drw-field {
   position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 3px 2px;
-  min-height: 24px;
+  padding: 4px 2px;
+  min-height: 26px;
 }
 .sc-drw-field-label {
   flex: 1;
-  color: #9aa0ae;
+  color: #9a9a9a;
 }
 .sc-drw-field-control {
   position: relative;
@@ -232,22 +249,22 @@ const CSS = `
   gap: 6px;
 }
 .sc-drw-input {
-  width: 110px;
-  padding: 3px 6px;
-  border: 1px solid #2a2e39;
-  border-radius: 3px;
-  background: #131722;
-  color: #d1d4dc;
+  width: 112px;
+  padding: 4px 8px;
+  border: 1px solid #2e2e2e;
+  border-radius: 4px;
+  background: #0f0f0f;
+  color: #dbdbdb;
   font: inherit;
 }
 .sc-drw-input:focus { outline: none; border-color: #2962ff; }
 .sc-drw-input--narrow { width: 64px; }
 .sc-drw-color {
-  width: 26px;
-  height: 22px;
+  width: 30px;
+  height: 24px;
   padding: 0;
-  border: 1px solid #2a2e39;
-  border-radius: 3px;
+  border: 1px solid #2e2e2e;
+  border-radius: 4px;
   background: transparent;
   cursor: pointer;
 }
@@ -263,94 +280,116 @@ const CSS = `
   gap: 6px;
   padding: 2px 0;
 }
-/* ── Left tool palette (toolPalette.ts) ─────────────────────────────────── */
+/* ── Left tool palette (toolPalette.ts) — TV rail: 52px, flat #0f0f0f,
+   52×38 buttons, 28px icons, right-edge › carets, light active tile. ──── */
 .sc-drw-tools {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  width: 40px;
+  gap: 0;
+  width: 52px;
   height: 100%;
-  padding: 4px 0;
-  background: #1e222d;
-  border-right: 1px solid #2a2e39;
-  color: #d1d4dc;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: 11px;
+  padding: 2px 0;
+  background: #0f0f0f;
+  border-right: none;
+  color: #dbdbdb;
+  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;
+  font-size: 12px;
   line-height: 1;
   user-select: none;
   overflow-y: auto;
   overflow-x: hidden;
-  scrollbar-width: thin;
+  scrollbar-width: none;
 }
+.sc-drw-tools::-webkit-scrollbar { display: none; }
 .sc-drw-tools-group {
   position: relative;
   display: flex;
+  width: 52px;
+  flex: none;
 }
 .sc-drw-tools-btn {
-  width: 32px;
-  height: 32px;
+  width: 52px;
+  height: 38px;
+  border-radius: 0;
 }
-.sc-drw-tools-btn svg { width: 18px; height: 18px; }
+.sc-drw-tools-btn:hover { background: transparent; }
 .sc-drw-tools-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 5px;
 }
-.sc-drw-tools-icon svg { display: block; }
+.sc-drw-tools-icon svg { display: block; width: 28px; height: 28px; }
+.sc-drw-tools-btn:hover .sc-drw-tools-icon { background: #2e2e2e; }
+.sc-drw-tools-btn[data-on="true"] { color: #0f0f0f; }
+.sc-drw-tools-btn[data-on="true"] .sc-drw-tools-icon {
+  background: #f0f3fa;
+  color: #0f0f0f;
+}
+/* The flyout caret is TV's right-edge › sliver — a separate narrow button
+   overlaid on the group's right side, vertically centered. */
 .sc-drw-tools-caret {
   position: absolute;
-  right: -1px;
-  bottom: -1px;
-  /* invisible but generous hit area — the visible triangle stays 4px. */
-  width: 16px;
-  height: 14px;
-  padding: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 11px;
+  height: 34px;
+  padding: 0 0 0 1px;
   margin: 0;
   border: none;
+  border-radius: 4px 0 0 4px;
   background: transparent;
+  color: #8c8c8c;
   cursor: pointer;
 }
-.sc-drw-tools-caret::before {
-  content: '';
-  position: absolute;
-  right: 1px;
-  bottom: 1px;
-  border-left: 4px solid transparent;
-  border-bottom: 4px solid #5d6372;
-}
-.sc-drw-tools-caret:hover::before { border-bottom-color: #d1d4dc; }
-.sc-drw-tools-group:hover .sc-drw-tools-caret::before { border-bottom-color: #9598a1; }
+.sc-drw-tools-caret svg { display: block; width: 5px; height: 8px; }
+.sc-drw-tools-caret:hover { background: #2e2e2e; color: #dbdbdb; }
 .sc-drw-tools-chrome {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 0;
   margin-top: auto;
-  padding-top: 4px;
-  border-top: 1px solid #2a2e39;
+  padding-top: 2px;
+  width: 100%;
+  border-top: 1px solid rgba(219, 219, 219, 0.1);
 }
 .sc-drw-flyout {
   /* position:fixed + document.body — the palette's rail can scroll
      (overflow-y:auto) so an in-rail flyout would be clipped. */
   position: fixed;
-  min-width: 190px;
+  width: 292px;
+  max-width: calc(100vw - 60px);
   max-height: calc(100vh - 16px);
   overflow-y: auto;
-  padding: 4px;
-  background: #1e222d;
-  border: 1px solid #2a2e39;
-  border-radius: 4px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-  color: #d1d4dc;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: 11px;
+  padding: 4px 0;
+  background: #1f1f1f;
+  border: none;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+  color: #dbdbdb;
+  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;
+  font-size: 14px;
   z-index: 20;
+  scrollbar-width: thin;
 }
 .sc-drw-flyout-item {
-  padding: 6px 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 6px 10px 6px 8px;
+  border-radius: 0;
 }
+.sc-drw-flyout-item[data-on="true"] { background: #2e2e2e; color: inherit; }
 .sc-drw-flyout-item--disabled {
   opacity: 0.4;
   cursor: default;
@@ -359,14 +398,20 @@ const CSS = `
 .sc-drw-flyout-icon {
   display: inline-flex;
   flex: none;
-  color: #b2b5be;
+  color: #dbdbdb;
 }
-.sc-drw-flyout-icon svg { width: 16px; height: 16px; }
-.sc-drw-flyout-title { flex: 1; }
+.sc-drw-flyout-icon svg { width: 28px; height: 28px; }
+.sc-drw-flyout-title { flex: 1; font-size: 14px; }
 .sc-drw-flyout-key {
-  color: #787b86;
-  font-size: 10px;
+  color: #8c8c8c;
+  font-size: 12px;
   text-transform: uppercase;
+  flex: none;
+}
+.sc-drw-flyout-sep {
+  height: 1px;
+  margin: 4px 0;
+  background: #0f0f0f;
 }
 `
 

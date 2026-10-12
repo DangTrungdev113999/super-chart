@@ -586,7 +586,7 @@ export interface DrawingChromeItem {
 
 export const DRAWING_CHROME: DrawingChromeItem[] = [
   { id: 'magnet', title: 'Magnet Mode', iconId: 'magnet', kind: 'toggle' },
-  { id: 'stayInDrawing', title: 'Stay in Drawing Mode', iconId: 'cursor', kind: 'toggle' },
+  { id: 'stayInDrawing', title: 'Stay in Drawing Mode', iconId: 'stayDrawing', kind: 'toggle' },
   { id: 'lockAll', title: 'Lock All Drawings', iconId: 'lock', kind: 'toggle' },
   { id: 'hideAll', title: 'Hide All Drawings', iconId: 'hide', kind: 'toggle' },
   { id: 'removeAll', title: 'Remove All Drawings', iconId: 'remove', kind: 'action' }
