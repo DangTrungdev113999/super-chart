@@ -260,6 +260,39 @@ const AUTO_NUMBER_BOUNDS: Record<string, { min?: number, max?: number, step?: nu
   coefficient: { min: 0, step: 0.001 }
 }
 
+/** Suffix rules for keys not in AUTO_NUMBER_BOUNDS (checked in order). */
+const AUTO_NUMBER_SUFFIX_BOUNDS: Array<[RegExp, { min?: number, max?: number, step?: number }]> = [
+  [/opacity$/i, { min: 0, max: 1, step: 0.05 }],
+  [/precision$/i, { min: 0, max: 12, step: 1 }]
+]
+
+function numberBoundsFor (key: string): { min?: number, max?: number, step?: number } {
+  if (key in AUTO_NUMBER_BOUNDS) {
+    return AUTO_NUMBER_BOUNDS[key]
+  }
+  for (const [re, bounds] of AUTO_NUMBER_SUFFIX_BOUNDS) {
+    if (re.test(key)) {
+      return bounds
+    }
+  }
+  return {}
+}
+
+/**
+ * Structural/runtime extendData keys the auto-scan must NOT surface as
+ * user-editable fields — either nested payloads, internal drag state, or
+ * numbers whose meaning isn't a raw input (table grid state desyncs
+ * cells/rowHeights/colWidths; trendAngle stores radians).
+ */
+const AUTO_FIELD_EXCLUDED_KEYS = new Set([
+  'common', 'data', 'levels', 'vlevels', 'hlevels', 'fanLevels', 'arcs',
+  'isEditing',
+  // table tool grid state
+  'rows', 'cols', 'cells', 'rowHeights', 'colWidths', 'tableWidth', 'tableHeight',
+  // trendAngle internal geometry (radians/px, not user-facing inputs)
+  'angle', 'distance'
+])
+
 function optionFields (overlay: Overlay, item: DrawingToolItem | undefined, draft: SettingsDraft): SettingField[] {
   const ed = overlay.extendData
   if (ed === null || typeof ed !== 'object') {
@@ -281,10 +314,7 @@ function optionFields (overlay: Overlay, item: DrawingToolItem | undefined, draf
     // `_`-prefixed runtime keys, `isEditing`, nested objects and claimed
     // style paths are excluded; primitives become auto-labeled controls.
     if (
-      key === 'common' || key === 'data' || key === 'levels' ||
-      key === 'vlevels' || key === 'hlevels' || key === 'fanLevels' ||
-      key === 'arcs' ||
-      key.startsWith('_') || key === 'isEditing' || claimed.has(key)
+      key.startsWith('_') || AUTO_FIELD_EXCLUDED_KEYS.has(key) || claimed.has(key)
     ) {
       continue
     }
@@ -299,7 +329,7 @@ function optionFields (overlay: Overlay, item: DrawingToolItem | undefined, draf
         set: v => { draft.extendData([key], v) }
       })
     } else if (isNumber(value)) {
-      const bounds = AUTO_NUMBER_BOUNDS[key] ?? {}
+      const bounds = numberBoundsFor(key)
       fields.push({
         id: `num_${key}`,
         kind: 'number',

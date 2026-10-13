@@ -121,8 +121,15 @@ export function openOverlayTextEditor (options: OverlayTextEditorOptions): TextE
   const sessionBox: { current: TextEditorSession | null } = { current: null }
   const onChartChange = (event?: unknown): void => {
     const change = event as OverlayChangeEvent | undefined
-    if (change?.type === 'remove' && change.overlay?.id === overlay.id) {
+    if (change?.overlay?.id !== overlay.id) {
+      return
+    }
+    if (change.type === 'remove') {
       sessionBox.current?.close('external')
+    } else if (change.type === 'update' || change.type === 'progress') {
+      // Points moved mid-session (body drag, synced/programmatic write) —
+      // re-anchor or the DOM box drifts off the glyphs.
+      sessionBox.current?.relayout()
     }
   }
   // Scroll/zoom/resize move the rendered text while the session is open —

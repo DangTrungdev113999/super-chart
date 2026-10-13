@@ -17,7 +17,7 @@ import type Bounding from '../../../common/Bounding'
 import type Coordinate from '../../../common/Coordinate'
 import type Point from '../../../common/Point'
 import { hexToRgb } from '../../../common/utils/color'
-import { isNumber, isObject, isString, isValid } from '../../../common/utils/typeChecks'
+import { isFunction, isNumber, isObject, isString, isValid } from '../../../common/utils/typeChecks'
 import type { Overlay, OverlayFigure, OverlayPerformEventParams } from '../../../component/Overlay'
 
 import { openOverlayTextEditor } from '../../editor/overlayTextEditor'
@@ -304,8 +304,20 @@ export function notePxPoint (
  * override() mid-drag would replay performEventPressedMove re-entrantly.
  */
 export function writeAnchoredFractions (overlay: Overlay, px: Coordinate, bounding: Bounding): void {
+  if (bounding.width <= 0 || bounding.height <= 0) {
+    // x/0 → Infinity, and `typeof NaN === 'number'` would then satisfy the
+    // "fractions already captured" checks — the note could never anchor.
+    return
+  }
   const current = overlay.extendData
-  const next: AnchoredNoteFields = { ...(isObject(current) ? current : {}) }
+  // Legacy payloads: a string/function extendData IS the label — carrying
+  // it into `text` preserves the note instead of silently deleting it.
+  const next: AnchoredNoteFields & { text?: string } = { ...(isObject(current) ? current : {}) }
+  if (isString(current)) {
+    next.text = current
+  } else if (isFunction(current)) {
+    next.text = String(current(overlay))
+  }
   next.fx = px.x / bounding.width
   next.fy = px.y / bounding.height
   overlay.extendData = next as typeof overlay.extendData
@@ -327,15 +339,30 @@ export function revertAnchoredPointWrite (
   const prev = params.prevPoints
   for (let i = 0; i < params.points.length; i++) {
     const prevPoint = prev[i]
-    const point = params.points[i]
     if (isValid(prevPoint)) {
-      if (isNumber(prevPoint.timestamp)) point.timestamp = prevPoint.timestamp
-      if (isNumber(prevPoint.dataIndex)) point.dataIndex = prevPoint.dataIndex
-      if (isNumber(prevPoint.value)) point.value = prevPoint.value
+      // Restore unconditionally — a field the kernel ADDED (e.g. timestamp
+      // onto a dataIndex-only point) must not survive the revert.
+      params.points[i] = { ...prevPoint }
     }
   }
   if (bounding !== undefined) {
     writeAnchoredFractions(overlay, px, bounding)
+  }
+}
+
+/**
+ * fx/fy captured at press start — body-move deltas are TOTAL deltas from
+ * press (the kernel re-derives points from _prevPressedPoints each tick),
+ * so they must apply against the press-start fractions, not the live
+ * extendData each previous tick already advanced.
+ */
+const pressStartFractions = new WeakMap<object, { fx: number, fy: number }>()
+
+/** Call from `onPressedMoveStart` on anchored-note tools. */
+export function captureAnchoredPressStart (overlay: Overlay): void {
+  const ed = overlay.extendData as AnchoredNoteFields | undefined
+  if (isNumber(ed?.fx) && isNumber(ed.fy)) {
+    pressStartFractions.set(overlay, { fx: ed.fx, fy: ed.fy })
   }
 }
 
@@ -349,23 +376,24 @@ export function revertAnchoredBodyMove (
   params: Omit<OverlayPerformEventParams, 'performPointIndex' | 'performPoint'>
 ): void {
   const bounding = annotationBoundingOf(overlay)
+  const press = pressStartFractions.get(overlay)
   const ed = overlay.extendData as AnchoredNoteFields | undefined
-  if (bounding === undefined || !isNumber(ed?.fx) || !isNumber(ed.fy)) {
+  const startFx = press?.fx ?? ed?.fx
+  const startFy = press?.fy ?? ed?.fy
+  if (bounding === undefined || !isNumber(startFx) || !isNumber(startFy)) {
     return
   }
   const before = pointToCoordinate(chart, overlay.paneId, params.prevPoints[0] ?? {})
   const after = pointToCoordinate(chart, overlay.paneId, params.points[0] ?? {})
   const dx = after.x - before.x
   const dy = after.y - before.y
-  params.points.forEach((point, i) => {
+  params.points.forEach((_point, i) => {
     const prevPoint = params.prevPoints[i]
     if (isValid(prevPoint)) {
-      if (isNumber(prevPoint.timestamp)) point.timestamp = prevPoint.timestamp
-      if (isNumber(prevPoint.dataIndex)) point.dataIndex = prevPoint.dataIndex
-      if (isNumber(prevPoint.value)) point.value = prevPoint.value
+      params.points[i] = { ...prevPoint }
     }
   })
-  writeAnchoredFractions(overlay, { x: ed.fx * bounding.width + dx, y: ed.fy * bounding.height + dy }, bounding)
+  writeAnchoredFractions(overlay, { x: startFx * bounding.width + dx, y: startFy * bounding.height + dy }, bounding)
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -429,7 +457,9 @@ export interface NoteTooltipLayout {
 }
 
 export function noteTooltipLayout (data: TextBoxData, point: Coordinate, bounding: Bounding): NoteTooltipLayout {
-  const width = Math.min(NOTE_TOOLTIP_WIDTH, bounding.width)
+  // Cap width so BOTH clamps can hold — a pane narrower than the tooltip +
+  // margins would otherwise push `left` negative.
+  const width = Math.min(NOTE_TOOLTIP_WIDTH, Math.max(0, bounding.width - 2 * NOTE_CORRECT_DISTANCE))
   const textWidth = width - 2 * NOTE_TOOLTIP_HORZ_PADDING
   // Line count through the shared box layout — identical wrap/spacing math
   // as the figure and editor (never measured twice).
@@ -447,13 +477,15 @@ export function noteTooltipLayout (data: TextBoxData, point: Coordinate, boundin
   let caretSide: NoteTooltipLayout['caretSide'] = noCaret ? null : 'top'
   if (top < NOTE_CORRECT_DISTANCE) {
     top = Math.round(point.y + NOTE_TOOLTIP_VERT_MARGIN)
+    // Flipped below the pin — still clamp the bottom edge inside the pane.
+    top = Math.min(top, Math.max(NOTE_CORRECT_DISTANCE, bounding.height - height - NOTE_CORRECT_DISTANCE))
   } else if (!noCaret) {
     caretSide = 'bottom'
   }
   if (left < NOTE_CORRECT_DISTANCE) {
     left = NOTE_CORRECT_DISTANCE
   } else if (left + width + NOTE_CORRECT_DISTANCE > bounding.width) {
-    left = bounding.width - width - NOTE_CORRECT_DISTANCE
+    left = Math.max(0, bounding.width - width - NOTE_CORRECT_DISTANCE)
   }
   const caretBaseY = caretSide === 'top' ? top : top + height
   const caretApex: Coordinate = caretSide === 'top'

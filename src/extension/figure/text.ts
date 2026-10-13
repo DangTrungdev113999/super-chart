@@ -121,11 +121,24 @@ export function checkCoordinateOnText (coordinate: Coordinate, attrs: TextAttrs 
       hitRect = getTextRect(text, styles)
     }
 
+    // Rotation is applied around (text.x, text.y) when drawing — un-rotate the
+    // candidate point around the same pivot so the rect test matches glyphs.
+    let cx = coordinate.x
+    let cy = coordinate.y
+    const rotation = text.rotation
+    if (rotation != null && rotation !== 0) {
+      const dx = cx - text.x
+      const dy = cy - text.y
+      const cos = Math.cos(-rotation)
+      const sin = Math.sin(-rotation)
+      cx = text.x + dx * cos - dy * sin
+      cy = text.y + dx * sin + dy * cos
+    }
     if (
-      coordinate.x >= hitRect.x &&
-      coordinate.x <= hitRect.x + hitRect.width &&
-      coordinate.y >= hitRect.y &&
-      coordinate.y <= hitRect.y + hitRect.height
+      cx >= hitRect.x &&
+      cx <= hitRect.x + hitRect.width &&
+      cy >= hitRect.y &&
+      cy <= hitRect.y + hitRect.height
     ) {
       return true
     }

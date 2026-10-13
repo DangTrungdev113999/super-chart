@@ -655,9 +655,13 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
     }
 
     if (isValid(styles)) {
-      if (this.styles == null || Object.isFrozen(this.styles)) {
+      if (this.styles == null) {
         this.styles = clone(styles)
       } else {
+        // Frozen payloads (Immer/store hydration) can't be merged into —
+        // clone the EXISTING styles first so sibling groups survive a
+        // partial patch, same as the extendData path above.
+        this.styles = clone(this.styles)
         merge(this.styles, styles)
       }
       this.figuresRev++

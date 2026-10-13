@@ -196,7 +196,8 @@ const circle: OverlayTemplate<ShapeExtendData> = {
         key: 'circle_xstrip',
         type: 'rect',
         attrs: { x: leftX, y: 0, width: stripWidth, height: bounding.height },
-        styles: { style: 'fill', color: alphaColor(AXIS_PILL_COLOR, 0.2) }
+        styles: { style: 'fill', color: alphaColor(AXIS_PILL_COLOR, 0.2) },
+        ignoreEvent: true
       })
     }
     const dLeft = formatDate(leftTs)
@@ -238,7 +239,8 @@ const circle: OverlayTemplate<ShapeExtendData> = {
         key: 'circle_ystrip',
         type: 'rect',
         attrs: { x: 0, y: topY, width: bounding.width, height: stripHeight },
-        styles: { style: 'fill', color: alphaColor(AXIS_PILL_COLOR, 0.2) }
+        styles: { style: 'fill', color: alphaColor(AXIS_PILL_COLOR, 0.2) },
+        ignoreEvent: true
       })
     }
     const pillTop = buildYAxisPill(topY, topVal, AXIS_PILL_COLOR, precision, bounding, yAxis ?? undefined, 'circle_y0')

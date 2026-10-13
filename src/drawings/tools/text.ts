@@ -198,9 +198,12 @@ const textNote: OverlayTemplate<TextToolExtendData> = {
     return figures
   },
   // Wrap-handle drags claim pointIndex 0 with 'horz' constraint: the kernel
-  // writes the cursor's dataIndex into points[0]. Restore the anchor and
-  // store the pointer's px distance from the box's left edge instead —
-  // the positionCommon `pos_width_handle` pattern.
+  // writes the cursor's dataIndex into points[0]. Restore the anchor FIRST
+  // (before any early return — the kernel has already overwritten it), then
+  // solve the new wrap width against the DRAG-START frame (prevPoints is
+  // snapshotted at startPressedMove): recomputing boxLeft from the live
+  // wordWrapWidth each tick creates positive feedback for right-aligned
+  // boxes and padding overshoot elsewhere.
   performEventPressedMove: function (this: Overlay<TextToolExtendData>, params) {
     if (params.figureKey !== TEXT_WRAP_HANDLE_KEY) {
       return
@@ -209,24 +212,38 @@ const textNote: OverlayTemplate<TextToolExtendData> = {
     const ext = (this.extendData as TextToolExtendData | undefined) ?? {}
     const moved = params.points[0]
     const prev = params.prevPoints[0]
-    if (chart === undefined || ext.wordWrapWidth === undefined) {
-      return
-    }
     const cursorIndex = isValid(moved) ? moved.dataIndex : undefined
     if (isValid(moved) && isValid(prev)) {
       moved.timestamp = prev.timestamp
       moved.dataIndex = prev.dataIndex
       moved.value = prev.value
     }
-    const prevPx = isValid(prev) ? pointToCoordinate(chart, this.paneId, prev) : null
-    const cursorX = isNumber(cursorIndex) ? indexToPaneX(chart, this.paneId, cursorIndex) : null
-    if (prevPx === null || cursorX === null) {
+    if (chart === undefined || ext.wordWrapWidth === undefined) {
       return
     }
-    const box = computeTextBoxLayout(getBoxData(this), prevPx)
-    writeTextExt(this, {
-      wordWrapWidth: Math.max(cursorX - box.boxLeft, MIN_WRAP_WIDTH_PX)
-    })
+    const anchorX = isValid(prev) ? pointToCoordinate(chart, this.paneId, prev)?.x : null
+    const cursorX = isNumber(cursorIndex) ? indexToPaneX(chart, this.paneId, cursorIndex) : null
+    if (anchorX == null || cursorX === null) {
+      return
+    }
+    const data = getBoxData(this)
+    const pad = (data.boxPaddingLeft ?? data.boxPaddingHorz ?? data.boxPadding ?? (data.fontSize ?? 12) / 3) +
+      (data.boxPaddingRight ?? data.boxPaddingHorz ?? data.boxPadding ?? (data.fontSize ?? 12) / 3)
+    const offsetX = data.offsetX ?? 0
+    // Right edge of the painted box = boxLeft + boxWidth where
+    // boxWidth = wordWrapWidth + padding (unless boxWidth is pinned).
+    const innerWidth = (() => {
+      switch (data.horzAlign ?? 'left') {
+        case 'center':
+          return 2 * (cursorX - anchorX) - pad
+        case 'right':
+          // Right edge pinned at the anchor — the handle moves the left edge.
+          return anchorX - offsetX - pad - cursorX
+        default:
+          return cursorX - anchorX - offsetX - pad
+      }
+    })()
+    writeTextExt(this, { wordWrapWidth: Math.max(innerWidth, MIN_WRAP_WIDTH_PX) })
   },
   onDrawEnd: ({ overlay, chart }) => {
     // Placing a text tool drops straight into editing (TV parity) — but

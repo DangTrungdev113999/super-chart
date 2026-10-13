@@ -574,7 +574,9 @@ export function gannArcFigures (start: Coordinate, end: Coordinate, arcs: GannAr
       figures.push({
         key: `${keyPrefix}_arcfill_${index}`,
         type: 'path',
-        attrs: { x: 0, y: 0, width: 0, height: 0, path },
+        // Real bbox of the ellipse — path figures hit-test their declared
+        // rect, and 0×0 puts a phantom dead-zone at the pane origin.
+        attrs: { x: start.x - rx, y: start.y - ry, width: rx * 2, height: ry * 2, path },
         styles: { style: 'fill', color: alphaColor(arc.color, alpha) }
       })
     }
@@ -588,7 +590,9 @@ export function gannArcFigures (start: Coordinate, end: Coordinate, arcs: GannAr
         height: 0,
         path: `M${pointAt(rx, ry, t0)} A${round2(rx)} ${round2(ry)} 0 0 ${sweep} ${pointAt(rx, ry, t1)}`
       },
-      styles: { style: 'stroke', color: arc.color, lineWidth: lineSize }
+      styles: { style: 'stroke', color: arc.color, lineWidth: lineSize },
+      // Stroke-only path — rect hit-test would swallow the whole bbox.
+      ignoreEvent: true
     })
     prevRx = rx
     prevRy = ry

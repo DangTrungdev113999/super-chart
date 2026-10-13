@@ -333,7 +333,9 @@ export function labelSpecOf (ext: LineExtendData): LabelSpec | null {
  */
 export function liveLabelSpecOf (overlay: Overlay, ext: LineExtendData): LabelSpec | null {
   const live = liveTextOf(overlay)
-  return labelSpecOf(live !== undefined ? { ...ext, text: live } : ext)
+  // While editing, showLabel:false must not hide the in-flight buffer —
+  // the user needs to see what they're typing.
+  return labelSpecOf(live !== undefined ? { ...ext, text: live, showLabel: true } : ext)
 }
 
 export interface DiagonalLabelLayout {
@@ -1005,6 +1007,11 @@ export function openLineLabelEditor<E extends object> (
   overlay: Overlay<E>,
   anchorFn: LineLabelAnchorFn
 ): void {
+  // A session is already live for this overlay (e.g. click→dblclick) —
+  // don't tear it down + reopen (junk commit, focus flicker).
+  if (liveTextOf(overlay) !== undefined) {
+    return
+  }
   const readExt = (): LineExtendData => (
     isObject(overlay.extendData) ? overlay.extendData : {}
   ) as LineExtendData
@@ -1020,6 +1027,7 @@ export function openLineLabelEditor<E extends object> (
       return {
         text: liveTextOf(overlay) ?? ext.text ?? '',
         fontSize: style.fontSize ?? 14,
+        fontFamily: chart.getStyles().overlay.text.family,
         bold: style.bold,
         italic: style.italic,
         horzAlign,

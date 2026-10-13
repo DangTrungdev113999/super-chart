@@ -346,7 +346,8 @@ const ellipse: OverlayTemplate<ShapeExtendData> = {
         key: 'ellipse_xstrip',
         type: 'rect',
         attrs: { x: leftX, y: 0, width: stripWidth, height: bounding.height },
-        styles: { style: 'fill', color: alphaColor(AXIS_PILL_COLOR, 0.2) }
+        styles: { style: 'fill', color: alphaColor(AXIS_PILL_COLOR, 0.2) },
+        ignoreEvent: true
       })
     }
     // Pill labels come from the AABB edge positions — converted back to
@@ -396,7 +397,8 @@ const ellipse: OverlayTemplate<ShapeExtendData> = {
         key: 'ellipse_ystrip',
         type: 'rect',
         attrs: { x: 0, y: topY, width: bounding.width, height: stripHeight },
-        styles: { style: 'fill', color: alphaColor(AXIS_PILL_COLOR, 0.2) }
+        styles: { style: 'fill', color: alphaColor(AXIS_PILL_COLOR, 0.2) },
+        ignoreEvent: true
       })
     }
     const topPoint = coordinateToPoint(chart, overlay.paneId, { x: 0, y: topY })

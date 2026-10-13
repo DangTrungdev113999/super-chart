@@ -506,7 +506,7 @@ function buildCatalog (): DrawingToolGroup[] {
           items: [
             item('callout', 'callout', 'Callout', 'callout', caps({ anchorCount: 2, hasText: true, multiline: true, snap45: false }), TEXT_RECIPE),
             item('priceLabel', 'priceLabel', 'Price Label', 'priceLabel', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE),
-            item('priceNote', 'simpleAnnotation', 'Price Note', 'priceLabel', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE),
+            item('priceNote', 'simpleAnnotation', 'Price Note', 'priceLabel', caps({ anchorCount: 2, hasText: true, snap45: true }), TEXT_RECIPE),
             // flagMark styles live under styles.flagMark (flagColor/poleColor)
             // — the generic text recipe wrote dead styles.text.* paths.
             item('flag', 'flagMark', 'Flag Mark', 'flag', caps({ anchorCount: 1, snap45: false }), ZONE_COLORS_RECIPE, { stylePaths: { fillColor: ['styles', 'flagMark', 'flagColor'], backgroundColor: ['styles', 'flagMark', 'poleColor'] } }),

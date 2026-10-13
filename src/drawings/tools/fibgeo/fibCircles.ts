@@ -116,11 +116,13 @@ const fibCircles: OverlayTemplate<FibCirclesExtendData> = {
             figures.push({
               key: `fib_circle_fill_${index}`,
               type: 'path',
+              // Outer-ring bbox — 0×0 declared bounds put a phantom hit
+              // zone at the pane origin instead of over the ring.
               attrs: {
-                x: 0,
-                y: 0,
-                width: 0,
-                height: 0,
+                x: cx - ring.rx,
+                y: cy - ring.ry,
+                width: ring.rx * 2,
+                height: ring.ry * 2,
                 path: ellipseRingPath(cx, cy, ring.rx, ring.ry, inner.rx, inner.ry)
               },
               styles: { style: 'fill', color: alphaColor(ring.level.color, alpha) }
@@ -135,7 +137,11 @@ const fibCircles: OverlayTemplate<FibCirclesExtendData> = {
             type: 'ellipse',
             attrs: { x: cx, y: cy, rx: ring.rx, ry: ring.ry },
             styles: { style: 'stroke', borderColor: ring.level.color, borderSize: lineSize },
-            bounds: { x: cx - ring.rx, y: cy - ring.ry, width: ring.rx * 2, height: ring.ry * 2 }
+            bounds: { x: cx - ring.rx, y: cy - ring.ry, width: ring.rx * 2, height: ring.ry * 2 },
+            // Stroke-only ring — ellipse hit-tests its whole interior, so
+            // the outermost ring would make a huge dead-zone. Select/drag
+            // via the diameter line, fills (when on) and anchors.
+            ignoreEvent: true
           })
           if (showLabels) {
             // TV labelPoint is the ring's bottom point; `horzAlign Left` +

@@ -14,7 +14,7 @@
 
 import type { Overlay, OverlayFigure, OverlayTemplate } from '../../../component/Overlay'
 import type { Chart } from '../../../Chart'
-import { isObject, isString, isValid } from '../../../common/utils/typeChecks'
+import { isFunction, isObject, isString, isValid } from '../../../common/utils/typeChecks'
 import type Bounding from '../../../common/Bounding'
 import type Coordinate from '../../../common/Coordinate'
 
@@ -27,6 +27,7 @@ import {
   baseTextBoxData,
   commitText,
   createPinNoteFigures,
+  captureAnchoredPressStart,
   isAnchoredNote,
   liveTextOf,
   NOTE_TOOLTIP_HORZ_PADDING,
@@ -67,9 +68,12 @@ function getNoteStyles (overlay: Overlay<AnchoredNoteExtendData>): NotePinStyle 
 }
 
 function getText (overlay: Overlay<AnchoredNoteExtendData>): string {
-  const extendData = overlay.extendData as AnchoredNoteExtendData | string | undefined
+  const extendData = overlay.extendData as AnchoredNoteExtendData | string | ((o: Overlay) => string) | undefined
   if (isString(extendData)) {
     return extendData
+  }
+  if (isFunction(extendData)) {
+    return String(extendData(overlay))
   }
   return liveTextOf(overlay) ?? extendData?.text ?? ''
 }
@@ -219,6 +223,11 @@ const anchoredNote: OverlayTemplate<AnchoredNoteExtendData> = {
     if (params.event !== undefined && chart !== undefined && isAnchoredNote(this, DEFAULT_ANCHORED)) {
       revertAnchoredBodyMove(this, chart, params)
     }
+  },
+  // fx/fy are snapshotted at press start — body-move deltas are totals
+  // from press, so each tick applies them against this fixed baseline.
+  onPressedMoveStart: ({ overlay }) => {
+    captureAnchoredPressStart(overlay)
   },
   onDrawEnd: ({ overlay, chart }) => {
     const ed = overlay.extendData

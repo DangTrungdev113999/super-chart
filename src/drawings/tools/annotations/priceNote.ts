@@ -170,17 +170,19 @@ function customTextData (overlay: Overlay<PriceNoteExtendData>): TextBoxData {
 }
 
 function openEditor (chart: Chart, overlay: Overlay<PriceNoteExtendData>): void {
+  const anchorAndAngle = (): { anchor: Coordinate, rad: number } => {
+    const p1 = pointToCoordinate(chart, overlay.paneId, overlay.points[0] ?? {})
+    const p2 = pointToCoordinate(chart, overlay.paneId, overlay.points[1] ?? {})
+    return customTextAnchor(p1, p2, getNoteStyles(overlay).fontSize ?? 12)
+  }
   openAnnotationEditor({
     chart,
     overlay,
-    data: () => customTextData(overlay),
-    // Editor anchors at the (unrotated) label anchor — the canvas figure
-    // rotates around it; the DOM textarea stays axis-aligned.
-    anchor: () => {
-      const p1 = pointToCoordinate(chart, overlay.paneId, overlay.points[0] ?? {})
-      const p2 = pointToCoordinate(chart, overlay.paneId, overlay.points[1] ?? {})
-      return customTextAnchor(p1, p2, getNoteStyles(overlay).fontSize ?? 12).anchor
-    },
+    // Rotate the editor to the canvas label's angle — with center/bottom
+    // alignment the layout's rotationPoint IS the anchor pixel, the same
+    // pivot the figure's `angle` spins around.
+    data: () => ({ ...customTextData(overlay), angle: anchorAndAngle().rad }),
+    anchor: () => anchorAndAngle().anchor,
     onCommit: (value) => {
       commitText(chart, overlay, value)
     }
@@ -245,7 +247,7 @@ const simpleAnnotation: OverlayTemplate<PriceNoteExtendData> = {
         key: 'p1Ring',
         type: 'circle',
         attrs: { x: p1.x, y: p1.y, r: P1_RING_RADIUS },
-        styles: { style: 'stroke', color: lineColor, borderSize: 1.5 },
+        styles: { style: 'stroke', borderColor: lineColor, borderSize: 1.5 },
         ignoreEvent: true
       }
     )

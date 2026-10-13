@@ -383,11 +383,21 @@ const MENU_STYLE: Partial<CSSStyleDeclaration> = {
   userSelect: 'none'
 }
 
+/** Open context menus keyed by overlay — closed on re-open or removal. */
+type TableMenuClose = () => void
+const openTableMenus = new WeakMap<object, TableMenuClose>()
+
+function closeTableMenu (overlay: Overlay<TableExtendData>): void {
+  openTableMenus.get(overlay)?.()
+  openTableMenus.delete(overlay)
+}
+
 function openTableMenu (chart: Chart, overlay: Overlay<TableExtendData>, px: Coordinate, cellIndex: number): void {
   const layer = getPaneDomLayer(chart, overlay.paneId)
   if (layer === null) {
     return
   }
+  closeTableMenu(overlay)
   const grid = getGrid(overlay)
   const row = Math.floor(cellIndex / grid.cols)
   const col = cellIndex % grid.cols
@@ -436,7 +446,11 @@ function openTableMenu (chart: Chart, overlay: Overlay<TableExtendData>, px: Coo
   const close = (): void => {
     unmounts.forEach(u => { u() })
     unmounts.length = 0
+    if (openTableMenus.get(overlay) === close) {
+      openTableMenus.delete(overlay)
+    }
   }
+  openTableMenus.set(overlay, close)
   for (const item of items) {
     const entry = createDom('div', { padding: '6px 14px', cursor: 'default', whiteSpace: 'nowrap' })
     entry.textContent = item.label
@@ -666,6 +680,18 @@ const table: OverlayTemplate<TableExtendData> = {
       })
     }
 
+    // Anchors dispatch last→first, so they must precede the resize strips/
+    // corners below — otherwise anchor_0 shadows the TL corner handle.
+    figures.push(...createAnchorFigures({
+      coordinates,
+      isSelected,
+      isHovered,
+      isTouch,
+      isDrawing: overlay.isDrawing(),
+      lock: overlay.lock,
+      keyPrefix: 'anchor_'
+    }))
+
     // Row/column resize strips on the internal gridlines (selected only —
     // TradingView surfaces them through its active-edge hit zones).
     if (isSelected === true && !overlay.lock && !overlay.isDrawing()) {
@@ -716,15 +742,6 @@ const table: OverlayTemplate<TableExtendData> = {
       }
     }
 
-    figures.push(...createAnchorFigures({
-      coordinates,
-      isSelected,
-      isHovered,
-      isTouch,
-      isDrawing: overlay.isDrawing(),
-      lock: overlay.lock,
-      keyPrefix: 'anchor_'
-    }))
     return figures
   },
   onPressedMoveStart: ({ overlay, figure, x, y }) => {
@@ -865,7 +882,11 @@ const table: OverlayTemplate<TableExtendData> = {
     }
     openCellEditor(chart, overlay, index ?? 0)
   },
-  onRightClick: ({ overlay, chart, figure, x, y }) => {
+  onRightClick: ({ overlay, chart, figure, x, y, preventDefault }) => {
+    // Structure edits are destructive — a locked table keeps its menu off.
+    if (overlay.lock) {
+      return
+    }
     const grid = getGrid(overlay)
     let index = cellIndexFromKey(figure?.key, grid.cols)
     if (index === null && isNumber(x) && isNumber(y)) {
@@ -874,9 +895,14 @@ const table: OverlayTemplate<TableExtendData> = {
     if (index === null) {
       return
     }
+    // Suppress the generic drawings context-menu (both would open).
+    preventDefault?.()
     activeCells.set(overlay, index)
     overlay.invalidateFigures()
     openTableMenu(chart, overlay, { x: x ?? 0, y: y ?? 0 }, index)
+  },
+  onRemoved: ({ overlay }) => {
+    closeTableMenu(overlay)
   },
   onDrawEnd: ({ overlay, chart }) => {
     if (!overlay.isDrawing()) {
