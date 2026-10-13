@@ -11814,7 +11814,7 @@ var PALETTE = [
     '#ffeb3b', '#ff9800', '#f23645', '#e91e63',
     '#9c27b0', '#673ab7'
 ];
-var CSS = "\n/* TV-capture tokens \u2014 dark theme measured off the real TradingView rail:\n   rail #0f0f0f, surfaces #1f1f1f, hover #2e2e2e, text #dbdbdb, muted #8c8c8c,\n   active tool = light tile #f0f3fa with dark icon. */\n.sc-drw-toolbar {\n  position: absolute;\n  top: 0;\n  left: 0;\n  display: flex;\n  align-items: center;\n  height: 38px;\n  padding: 0 2px;\n  background: #1f1f1f;\n  border: none;\n  border-radius: 6px;\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);\n  color: #dbdbdb;\n  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;\n  font-size: 12px;\n  line-height: 1;\n  user-select: none;\n  white-space: nowrap;\n  will-change: transform;\n}\n.sc-drw-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 38px;\n  height: 38px;\n  padding: 0;\n  margin: 0;\n  border: none;\n  border-radius: 4px;\n  background: transparent;\n  color: #dbdbdb;\n  cursor: pointer;\n  flex: none;\n}\n.sc-drw-btn:hover { background: #2e2e2e; }\n.sc-drw-btn:active { background: #363636; }\n.sc-drw-btn[data-on=\"true\"] { color: #2962ff; }\n.sc-drw-btn[data-on=\"true\"]:hover { color: #4c7dff; }\n.sc-drw-btn svg { display: block; width: 28px; height: 28px; }\n.sc-drw-btn--wide { width: auto; padding: 0 8px; font-size: 12px; gap: 4px; }\n.sc-drw-btn--wide svg { width: 16px; height: 16px; }\n.sc-drw-grip {\n  cursor: grab;\n  color: #8c8c8c;\n  width: 14px;\n}\n.sc-drw-grip:active { cursor: grabbing; }\n.sc-drw-sep {\n  width: 1px;\n  height: 18px;\n  margin: 0 1px;\n  background: rgba(219, 219, 219, 0.14);\n  flex: none;\n}\n/* Color buttons are icon glyphs with a 3px color bar at the foot \u2014 TV's\n   \"M\u00E0u c\u00F4ng c\u1EE5 \u0111\u01B0\u1EDDng k\u1EBB / M\u00E0u v\u0103n b\u1EA3n\" affordance, not a solid swatch. */\n.sc-drw-colorbtn { position: relative; }\n.sc-drw-colorbtn svg { width: 28px; height: 28px; }\n.sc-drw-colorbar {\n  position: absolute;\n  left: 9px;\n  right: 9px;\n  bottom: 5px;\n  height: 3px;\n  border-radius: 1.5px;\n}\n.sc-drw-widthbtn { width: auto; padding: 0 8px; gap: 5px; font-size: 12px; }\n.sc-drw-widthbtn .sc-drw-width-line { flex: none; }\n.sc-drw-widthbtn .sc-drw-width-caret { display: inline-flex; flex: none; color: #8c8c8c; }\n.sc-drw-widthbtn .sc-drw-width-caret svg { width: 10px; height: 10px; }\n.sc-drw-menu {\n  position: absolute;\n  top: 0;\n  left: 0;\n  min-width: 140px;\n  padding: 4px;\n  background: #1f1f1f;\n  border: none;\n  border-radius: 6px;\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 8px 20px rgba(0, 0, 0, 0.45);\n  color: #dbdbdb;\n  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;\n  font-size: 13px;\n  z-index: 10;\n}\n.sc-drw-menu-item {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  width: 100%;\n  height: 32px;\n  padding: 0 10px;\n  border: none;\n  border-radius: 4px;\n  background: transparent;\n  color: inherit;\n  font: inherit;\n  text-align: left;\n  cursor: pointer;\n}\n.sc-drw-menu-item:hover { background: #2e2e2e; }\n.sc-drw-menu-item[data-on=\"true\"] { color: #4c7dff; }\n.sc-drw-menu-item svg { width: 18px; height: 18px; flex: none; }\n.sc-drw-ctxmenu {\n  position: fixed;\n  top: 0;\n  left: 0;\n  min-width: 220px;\n  z-index: 1200;\n}\n.sc-drw-menu-sep {\n  height: 1px;\n  margin: 4px -4px;\n  background: #0f0f0f;\n}\n.sc-drw-menu-icon { display: flex; width: 18px; height: 18px; flex: none; align-items: center; justify-content: center; }\n.sc-drw-menu-text { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.sc-drw-menu-item--danger { color: #f23645; }\n.sc-drw-menu-item--disabled { color: #8c8c8c; cursor: default; }\n.sc-drw-menu-item--disabled:hover { background: transparent; }\n.sc-drw-menu-label {\n  padding: 8px 12px 4px;\n  color: #8c8c8c;\n  font-size: 11px;\n  text-transform: uppercase;\n  letter-spacing: 0.4px;\n}\n.sc-drw-palette {\n  display: grid;\n  grid-template-columns: repeat(7, 20px);\n  gap: 5px;\n  padding: 6px;\n}\n.sc-drw-palette-cell {\n  width: 20px;\n  height: 20px;\n  padding: 0;\n  border: 1px solid rgba(255, 255, 255, 0.12);\n  border-radius: 3px;\n  cursor: pointer;\n}\n.sc-drw-palette-cell:hover { transform: scale(1.15); border-color: #ffffff; }\n.sc-drw-palette--inline {\n  display: none;\n  position: absolute;\n  top: 100%;\n  left: 0;\n  margin-top: 4px;\n  background: #1f1f1f;\n  border: none;\n  border-radius: 6px;\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 8px 20px rgba(0, 0, 0, 0.45);\n  z-index: 5;\n}\n.sc-drw-field:hover .sc-drw-palette--inline { display: grid; }\n.sc-drw-dialog {\n  position: absolute;\n  top: 0;\n  left: 0;\n  width: 250px;\n  background: #1f1f1f;\n  border: none;\n  border-radius: 6px;\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 8px 20px rgba(0, 0, 0, 0.45);\n  color: #dbdbdb;\n  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;\n  font-size: 12px;\n  user-select: none;\n  will-change: transform;\n  z-index: 20;\n}\n.sc-drw-dialog-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 8px 10px;\n  font-weight: 600;\n  cursor: grab;\n  border-bottom: 1px solid rgba(219, 219, 219, 0.08);\n}\n.sc-drw-dialog-header:active { cursor: grabbing; }\n.sc-drw-dialog-tabs {\n  display: flex;\n  gap: 2px;\n  padding: 4px 8px 0;\n  border-bottom: 1px solid rgba(219, 219, 219, 0.08);\n}\n.sc-drw-dialog-tab {\n  padding: 6px 10px;\n  border: none;\n  border-radius: 4px 4px 0 0;\n  background: transparent;\n  color: #8c8c8c;\n  font: inherit;\n  cursor: pointer;\n}\n.sc-drw-dialog-tab:hover { color: #dbdbdb; }\n.sc-drw-dialog-tab[data-on=\"true\"] {\n  color: #ffffff;\n  background: #2e2e2e;\n}\n.sc-drw-dialog-body {\n  max-height: 340px;\n  overflow-y: auto;\n  padding: 10px;\n}\n.sc-drw-section {\n  padding: 8px 2px 4px;\n  color: #8c8c8c;\n  font-size: 11px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: 0.4px;\n}\n.sc-drw-field {\n  position: relative;\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  padding: 4px 2px;\n  min-height: 26px;\n}\n.sc-drw-field-label {\n  flex: 1;\n  color: #9a9a9a;\n}\n.sc-drw-field-control {\n  position: relative;\n  display: flex;\n  align-items: center;\n  gap: 6px;\n}\n.sc-drw-input {\n  width: 112px;\n  padding: 4px 8px;\n  border: 1px solid #2e2e2e;\n  border-radius: 4px;\n  background: #0f0f0f;\n  color: #dbdbdb;\n  font: inherit;\n}\n.sc-drw-input:focus { outline: none; border-color: #2962ff; }\n.sc-drw-input--narrow { width: 64px; }\n.sc-drw-color {\n  width: 30px;\n  height: 24px;\n  padding: 0;\n  border: 1px solid #2e2e2e;\n  border-radius: 4px;\n  background: transparent;\n  cursor: pointer;\n}\n.sc-drw-levels {\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n  width: 100%;\n}\n.sc-drw-level-row {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  padding: 2px 0;\n}\n/* \u2500\u2500 Left tool palette (toolPalette.ts) \u2014 TV rail: 52px, flat #0f0f0f,\n   52\u00D738 buttons, 28px icons, right-edge \u203A carets, light active tile. \u2500\u2500\u2500\u2500 */\n.sc-drw-tools {\n  position: relative;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 0;\n  width: 52px;\n  height: 100%;\n  padding: 2px 0;\n  background: #0f0f0f;\n  border-right: none;\n  color: #dbdbdb;\n  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;\n  font-size: 12px;\n  line-height: 1;\n  user-select: none;\n  overflow-y: auto;\n  overflow-x: hidden;\n  scrollbar-width: none;\n}\n.sc-drw-tools::-webkit-scrollbar { display: none; }\n.sc-drw-tools-group {\n  position: relative;\n  display: flex;\n  width: 52px;\n  flex: none;\n}\n.sc-drw-tools-btn {\n  width: 52px;\n  height: 38px;\n  border-radius: 0;\n}\n.sc-drw-tools-btn:hover { background: transparent; }\n.sc-drw-tools-icon {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 32px;\n  height: 32px;\n  border-radius: 5px;\n}\n.sc-drw-tools-icon svg { display: block; width: 28px; height: 28px; }\n.sc-drw-tools-btn:hover .sc-drw-tools-icon { background: #2e2e2e; }\n.sc-drw-tools-btn[data-on=\"true\"] { color: #0f0f0f; }\n.sc-drw-tools-btn[data-on=\"true\"] .sc-drw-tools-icon {\n  background: #f0f3fa;\n  color: #0f0f0f;\n}\n/* The flyout caret is TV's right-edge \u203A sliver \u2014 a separate narrow button\n   overlaid on the group's right side, vertically centered. */\n.sc-drw-tools-caret {\n  position: absolute;\n  right: 0;\n  top: 50%;\n  transform: translateY(-50%);\n  display: inline-flex;\n  align-items: center;\n  justify-content: flex-start;\n  width: 11px;\n  height: 34px;\n  padding: 0 0 0 1px;\n  margin: 0;\n  border: none;\n  border-radius: 4px 0 0 4px;\n  background: transparent;\n  color: #8c8c8c;\n  cursor: pointer;\n}\n.sc-drw-tools-caret svg { display: block; width: 5px; height: 8px; }\n.sc-drw-tools-caret:hover { background: #2e2e2e; color: #dbdbdb; }\n.sc-drw-tools-chrome {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 0;\n  margin-top: auto;\n  padding-top: 2px;\n  width: 100%;\n  border-top: 1px solid rgba(219, 219, 219, 0.1);\n}\n.sc-drw-flyout {\n  /* position:fixed + document.body \u2014 the palette's rail can scroll\n     (overflow-y:auto) so an in-rail flyout would be clipped. */\n  position: fixed;\n  width: 292px;\n  max-width: calc(100vw - 60px);\n  max-height: calc(100vh - 16px);\n  overflow-y: auto;\n  padding: 4px 0;\n  background: #1f1f1f;\n  border: none;\n  border-radius: 6px;\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);\n  color: #dbdbdb;\n  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;\n  font-size: 14px;\n  z-index: 20;\n  scrollbar-width: thin;\n}\n.sc-drw-flyout-item {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  height: 40px;\n  padding: 6px 10px 6px 8px;\n  border-radius: 0;\n}\n.sc-drw-flyout-item[data-on=\"true\"] { background: #2e2e2e; color: inherit; }\n.sc-drw-flyout-item--disabled {\n  opacity: 0.4;\n  cursor: default;\n}\n.sc-drw-flyout-item--disabled:hover { background: transparent; }\n.sc-drw-flyout-icon {\n  display: inline-flex;\n  flex: none;\n  color: #dbdbdb;\n}\n.sc-drw-flyout-icon svg { width: 28px; height: 28px; }\n.sc-drw-flyout-title { flex: 1; font-size: 14px; }\n.sc-drw-flyout-key {\n  color: #8c8c8c;\n  font-size: 12px;\n  text-transform: uppercase;\n  flex: none;\n}\n.sc-drw-flyout-sep {\n  height: 1px;\n  margin: 4px 0;\n  background: #0f0f0f;\n}\n.sc-drw-tools-sep {\n  width: 24px;\n  height: 1px;\n  margin: 4px auto;\n  background: rgba(219, 219, 219, 0.12);\n  flex: none;\n}\n.sc-drw-emoji {\n  width: 300px;\n  background: #1f1f1f;\n  border-radius: 6px;\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);\n  color: #dbdbdb;\n  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;\n  z-index: 20;\n  overflow: hidden;\n}\n.sc-drw-emoji-tabs {\n  display: flex;\n  gap: 2px;\n  padding: 6px 8px 0;\n  border-bottom: 1px solid rgba(219, 219, 219, 0.1);\n}\n.sc-drw-emoji-tab {\n  flex: 1;\n  background: transparent;\n  border: none;\n  color: #8c8c8c;\n  font-size: 13px;\n  padding: 8px 4px;\n  cursor: pointer;\n  border-bottom: 2px solid transparent;\n}\n.sc-drw-emoji-tab[data-on=\"true\"] {\n  color: #dbdbdb;\n  border-bottom-color: #2962ff;\n}\n.sc-drw-emoji-grid {\n  display: grid;\n  grid-template-columns: repeat(8, 1fr);\n  gap: 2px;\n  padding: 8px;\n  max-height: 260px;\n  overflow-y: auto;\n  scrollbar-width: thin;\n}\n.sc-drw-emoji-cell {\n  background: transparent;\n  border: none;\n  border-radius: 4px;\n  font-size: 20px;\n  line-height: 1;\n  padding: 5px 0;\n  cursor: pointer;\n}\n.sc-drw-emoji-cell:hover { background: #2e2e2e; }\n";
+var CSS = "\n/* TV-capture tokens \u2014 dark theme measured off the real TradingView rail:\n   rail #0f0f0f, surfaces #1f1f1f, hover #2e2e2e, text #dbdbdb, muted #8c8c8c,\n   active tool = light tile #f0f3fa with dark icon. */\n\n/* Theme palettes \u2014 surfaces opt in via data-sc-theme. Dark = TV dark rail;\n   light follows TV's light chrome (white rail, #f0f3fa hover, dark text). */\n:root, [data-sc-theme=\"dark\"] {\n  --sc-drw-rail: #0f0f0f;\n  --sc-drw-inset: #0f0f0f;\n  --sc-drw-surface: #1f1f1f;\n  --sc-drw-hover: #2e2e2e;\n  --sc-drw-pressed: #363636;\n  --sc-drw-line: #2e2e2e;\n  --sc-drw-text: #dbdbdb;\n  --sc-drw-strong: #ffffff;\n  --sc-drw-muted: #8c8c8c;\n  --sc-drw-border: rgba(219, 219, 219, 0.12);\n  --sc-drw-cell-border: rgba(255, 255, 255, 0.12);\n  --sc-drw-accent: #2962ff;\n  --sc-drw-accent-hi: #4c7dff;\n  --sc-drw-active-tile: #f0f3fa;\n  --sc-drw-active-text: #0f0f0f;\n  --sc-drw-danger: #f23645;\n}\n[data-sc-theme=\"light\"] {\n  --sc-drw-rail: #ffffff;\n  --sc-drw-inset: #f0f3fa;\n  --sc-drw-surface: #ffffff;\n  --sc-drw-hover: #f0f3fa;\n  --sc-drw-pressed: #e0e3eb;\n  --sc-drw-line: #e0e3eb;\n  --sc-drw-text: #131722;\n  --sc-drw-strong: #131722;\n  --sc-drw-muted: #787b86;\n  --sc-drw-border: rgba(19, 23, 34, 0.09);\n  --sc-drw-cell-border: rgba(19, 23, 34, 0.15);\n  --sc-drw-accent: #2962ff;\n  --sc-drw-accent-hi: #1e53e5;\n  --sc-drw-active-tile: #f0f3fa;\n  --sc-drw-active-text: #2962ff;\n  --sc-drw-danger: #f23645;\n}\n.sc-drw-toolbar {\n  position: absolute;\n  top: 0;\n  left: 0;\n  display: flex;\n  align-items: center;\n  height: 38px;\n  padding: 0 2px;\n  background: var(--sc-drw-surface);\n  border: none;\n  border-radius: 6px;\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);\n  color: var(--sc-drw-text);\n  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;\n  font-size: 12px;\n  line-height: 1;\n  user-select: none;\n  white-space: nowrap;\n  will-change: transform;\n}\n.sc-drw-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 38px;\n  height: 38px;\n  padding: 0;\n  margin: 0;\n  border: none;\n  border-radius: 4px;\n  background: transparent;\n  color: var(--sc-drw-text);\n  cursor: pointer;\n  flex: none;\n}\n.sc-drw-btn:hover { background: var(--sc-drw-hover); }\n.sc-drw-btn:active { background: var(--sc-drw-pressed); }\n.sc-drw-btn[data-on=\"true\"] { color: var(--sc-drw-accent); }\n.sc-drw-btn[data-on=\"true\"]:hover { color: var(--sc-drw-accent-hi); }\n.sc-drw-btn svg { display: block; width: 28px; height: 28px; }\n.sc-drw-btn--wide { width: auto; padding: 0 8px; font-size: 12px; gap: 4px; }\n.sc-drw-btn--wide svg { width: 16px; height: 16px; }\n.sc-drw-grip {\n  cursor: grab;\n  color: var(--sc-drw-muted);\n  width: 14px;\n}\n.sc-drw-grip:active { cursor: grabbing; }\n.sc-drw-sep {\n  width: 1px;\n  height: 18px;\n  margin: 0 1px;\n  background: var(--sc-drw-border);\n  flex: none;\n}\n/* Color buttons are icon glyphs with a 3px color bar at the foot \u2014 TV's\n   \"M\u00E0u c\u00F4ng c\u1EE5 \u0111\u01B0\u1EDDng k\u1EBB / M\u00E0u v\u0103n b\u1EA3n\" affordance, not a solid swatch. */\n.sc-drw-colorbtn { position: relative; }\n.sc-drw-colorbtn svg { width: 28px; height: 28px; }\n.sc-drw-colorbar {\n  position: absolute;\n  left: 9px;\n  right: 9px;\n  bottom: 5px;\n  height: 3px;\n  border-radius: 1.5px;\n}\n.sc-drw-widthbtn { width: auto; padding: 0 8px; gap: 5px; font-size: 12px; }\n.sc-drw-widthbtn .sc-drw-width-line { flex: none; }\n.sc-drw-widthbtn .sc-drw-width-caret { display: inline-flex; flex: none; color: var(--sc-drw-muted); }\n.sc-drw-widthbtn .sc-drw-width-caret svg { width: 10px; height: 10px; }\n.sc-drw-menu {\n  position: absolute;\n  top: 0;\n  left: 0;\n  min-width: 140px;\n  padding: 4px;\n  background: var(--sc-drw-surface);\n  border: none;\n  border-radius: 6px;\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 8px 20px rgba(0, 0, 0, 0.45);\n  color: var(--sc-drw-text);\n  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;\n  font-size: 13px;\n  z-index: 10;\n}\n.sc-drw-menu-item {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  width: 100%;\n  height: 32px;\n  padding: 0 10px;\n  border: none;\n  border-radius: 4px;\n  background: transparent;\n  color: inherit;\n  font: inherit;\n  text-align: left;\n  cursor: pointer;\n}\n.sc-drw-menu-item:hover { background: var(--sc-drw-hover); }\n.sc-drw-menu-item[data-on=\"true\"] { color: var(--sc-drw-accent-hi); }\n.sc-drw-menu-item svg { width: 18px; height: 18px; flex: none; }\n.sc-drw-ctxmenu {\n  position: fixed;\n  top: 0;\n  left: 0;\n  min-width: 220px;\n  z-index: 1200;\n}\n.sc-drw-menu-sep {\n  height: 1px;\n  margin: 4px -4px;\n  background: var(--sc-drw-inset);\n}\n.sc-drw-menu-icon { display: flex; width: 18px; height: 18px; flex: none; align-items: center; justify-content: center; }\n.sc-drw-menu-text { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.sc-drw-menu-item--danger { color: var(--sc-drw-danger); }\n.sc-drw-menu-item--disabled { color: var(--sc-drw-muted); cursor: default; }\n.sc-drw-menu-item--disabled:hover { background: transparent; }\n.sc-drw-menu-label {\n  padding: 8px 12px 4px;\n  color: var(--sc-drw-muted);\n  font-size: 11px;\n  text-transform: uppercase;\n  letter-spacing: 0.4px;\n}\n.sc-drw-palette {\n  display: grid;\n  grid-template-columns: repeat(7, 20px);\n  gap: 5px;\n  padding: 6px;\n}\n.sc-drw-palette-cell {\n  width: 20px;\n  height: 20px;\n  padding: 0;\n  border: 1px solid var(--sc-drw-cell-border);\n  border-radius: 3px;\n  cursor: pointer;\n}\n.sc-drw-palette-cell:hover { transform: scale(1.15); border-color: var(--sc-drw-text); }\n.sc-drw-palette--inline {\n  display: none;\n  position: absolute;\n  top: 100%;\n  left: 0;\n  margin-top: 4px;\n  background: var(--sc-drw-surface);\n  border: none;\n  border-radius: 6px;\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 8px 20px rgba(0, 0, 0, 0.45);\n  z-index: 5;\n}\n.sc-drw-field:hover .sc-drw-palette--inline { display: grid; }\n.sc-drw-dialog {\n  position: absolute;\n  top: 0;\n  left: 0;\n  width: 250px;\n  background: var(--sc-drw-surface);\n  border: none;\n  border-radius: 6px;\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 8px 20px rgba(0, 0, 0, 0.45);\n  color: var(--sc-drw-text);\n  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;\n  font-size: 12px;\n  user-select: none;\n  will-change: transform;\n  z-index: 20;\n}\n.sc-drw-dialog-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 8px 10px;\n  font-weight: 600;\n  cursor: grab;\n  border-bottom: 1px solid var(--sc-drw-border);\n}\n.sc-drw-dialog-header:active { cursor: grabbing; }\n.sc-drw-dialog-tabs {\n  display: flex;\n  gap: 2px;\n  padding: 4px 8px 0;\n  border-bottom: 1px solid var(--sc-drw-border);\n}\n.sc-drw-dialog-tab {\n  padding: 6px 10px;\n  border: none;\n  border-radius: 4px 4px 0 0;\n  background: transparent;\n  color: var(--sc-drw-muted);\n  font: inherit;\n  cursor: pointer;\n}\n.sc-drw-dialog-tab:hover { color: var(--sc-drw-text); }\n.sc-drw-dialog-tab[data-on=\"true\"] {\n  color: var(--sc-drw-strong);\n  background: var(--sc-drw-hover);\n}\n.sc-drw-dialog-body {\n  max-height: 340px;\n  overflow-y: auto;\n  padding: 10px;\n}\n.sc-drw-section {\n  padding: 8px 2px 4px;\n  color: var(--sc-drw-muted);\n  font-size: 11px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: 0.4px;\n}\n.sc-drw-field {\n  position: relative;\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  padding: 4px 2px;\n  min-height: 26px;\n}\n.sc-drw-field-label {\n  flex: 1;\n  color: var(--sc-drw-muted);\n}\n.sc-drw-field-control {\n  position: relative;\n  display: flex;\n  align-items: center;\n  gap: 6px;\n}\n.sc-drw-input {\n  width: 112px;\n  padding: 4px 8px;\n  border: 1px solid var(--sc-drw-line);\n  border-radius: 4px;\n  background: var(--sc-drw-inset);\n  color: var(--sc-drw-text);\n  font: inherit;\n}\n.sc-drw-input:focus { outline: none; border-color: var(--sc-drw-accent); }\n.sc-drw-input--narrow { width: 64px; }\n.sc-drw-color {\n  width: 30px;\n  height: 24px;\n  padding: 0;\n  border: 1px solid var(--sc-drw-line);\n  border-radius: 4px;\n  background: transparent;\n  cursor: pointer;\n}\n.sc-drw-levels {\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n  width: 100%;\n}\n.sc-drw-level-row {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  padding: 2px 0;\n}\n/* \u2500\u2500 Left tool palette (toolPalette.ts) \u2014 TV rail: 52px, flat #0f0f0f,\n   52\u00D738 buttons, 28px icons, right-edge \u203A carets, light active tile. \u2500\u2500\u2500\u2500 */\n.sc-drw-tools {\n  position: relative;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 0;\n  width: 52px;\n  height: 100%;\n  padding: 2px 0;\n  background: var(--sc-drw-rail);\n  border-right: none;\n  color: var(--sc-drw-text);\n  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;\n  font-size: 12px;\n  line-height: 1;\n  user-select: none;\n  overflow-y: auto;\n  overflow-x: hidden;\n  scrollbar-width: none;\n}\n.sc-drw-tools::-webkit-scrollbar { display: none; }\n.sc-drw-tools-group {\n  position: relative;\n  display: flex;\n  width: 52px;\n  flex: none;\n}\n.sc-drw-tools-btn {\n  width: 52px;\n  height: 38px;\n  border-radius: 0;\n}\n.sc-drw-tools-btn:hover { background: transparent; }\n.sc-drw-tools-icon {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 32px;\n  height: 32px;\n  border-radius: 5px;\n}\n.sc-drw-tools-icon svg { display: block; width: 28px; height: 28px; }\n.sc-drw-tools-btn:hover .sc-drw-tools-icon { background: var(--sc-drw-hover); }\n.sc-drw-tools-btn[data-on=\"true\"] { color: var(--sc-drw-active-text); }\n.sc-drw-tools-btn[data-on=\"true\"] .sc-drw-tools-icon {\n  background: var(--sc-drw-active-tile);\n  color: var(--sc-drw-active-text);\n}\n/* The flyout caret is TV's right-edge \u203A sliver \u2014 a separate narrow button\n   overlaid on the group's right side, vertically centered. */\n.sc-drw-tools-caret {\n  position: absolute;\n  right: 0;\n  top: 50%;\n  transform: translateY(-50%);\n  display: inline-flex;\n  align-items: center;\n  justify-content: flex-start;\n  width: 11px;\n  height: 34px;\n  padding: 0 0 0 1px;\n  margin: 0;\n  border: none;\n  border-radius: 4px 0 0 4px;\n  background: transparent;\n  color: var(--sc-drw-muted);\n  cursor: pointer;\n}\n.sc-drw-tools-caret svg { display: block; width: 5px; height: 8px; }\n.sc-drw-tools-caret:hover { background: var(--sc-drw-hover); color: var(--sc-drw-text); }\n.sc-drw-tools-chrome {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 0;\n  margin-top: auto;\n  padding-top: 2px;\n  width: 100%;\n  border-top: 1px solid var(--sc-drw-border);\n}\n.sc-drw-flyout {\n  /* position:fixed + document.body \u2014 the palette's rail can scroll\n     (overflow-y:auto) so an in-rail flyout would be clipped. */\n  position: fixed;\n  width: 292px;\n  max-width: calc(100vw - 60px);\n  max-height: calc(100vh - 16px);\n  overflow-y: auto;\n  padding: 4px 0;\n  background: var(--sc-drw-surface);\n  border: none;\n  border-radius: 6px;\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);\n  color: var(--sc-drw-text);\n  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;\n  font-size: 14px;\n  z-index: 20;\n  scrollbar-width: thin;\n}\n.sc-drw-flyout-item {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  height: 40px;\n  padding: 6px 10px 6px 8px;\n  border-radius: 0;\n}\n.sc-drw-flyout-item[data-on=\"true\"] { background: var(--sc-drw-hover); color: inherit; }\n.sc-drw-flyout-item--disabled {\n  opacity: 0.4;\n  cursor: default;\n}\n.sc-drw-flyout-item--disabled:hover { background: transparent; }\n.sc-drw-flyout-icon {\n  display: inline-flex;\n  flex: none;\n  color: var(--sc-drw-text);\n}\n.sc-drw-flyout-icon svg { width: 28px; height: 28px; }\n.sc-drw-flyout-title { flex: 1; font-size: 14px; }\n.sc-drw-flyout-key {\n  color: var(--sc-drw-muted);\n  font-size: 12px;\n  text-transform: uppercase;\n  flex: none;\n}\n.sc-drw-flyout-sep {\n  height: 1px;\n  margin: 4px 0;\n  background: var(--sc-drw-inset);\n}\n.sc-drw-tools-sep {\n  width: 24px;\n  height: 1px;\n  margin: 4px auto;\n  background: var(--sc-drw-border);\n  flex: none;\n}\n.sc-drw-emoji {\n  width: 300px;\n  background: var(--sc-drw-surface);\n  border-radius: 6px;\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);\n  color: var(--sc-drw-text);\n  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;\n  z-index: 20;\n  overflow: hidden;\n}\n.sc-drw-emoji-tabs {\n  display: flex;\n  gap: 2px;\n  padding: 6px 8px 0;\n  border-bottom: 1px solid var(--sc-drw-border);\n}\n.sc-drw-emoji-tab {\n  flex: 1;\n  background: transparent;\n  border: none;\n  color: var(--sc-drw-muted);\n  font-size: 13px;\n  padding: 8px 4px;\n  cursor: pointer;\n  border-bottom: 2px solid transparent;\n}\n.sc-drw-emoji-tab[data-on=\"true\"] {\n  color: var(--sc-drw-text);\n  border-bottom-color: var(--sc-drw-accent);\n}\n.sc-drw-emoji-grid {\n  display: grid;\n  grid-template-columns: repeat(8, 1fr);\n  gap: 2px;\n  padding: 8px;\n  max-height: 260px;\n  overflow-y: auto;\n  scrollbar-width: thin;\n}\n.sc-drw-emoji-cell {\n  background: transparent;\n  border: none;\n  border-radius: 4px;\n  font-size: 20px;\n  line-height: 1;\n  padding: 5px 0;\n  cursor: pointer;\n}\n.sc-drw-emoji-cell:hover { background: var(--sc-drw-hover); }\n";
 /** Inject the drawings UI stylesheet — idempotent, SSR-safe. */
 function injectDrawingStyles(doc) {
     if (doc === undefined) {
@@ -11832,6 +11832,108 @@ function injectDrawingStyles(doc) {
     style.id = STYLE_ID$1;
     style.textContent = CSS;
     doc.head.appendChild(style);
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var overrides = new WeakMap();
+/** Live surfaces per chart — tagged elements for retagging on setTheme. */
+var surfaces = new WeakMap();
+/** Parse #rgb/#rrggbb/rgb(r,g,b) → 0..255 triple, null when unparsable. */
+function parseColor(color) {
+    var hex = /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(color.trim());
+    if (hex !== null) {
+        var h = hex[1];
+        if (h.length === 3) {
+            h = h.split('').map(function (c) { return c + c; }).join('');
+        }
+        if (h.length === 8) {
+            h = h.slice(0, 6);
+        }
+        return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+    }
+    var rgb = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i.exec(color.trim());
+    if (rgb !== null) {
+        return [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])];
+    }
+    return null;
+}
+/** Relative luminance 0..1 (sRGB threshold ~0.5 splits light/dark). */
+function luminance(color) {
+    var c = parseColor(color);
+    if (c === null) {
+        return null;
+    }
+    return (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255;
+}
+function detectDrawingsTheme(chart) {
+    var styles = chart.getStyles();
+    var bg = styles.candle.area.backgroundColor;
+    var first = isArray(bg) ? bg[0].color : bg;
+    if (isString(first)) {
+        var l = luminance(first);
+        if (l !== null) {
+            return l > 0.5 ? 'light' : 'dark';
+        }
+    }
+    return 'dark';
+}
+function getDrawingsTheme(chart) {
+    var _a;
+    return (_a = overrides.get(chart)) !== null && _a !== void 0 ? _a : detectDrawingsTheme(chart);
+}
+/** Tag a surface root so the stylesheet vars apply. */
+function applyDrawingsTheme(chart, el) {
+    var e_1, _a;
+    el.setAttribute('data-sc-theme', getDrawingsTheme(chart));
+    var set = surfaces.get(chart);
+    if (set === undefined) {
+        set = new Set();
+        surfaces.set(chart, set);
+    }
+    try {
+        // Prune detached nodes so the registry stays bounded.
+        for (var set_1 = __values(set), set_1_1 = set_1.next(); !set_1_1.done; set_1_1 = set_1.next()) {
+            var e = set_1_1.value;
+            if (!e.isConnected) {
+                set.delete(e);
+            }
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (set_1_1 && !set_1_1.done && (_a = set_1.return)) _a.call(set_1);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    set.add(el);
+}
+function setDrawingsTheme(chart, theme) {
+    var _a;
+    if (theme === 'auto') {
+        overrides.delete(chart);
+    }
+    else {
+        overrides.set(chart, theme);
+    }
+    var resolved = getDrawingsTheme(chart);
+    (_a = surfaces.get(chart)) === null || _a === void 0 ? void 0 : _a.forEach(function (el) {
+        if (el.isConnected) {
+            el.setAttribute('data-sc-theme', resolved);
+        }
+    });
 }
 
 /**
@@ -11924,6 +12026,7 @@ function attachFloatingToolbar(chart, manager, hooks) {
         closeMenu();
         var menu = createDom('div');
         menu.className = 'sc-drw-menu';
+        applyDrawingsTheme(chart, menu);
         build(menu);
         // Position below the toolbar, aligned to the anchor button. Clamp the
         // right edge — a menu anchored near the pane's right side would clip
@@ -12617,6 +12720,7 @@ function attachFloatingToolbar(chart, manager, hooks) {
         manualOffset = null;
         element = createDom('div');
         element.className = 'sc-drw-toolbar';
+        applyDrawingsTheme(chart, element);
         unmount = layer.mount(element, { interactive: true });
         build();
         reposition();
@@ -15041,6 +15145,7 @@ function attachSettingsDialog(chart, manager) {
         activeTab = 'style';
         element = createDom('div');
         element.className = 'sc-drw-dialog';
+        applyDrawingsTheme(chart, element);
         element.setAttribute('role', 'dialog');
         element.style.transform = "translate3d(".concat(pos.x, "px, ").concat(pos.y, "px, 0)");
         // Keep chart interaction events from bleeding through the panel.
@@ -15258,6 +15363,7 @@ function attachContextMenu(chart, manager, options) {
         });
         menu = createDom('div');
         menu.className = 'sc-drw-menu sc-drw-ctxmenu';
+        applyDrawingsTheme(chart, menu);
         menu.setAttribute('role', 'menu');
         items.forEach(function (it) {
             menu === null || menu === void 0 ? void 0 : menu.appendChild(it === 'sep' ? separator() : itemEl(it, overlay));
@@ -15408,6 +15514,7 @@ function mountToolPalette(container, chart, api, options) {
     injectDrawingStyles(ownerDoc);
     var root = createDom('div');
     root.className = 'sc-drw-tools';
+    applyDrawingsTheme(chart, root);
     /** group id → last armed catalog item (defaults to first available). */
     var lastUsed = new Map();
     /** group id → rail button, for active-tool highlighting. */
@@ -15489,6 +15596,7 @@ function mountToolPalette(container, chart, api, options) {
         }
         var pop = createDom('div');
         pop.className = 'sc-drw-emoji';
+        applyDrawingsTheme(chart, pop);
         pop.setAttribute('role', 'dialog');
         var tabs = createDom('div');
         tabs.className = 'sc-drw-emoji-tabs';
@@ -15766,6 +15874,7 @@ function mountToolPalette(container, chart, api, options) {
         closeFlyout();
         var menu = createDom('div');
         menu.className = 'sc-drw-flyout';
+        applyDrawingsTheme(chart, menu);
         menu.setAttribute('role', 'menu');
         var firstRow = null;
         var sectionIndex = 0;
@@ -16690,6 +16799,8 @@ function createDrawingsApi(chart, options) {
                 container.style.cursor =
                     mode === 'eraser' ? 'cell' : mode === 'zoom' ? 'zoom-in' : 'default';
             }
+        }, setTheme: function (theme) {
+            setDrawingsTheme(chart, theme);
         }, configure: function (opts) {
             var _a;
             if ('store' in opts) {

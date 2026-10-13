@@ -20,6 +20,7 @@ import type { DrawingManager } from '../manager'
 import { serializeOverlay, serializedToOverlayCreate } from '../serialize'
 import { getDrawingIcon } from '../icons'
 import { injectDrawingStyles } from './styles'
+import { applyDrawingsTheme } from './theme'
 
 /**
  * Right-click context menu for drawings (TradingView behavior): opens at
@@ -201,6 +202,7 @@ export function attachContextMenu (chart: Chart, manager: DrawingManager, option
 
     menu = createDom('div')
     menu.className = 'sc-drw-menu sc-drw-ctxmenu'
+    applyDrawingsTheme(chart, menu)
     menu.setAttribute('role', 'menu')
     items.forEach(it => {
       menu?.appendChild(it === 'sep' ? separator() : itemEl(it, overlay))

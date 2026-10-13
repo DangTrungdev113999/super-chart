@@ -24,6 +24,7 @@ import {
   isStayInDrawingEnabled, setStayInDrawingEnabled
 } from '../interaction/snap45'
 import { injectDrawingStyles } from './styles'
+import { applyDrawingsTheme } from './theme'
 
 /**
  * Left-side tool palette (DP-6d) — TradingView's vertical drawing rail.
@@ -177,6 +178,7 @@ export function mountToolPalette (
 
   const root = createDom('div')
   root.className = 'sc-drw-tools'
+  applyDrawingsTheme(chart, root)
 
   /** group id → last armed catalog item (defaults to first available). */
   const lastUsed = new Map<string, DrawingToolItem>()
@@ -253,6 +255,7 @@ export function mountToolPalette (
     }
     const pop = createDom('div')
     pop.className = 'sc-drw-emoji'
+    applyDrawingsTheme(chart, pop)
     pop.setAttribute('role', 'dialog')
 
     const tabs = createDom('div')
@@ -446,6 +449,7 @@ export function mountToolPalette (
     closeFlyout()
     const menu = createDom('div')
     menu.className = 'sc-drw-flyout'
+    applyDrawingsTheme(chart, menu)
     menu.setAttribute('role', 'menu')
     let firstRow: HTMLElement | null = null
     let sectionIndex = 0

@@ -28,6 +28,7 @@ import { getDrawingCatalog, findCatalogItem, findCatalogItemByHotkey, type Drawi
 import type { DrawingStore } from './persistence'
 import { serializeOverlay, serializedToOverlayCreate, type SerializedDrawing, type SerializedDrawingPoint } from './serialize'
 import { attachFloatingToolbar, type FloatingToolbar, type FloatingToolbarHooks } from './ui/floatingToolbar'
+import { setDrawingsTheme } from './ui/theme'
 import { attachSettingsDialog, type SettingsDialog } from './ui/settingsDialog'
 import { attachContextMenu, type ContextMenuOptions, type DrawingContextMenu } from './ui/contextMenu'
 import { mountToolPalette, type ToolPalette, type ToolPaletteOptions } from './ui/toolPalette'
@@ -160,6 +161,12 @@ export interface DrawingsApi extends DrawingManager {
    * hosts can call it directly too.
    */
   setCursorMode: (mode: string) => void
+
+  /**
+   * Drawings chrome theme — 'light' | 'dark' | 'auto' (auto derives from the
+   * chart's candle area background luminance). Retags mounted surfaces.
+   */
+  setTheme: (theme: 'light' | 'dark' | 'auto') => void
 
   configure: (opts: DrawingsConfigureOptions) => void
 }
@@ -660,6 +667,10 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
         container.style.cursor =
           mode === 'eraser' ? 'cell' : mode === 'zoom' ? 'zoom-in' : 'default'
       }
+    },
+
+    setTheme (theme) {
+      setDrawingsTheme(chart, theme)
     },
 
     configure (opts) {

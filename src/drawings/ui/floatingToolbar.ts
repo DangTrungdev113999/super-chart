@@ -27,6 +27,7 @@ import { isAlign45Enabled, setAlign45Enabled } from '../interaction/snap45'
 import { serializeOverlay, serializedToOverlayCreate } from '../serialize'
 import { getDrawingTemplate, saveDrawingTemplate, clearDrawingTemplate } from '../templates'
 import { injectDrawingStyles, PALETTE } from './styles'
+import { applyDrawingsTheme } from './theme'
 
 /**
  * Floating quick-settings toolbar (DP-6b). Lives on the pane DOM layer and
@@ -147,6 +148,7 @@ export function attachFloatingToolbar (
     closeMenu()
     const menu = createDom('div')
     menu.className = 'sc-drw-menu'
+    applyDrawingsTheme(chart, menu)
     build(menu)
     // Position below the toolbar, aligned to the anchor button. Clamp the
     // right edge — a menu anchored near the pane's right side would clip
@@ -850,6 +852,7 @@ export function attachFloatingToolbar (
     manualOffset = null
     element = createDom('div')
     element.className = 'sc-drw-toolbar'
+    applyDrawingsTheme(chart, element)
     unmount = layer.mount(element, { interactive: true })
     build()
     reposition()

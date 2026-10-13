@@ -24,6 +24,7 @@ import type { DrawingManager } from '../manager'
 import { findCatalogItemByOverlay } from '../catalog'
 import { hasOpenTextEditorSession } from '../editor/overlayTextEditor'
 import { buildSettingsTabs, type SettingField, type SettingsDraft } from './settingsSchema'
+import { applyDrawingsTheme } from './theme'
 import { injectDrawingStyles, PALETTE } from './styles'
 
 /**
@@ -557,6 +558,7 @@ export function attachSettingsDialog (chart: Chart, manager: DrawingManager): Se
     activeTab = 'style'
     element = createDom('div')
     element.className = 'sc-drw-dialog'
+    applyDrawingsTheme(chart, element)
     element.setAttribute('role', 'dialog')
     element.style.transform = `translate3d(${pos.x}px, ${pos.y}px, 0)`
     // Keep chart interaction events from bleeding through the panel.

@@ -1715,6 +1715,11 @@ export interface DrawingsApi extends DrawingManager {
 	 * hosts can call it directly too.
 	 */
 	setCursorMode: (mode: string) => void;
+	/**
+	 * Drawings chrome theme — 'light' | 'dark' | 'auto' (auto derives from the
+	 * chart's candle area background luminance). Retags mounted surfaces.
+	 */
+	setTheme: (theme: "light" | "dark" | "auto") => void;
 	configure: (opts: DrawingsConfigureOptions) => void;
 }
 export type DomPosition = "root" | "main" | "yAxis";
