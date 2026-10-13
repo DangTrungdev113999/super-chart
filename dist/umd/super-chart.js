@@ -7097,7 +7097,7 @@ var CURVE_HITBOX_HALF_WIDTH$1 = 6;
 var CURVE_SAMPLES$1 = 30;
 // P2 arrow tip (small filled triangle at curve endpoint, matches TV)
 var ARROW_LENGTH$1 = 8;
-var ARROW_HALF_WIDTH$2 = 5;
+var ARROW_HALF_WIDTH$1 = 5;
 
 /**
  * Forecast overlay utility functions
@@ -7596,7 +7596,7 @@ var forecast$1 = {
         // Always drawn — matches TradingView where the arrow is visible in both
         // selected and unselected states (the hollow CP ring sits on top of it).
         var tanAtP2 = quadBezierTangent$1(c1, cp, c2, 1);
-        var arrowPoly = buildArrowPolygon$1(c2, tanAtP2, ARROW_LENGTH$1, ARROW_HALF_WIDTH$2);
+        var arrowPoly = buildArrowPolygon$1(c2, tanAtP2, ARROW_LENGTH$1, ARROW_HALF_WIDTH$1);
         figures.push({
             key: 'fc_arrow',
             type: 'polygon',
@@ -10850,7 +10850,8 @@ function buildCatalog() {
                         item('pitchfork', 'pitchfork', 'Pitchfork', 'pitchfork', caps({ anchorCount: 3 }), LINE_RECIPE),
                         item('schiffPitchfork', 'schiffPitchfork', 'Schiff Pitchfork', 'pitchfork', caps({ anchorCount: 3 }), LINE_RECIPE),
                         item('modifiedSchiffPitchfork', 'modifiedSchiffPitchfork', 'Modified Schiff', 'pitchfork', caps({ anchorCount: 3 }), LINE_RECIPE),
-                        item('insidePitchfork', 'insidePitchfork', 'Inside Pitchfork', 'pitchfork', caps({ anchorCount: 3 }), LINE_RECIPE)
+                        item('insidePitchfork', 'insidePitchfork', 'Inside Pitchfork', 'pitchfork', caps({ anchorCount: 3 }), LINE_RECIPE),
+                        item('pitchfan', 'pitchfan', 'Pitchfan', 'pitchfork', caps({ anchorCount: 3 }), LINE_RECIPE)
                     ]
                 }
             ]
@@ -13823,25 +13824,104 @@ function styleFields(overlay, item, draft) {
     }
     return fields;
 }
-function optionFields(overlay, draft) {
-    // Top-level booleans on extendData become auto-labeled toggles — extend
-    // modes, fan/arc visibility flags etc. carried by rebuilt tools.
+/** Bounds for well-known auto-scanned extendData numbers (key → range). */
+var AUTO_NUMBER_BOUNDS = {
+    transparency: { min: 0, max: 100, step: 1 },
+    fontsize: { min: 8, max: 72, step: 1 },
+    fontSize: { min: 8, max: 72, step: 1 },
+    lineWidth: { min: 1, max: 8, step: 1 },
+    smooth: { min: 0, max: 20, step: 1 },
+    scaleRatio: { min: 0, step: 0.01 },
+    degree: { min: 0, max: 14, step: 1 },
+    level: { min: 0, step: 0.001 },
+    coefficient: { min: 0, step: 0.001 }
+};
+function optionFields(overlay, item, draft) {
+    var e_3, _a, e_4, _b;
+    var _c, _d, _e;
     var ed = overlay.extendData;
     if (ed === null || typeof ed !== 'object') {
         return [];
     }
+    // Top-level keys already bound by a stylePaths entry (e.g.
+    // extendData.lineColor) are covered by styleFields — skip them here so
+    // they don't double-emit.
+    var claimed = new Set();
+    var paths = (_c = item === null || item === void 0 ? void 0 : item.stylePaths) !== null && _c !== void 0 ? _c : {};
+    try {
+        for (var _f = __values(Object.values(paths)), _g = _f.next(); !_g.done; _g = _f.next()) {
+            var sp = _g.value;
+            if (sp !== undefined && sp[0] === 'extendData' && sp.length === 2 && isString(sp[1])) {
+                claimed.add(sp[1]);
+            }
+        }
+    }
+    catch (e_3_1) { e_3 = { error: e_3_1 }; }
+    finally {
+        try {
+            if (_g && !_g.done && (_a = _f.return)) _a.call(_f);
+        }
+        finally { if (e_3) throw e_3.error; }
+    }
     var record = ed;
-    return Object.keys(record)
-        // `_`-prefixed runtime keys and `isEditing` are transient state —
-        // serialize strips them; surfacing them as toggles corrupts the strip.
-        .filter(function (key) { return key !== 'common' && key !== 'data' && !key.startsWith('_') && key !== 'isEditing' && isBoolean(record[key]); })
-        .map(function (key) { return ({
-        id: "flag_".concat(key),
-        kind: 'checkbox',
-        label: key.replace(/([A-Z])/g, ' $1').replace(/^./, function (c) { return c.toUpperCase(); }),
-        get: function () { return overlay.extendData[key]; },
-        set: function (v) { draft.extendData([key], v); }
-    }); });
+    var fields = [];
+    var _loop_1 = function (key) {
+        // `_`-prefixed runtime keys, `isEditing`, nested objects and claimed
+        // style paths are excluded; primitives become auto-labeled controls.
+        if (key === 'common' || key === 'data' || key === 'levels' ||
+            key === 'vlevels' || key === 'hlevels' || key === 'fanLevels' ||
+            key === 'arcs' ||
+            key.startsWith('_') || key === 'isEditing' || claimed.has(key)) {
+            return "continue";
+        }
+        var label = key.replace(/([A-Z])/g, ' $1').replace(/^./, function (c) { return c.toUpperCase(); });
+        var value = record[key];
+        if (isBoolean(value)) {
+            fields.push({
+                id: "flag_".concat(key),
+                kind: 'checkbox',
+                label: label,
+                get: function () { return overlay.extendData[key]; },
+                set: function (v) { draft.extendData([key], v); }
+            });
+        }
+        else if (isNumber(value)) {
+            var bounds = (_d = AUTO_NUMBER_BOUNDS[key]) !== null && _d !== void 0 ? _d : {};
+            fields.push({
+                id: "num_".concat(key),
+                kind: 'number',
+                label: label,
+                min: bounds.min,
+                max: bounds.max,
+                step: (_e = bounds.step) !== null && _e !== void 0 ? _e : 0,
+                get: function () { return overlay.extendData[key]; },
+                set: function (v) { draft.extendData([key], v); }
+            });
+        }
+        else if (isString(value)) {
+            fields.push({
+                id: "str_".concat(key),
+                kind: 'text',
+                label: label,
+                get: function () { return overlay.extendData[key]; },
+                set: function (v) { draft.extendData([key], v); }
+            });
+        }
+    };
+    try {
+        for (var _h = __values(Object.keys(record)), _j = _h.next(); !_j.done; _j = _h.next()) {
+            var key = _j.value;
+            _loop_1(key);
+        }
+    }
+    catch (e_4_1) { e_4 = { error: e_4_1 }; }
+    finally {
+        try {
+            if (_j && !_j.done && (_b = _h.return)) _b.call(_h);
+        }
+        finally { if (e_4) throw e_4.error; }
+    }
+    return fields;
 }
 function levelsField(overlay, draft) {
     if (findLevelsPath(overlay.extendData) === null) {
@@ -13932,7 +14012,7 @@ function buildSettingsTabs(overlay, item, draft) {
     if (levels !== null) {
         style.push(levels);
     }
-    style.push.apply(style, __spreadArray([], __read(optionFields(overlay, draft)), false));
+    style.push.apply(style, __spreadArray([], __read(optionFields(overlay, item, draft)), false));
     var tabs = [];
     if (style.length > 0) {
         tabs.push({ id: 'style', title: 'Style', fields: style });
@@ -37697,6 +37777,306 @@ function textEditorHooks(open) {
         }
     };
 }
+var annotationContexts = new WeakMap();
+function rememberAnnotationContext(overlay, chart, bounding) {
+    annotationContexts.set(overlay, { chart: chart, bounding: bounding });
+}
+function annotationChartOf(overlay) {
+    var _a;
+    return (_a = annotationContexts.get(overlay)) === null || _a === void 0 ? void 0 : _a.chart;
+}
+function annotationBoundingOf(overlay) {
+    var _a;
+    return (_a = annotationContexts.get(overlay)) === null || _a === void 0 ? void 0 : _a.bounding;
+}
+/**
+ * Dark-theme detection via the y-axis tick text color luminance — the same
+ * heuristic OverlayView uses (a light tick color implies a dark chart).
+ * TradingView reads model.dark() directly; no such flag is exposed here.
+ */
+function paneIsDark(chart) {
+    var hex = String(chart.getStyles().yAxis.tickText.color);
+    var match = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})/i.exec(hex);
+    if (match === null) {
+        return false;
+    }
+    var luminance = (parseInt(match[1], 16) * 299 + parseInt(match[2], 16) * 587 + parseInt(match[3], 16) * 114) / 1000;
+    return luminance > 128;
+}
+/** Whether the overlay renders at its fixed fraction point vs data point. */
+function isAnchoredNote(overlay, defaultAnchored) {
+    var _a;
+    var anchored = (_a = overlay.extendData) === null || _a === void 0 ? void 0 : _a.anchored;
+    return anchored !== null && anchored !== void 0 ? anchored : defaultAnchored;
+}
+/**
+ * The pane-px position the note pins to: `fx`/`fy` fractions of the pane
+ * when anchored and both were captured, else the converted data point.
+ */
+function notePxPoint(overlay, bounding, dataPx, defaultAnchored) {
+    if (!isAnchoredNote(overlay, defaultAnchored)) {
+        return dataPx;
+    }
+    var ed = overlay.extendData;
+    if (isNumber(ed === null || ed === void 0 ? void 0 : ed.fx) && isNumber(ed.fy)) {
+        return { x: ed.fx * bounding.width, y: ed.fy * bounding.height };
+    }
+    return dataPx;
+}
+/**
+ * Record `px` as the overlay's fixed fractions. Writes extendData in place —
+ * the gesture path already bumped figuresRev, and reassigning through
+ * override() mid-drag would replay performEventPressedMove re-entrantly.
+ */
+function writeAnchoredFractions(overlay, px, bounding) {
+    var current = overlay.extendData;
+    var next = __assign({}, (isObject(current) ? current : {}));
+    next.fx = px.x / bounding.width;
+    next.fy = px.y / bounding.height;
+    overlay.extendData = next;
+}
+/**
+ * Anchored notes keep the fixed fraction point and the data point separate
+ * (TradingView stores `fixedPoint` apart from `points()`): a point drag
+ * must not disturb the stored data anchor while the pin is fixed. The
+ * kernel already wrote the cursor into `points[i]` — restore it, then the
+ * caller writes fx/fy from the raw event pixel.
+ */
+function revertAnchoredPointWrite(overlay, params, px, bounding) {
+    var prev = params.prevPoints;
+    for (var i = 0; i < params.points.length; i++) {
+        var prevPoint = prev[i];
+        var point = params.points[i];
+        if (isValid(prevPoint)) {
+            if (isNumber(prevPoint.timestamp))
+                point.timestamp = prevPoint.timestamp;
+            if (isNumber(prevPoint.dataIndex))
+                point.dataIndex = prevPoint.dataIndex;
+            if (isNumber(prevPoint.value))
+                point.value = prevPoint.value;
+        }
+    }
+    if (bounding !== undefined) {
+        writeAnchoredFractions(overlay, px, bounding);
+    }
+}
+/**
+ * Same for whole-body drags (`performEventBodyMove`): the kernel shifted
+ * every stored point — undo and move the fixed point by the pixel delta.
+ */
+function revertAnchoredBodyMove(overlay, chart, params) {
+    var _a, _b;
+    var bounding = annotationBoundingOf(overlay);
+    var ed = overlay.extendData;
+    if (bounding === undefined || !isNumber(ed === null || ed === void 0 ? void 0 : ed.fx) || !isNumber(ed.fy)) {
+        return;
+    }
+    var before = pointToCoordinate$3(chart, overlay.paneId, (_a = params.prevPoints[0]) !== null && _a !== void 0 ? _a : {});
+    var after = pointToCoordinate$3(chart, overlay.paneId, (_b = params.points[0]) !== null && _b !== void 0 ? _b : {});
+    var dx = after.x - before.x;
+    var dy = after.y - before.y;
+    params.points.forEach(function (point, i) {
+        var prevPoint = params.prevPoints[i];
+        if (isValid(prevPoint)) {
+            if (isNumber(prevPoint.timestamp))
+                point.timestamp = prevPoint.timestamp;
+            if (isNumber(prevPoint.dataIndex))
+                point.dataIndex = prevPoint.dataIndex;
+            if (isNumber(prevPoint.value))
+                point.value = prevPoint.value;
+        }
+    });
+    writeAnchoredFractions(overlay, { x: ed.fx * bounding.width + dx, y: ed.fy * bounding.height + dy }, bounding);
+}
+// ═══════════════════════════════════════════════════════════════════
+// Note pin + hover tooltip (TradingView line-tool-note module 259461)
+// ═══════════════════════════════════════════════════════════════════
+/** TV marker viewBox — a 24×30 teardrop pin, tip at bottom-center. */
+var NOTE_PIN_WIDTH = 24;
+var NOTE_PIN_HEIGHT = 30;
+/** Tooltip is always ~236px wide (capped by pane width). */
+var NOTE_TOOLTIP_WIDTH = 236;
+var NOTE_TOOLTIP_HORZ_PADDING = 12;
+var NOTE_TOOLTIP_VERT_PADDING = 12;
+var NOTE_TOOLTIP_LINE_SPACING = 5;
+/** Vertical gap between pin top and tooltip bottom edge. */
+var NOTE_TOOLTIP_VERT_MARGIN = 13;
+var NOTE_CARET_WIDTH = 12;
+var NOTE_CARET_HEIGHT = 10;
+/** Caret is suppressed when the pin sits within 24px of a pane edge. */
+var NOTE_NO_CARET_EDGE = 24;
+/** Tooltip never sits closer than 10px to the pane top/left/right edges. */
+var NOTE_CORRECT_DISTANCE = 10;
+/**
+ * The 24×30 teardrop outline sampled from TradingView's pin SVG path
+ * (viewBox "0 0 24 30", the `m12 30 ...` curve set) — 30 points are enough
+ * to keep the cubic silhouette smooth at 1× size. Expressed as offsets
+ * from the pin's top-left corner.
+ */
+var NOTE_PIN_OUTLINE = [
+    { x: 12.0, y: 30.0 }, { x: 12.9, y: 29.2 }, { x: 15.8, y: 26.5 }, { x: 18.3, y: 23.9 },
+    { x: 20.4, y: 21.3 }, { x: 21.9, y: 18.9 }, { x: 23.1, y: 16.5 }, { x: 23.8, y: 14.3 },
+    { x: 24.0, y: 12.1 }, { x: 23.7, y: 9.2 }, { x: 22.8, y: 6.6 }, { x: 21.3, y: 4.4 },
+    { x: 19.5, y: 2.5 }, { x: 17.2, y: 1.2 }, { x: 14.7, y: 0.3 }, { x: 12.0, y: 0.0 },
+    { x: 9.3, y: 0.3 }, { x: 6.8, y: 1.2 }, { x: 4.5, y: 2.5 }, { x: 2.7, y: 4.4 },
+    { x: 1.2, y: 6.6 }, { x: 0.3, y: 9.2 }, { x: 0.0, y: 12.1 }, { x: 0.2, y: 14.3 },
+    { x: 0.9, y: 16.5 }, { x: 2.1, y: 18.9 }, { x: 3.6, y: 21.3 }, { x: 5.7, y: 23.9 },
+    { x: 8.2, y: 26.5 }, { x: 11.1, y: 29.2 }
+];
+function noteTooltipLayout(data, point, bounding) {
+    var width = Math.min(NOTE_TOOLTIP_WIDTH, bounding.width);
+    var textWidth = width - 2 * NOTE_TOOLTIP_HORZ_PADDING;
+    // Line count through the shared box layout — identical wrap/spacing math
+    // as the figure and editor (never measured twice).
+    var probe = computeTextBoxLayout(__assign(__assign({}, data), { wordWrapWidth: textWidth, boxPaddingHorz: NOTE_TOOLTIP_HORZ_PADDING, boxPaddingVert: NOTE_TOOLTIP_VERT_PADDING, lineSpacing: NOTE_TOOLTIP_LINE_SPACING }), { x: 0, y: 0 });
+    var height = probe.boxHeight;
+    var left = Math.round(point.x - width / 2);
+    var top = Math.round(point.y - NOTE_PIN_HEIGHT - height - NOTE_TOOLTIP_VERT_MARGIN);
+    var noCaret = point.x < NOTE_NO_CARET_EDGE || point.x + NOTE_NO_CARET_EDGE > bounding.width;
+    var caretSide = noCaret ? null : 'top';
+    if (top < NOTE_CORRECT_DISTANCE) {
+        top = Math.round(point.y + NOTE_TOOLTIP_VERT_MARGIN);
+    }
+    else if (!noCaret) {
+        caretSide = 'bottom';
+    }
+    if (left < NOTE_CORRECT_DISTANCE) {
+        left = NOTE_CORRECT_DISTANCE;
+    }
+    else if (left + width + NOTE_CORRECT_DISTANCE > bounding.width) {
+        left = bounding.width - width - NOTE_CORRECT_DISTANCE;
+    }
+    var caretBaseY = caretSide === 'top' ? top : top + height;
+    var caretApex = caretSide === 'top'
+        ? { x: point.x, y: top - NOTE_CARET_HEIGHT }
+        : { x: point.x, y: top + height + NOTE_CARET_HEIGHT };
+    return {
+        left: left,
+        top: top,
+        width: width,
+        height: height,
+        textWidth: textWidth,
+        caretSide: caretSide,
+        caretApex: caretApex,
+        caretBaseLeft: point.x - NOTE_CARET_WIDTH / 2,
+        caretBaseRight: point.x + NOTE_CARET_WIDTH / 2,
+        caretBaseY: caretBaseY
+    };
+}
+/**
+ * Pin + hover tooltip + caret figures shared by the note and anchored-note
+ * tools. `point` is the resolved pane-px position (fx/fy or data point).
+ * The tooltip shows while hovered or selected — `editing` forces it while
+ * an editor session is live so the invisible textarea never floats over an
+ * invisible box (TradingView keeps the tooltip up in edit mode).
+ */
+function createPinNoteFigures(params) {
+    var _a, _b, _c, _d, _e, _f;
+    var point = params.point, text = params.text, styles = params.styles, bounding = params.bounding, dark = params.dark, showTooltip = params.showTooltip;
+    var pinLeft = point.x - NOTE_PIN_WIDTH / 2;
+    var pinTop = point.y - NOTE_PIN_HEIGHT;
+    var markerColor = (_a = styles.markerColor) !== null && _a !== void 0 ? _a : '#2962FF';
+    var figures = [
+        {
+            key: 'pin',
+            type: 'polygon',
+            attrs: {
+                coordinates: NOTE_PIN_OUTLINE.map(function (p) { return ({ x: p.x + pinLeft, y: p.y + pinTop }); })
+            },
+            styles: { style: 'fill', color: markerColor },
+            pointIndex: 0,
+            cursor: 'move',
+            bounds: { x: pinLeft, y: pinTop, width: NOTE_PIN_WIDTH, height: NOTE_PIN_HEIGHT }
+        },
+        // The punched hole of the SVG pin — approximated by an opaque disc in
+        // the pane-background tone (canvas figures cannot fill evenodd).
+        {
+            key: 'pinHole',
+            type: 'circle',
+            attrs: { x: point.x, y: pinTop + 12, r: 5 },
+            styles: { style: 'fill', color: dark ? '#131722' : '#FFFFFF' },
+            pointIndex: 0,
+            cursor: 'move'
+        }
+    ];
+    if (!showTooltip) {
+        return figures;
+    }
+    var drawBackground = (_b = styles.drawBackground) !== null && _b !== void 0 ? _b : true;
+    var drawBorder = (_c = styles.drawBorder) !== null && _c !== void 0 ? _c : false;
+    var backgroundColor = drawBackground
+        ? (isNumber(styles.backgroundTransparency) && styles.backgroundTransparency > 0 && isString(styles.backgroundColor)
+            ? hexToRgb(styles.backgroundColor, 1 - styles.backgroundTransparency / 100)
+            : styles.backgroundColor)
+        : undefined;
+    var layout = noteTooltipLayout(__assign(__assign({}, baseTextBoxData(text, styles)), { text: text }), point, bounding);
+    var attrs = {
+        x: layout.left,
+        y: layout.top,
+        text: text,
+        fontSize: (_d = styles.fontSize) !== null && _d !== void 0 ? _d : 14,
+        bold: styles.bold,
+        italic: styles.italic,
+        fontFamily: styles.fontFamily,
+        wordWrapWidth: layout.textWidth,
+        boxWidth: layout.width,
+        boxPaddingHorz: NOTE_TOOLTIP_HORZ_PADDING,
+        boxPaddingVert: NOTE_TOOLTIP_VERT_PADDING,
+        lineSpacing: NOTE_TOOLTIP_LINE_SPACING,
+        horzAlign: 'left',
+        vertAlign: 'top',
+        horzTextAlign: 'left'
+    };
+    if (layout.caretSide !== null) {
+        figures.push({
+            key: 'caret',
+            type: 'polygon',
+            attrs: {
+                coordinates: [
+                    { x: layout.caretBaseLeft, y: layout.caretBaseY },
+                    layout.caretApex,
+                    { x: layout.caretBaseRight, y: layout.caretBaseY }
+                ]
+            },
+            styles: { style: 'fill', color: backgroundColor !== null && backgroundColor !== void 0 ? backgroundColor : 'transparent' }
+        });
+    }
+    // Tolerance strip between pin and tooltip keeps the overlay hovered while
+    // crossing the gap (TV hit-tests the same strip — the module's
+    // SpaceBetweenMarkerAndTooltipTolerance = 8).
+    var tooltipNearY = layout.top <= pinTop ? layout.top + layout.height : layout.top;
+    var pinNearY = layout.top <= pinTop ? pinTop : point.y;
+    figures.push({
+        key: 'gapStrip',
+        type: 'rect',
+        attrs: {
+            x: point.x - NOTE_PIN_WIDTH / 2,
+            y: Math.min(tooltipNearY, pinNearY),
+            width: NOTE_PIN_WIDTH,
+            height: Math.max(0, Math.abs(pinNearY - tooltipNearY))
+        },
+        styles: { style: 'fill', color: 'transparent' },
+        cursor: 'move'
+    });
+    figures.push({
+        key: 'noteTooltip',
+        type: 'richText',
+        attrs: attrs,
+        styles: {
+            color: styles.color,
+            backgroundColor: backgroundColor,
+            borderColor: drawBorder ? styles.borderColor : 'transparent',
+            borderWidth: drawBorder ? ((_e = styles.borderWidth) !== null && _e !== void 0 ? _e : 1) : 0,
+            backgroundRoundRect: (_f = styles.backgroundRoundRect) !== null && _f !== void 0 ? _f : 4,
+            boxShadow: drawBackground
+                ? { color: dark ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.2)', blur: 4, offsetX: 0, offsetY: 2 }
+                : undefined
+        },
+        bounds: { x: layout.left, y: layout.top, width: layout.width, height: layout.height },
+        cursor: 'text'
+    });
+    return figures;
+}
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -37711,7 +38091,1327 @@ function textEditorHooks(open) {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-function getBoxData$9(overlay) {
+/**
+ * Effective main-line color: `styles.line` (kernel settings channel) wins,
+ * then the extendData color channel (consumer tools), then the chart theme
+ * default so secondary elements (arrows/labels/pills) match the line even
+ * when `overlay.styles` is unset.
+ */
+function lineColorOf(overlay, chart, extColor) {
+    var _a, _b, _c, _d;
+    return (_d = (_c = (_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a.line) === null || _b === void 0 ? void 0 : _b.color) !== null && _c !== void 0 ? _c : extColor) !== null && _d !== void 0 ? _d : chart.getStyles().overlay.line.color;
+}
+/** Effective line width — for label offset math and explicit-style figures. */
+function lineSizeOf(overlay, chart, extWidth) {
+    var _a, _b, _c, _d;
+    return (_d = (_c = (_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a.line) === null || _b === void 0 ? void 0 : _b.size) !== null && _c !== void 0 ? _c : extWidth) !== null && _d !== void 0 ? _d : chart.getStyles().overlay.line.size;
+}
+/** Explicit line-figure styles for tools driven by extendData styling. */
+function lineStyleOverrides(overlay, chart, ext) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;
+    var themeLine = chart.getStyles().overlay.line;
+    var extStyle = ext === null || ext === void 0 ? void 0 : ext.lineStyle;
+    // 'dotted' is a first-class LineType — figures render it via dashedValue.
+    var style = (_c = (_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a.line) === null || _b === void 0 ? void 0 : _b.style) !== null && _c !== void 0 ? _c : (extStyle === 'dashed' || extStyle === 'dotted' ? extStyle : 'solid');
+    var dashedValue = (_f = (_e = (_d = overlay.styles) === null || _d === void 0 ? void 0 : _d.line) === null || _e === void 0 ? void 0 : _e.dashedValue) !== null && _f !== void 0 ? _f : (extStyle === 'dotted' ? [2, 2] : extStyle === 'dashed' ? [6, 4] : [2, 2]);
+    return {
+        color: (_l = (_k = (_j = (_h = (_g = overlay.styles) === null || _g === void 0 ? void 0 : _g.line) === null || _h === void 0 ? void 0 : _h.color) !== null && _j !== void 0 ? _j : ext === null || ext === void 0 ? void 0 : ext.lineColor) !== null && _k !== void 0 ? _k : ext === null || ext === void 0 ? void 0 : ext.color) !== null && _l !== void 0 ? _l : themeLine.color,
+        size: (_q = (_p = (_o = (_m = overlay.styles) === null || _m === void 0 ? void 0 : _m.line) === null || _o === void 0 ? void 0 : _o.size) !== null && _p !== void 0 ? _p : ext === null || ext === void 0 ? void 0 : ext.lineWidth) !== null && _q !== void 0 ? _q : themeLine.size,
+        style: style,
+        dashedValue: dashedValue
+    };
+}
+// ═══════════════════════════════════════
+// Precision
+// ═══════════════════════════════════════
+/**
+ * Display precision for price labels/pills: symbol precision on candle
+ * panes, max indicator precision on indicator panes (fibonacciLine pattern).
+ */
+function pricePrecisionOf(chart, overlay, yAxis, override) {
+    var _a, _b, _c;
+    if (isNumber(override)) {
+        return override;
+    }
+    if ((_a = yAxis === null || yAxis === void 0 ? void 0 : yAxis.isInCandle()) !== null && _a !== void 0 ? _a : true) {
+        return (_c = (_b = chart.getSymbol()) === null || _b === void 0 ? void 0 : _b.pricePrecision) !== null && _c !== void 0 ? _c : 2;
+    }
+    var precision = 0;
+    var indicators = chart.getIndicators({ paneId: overlay.paneId });
+    indicators.forEach(function (indicator) {
+        precision = Math.max(precision, indicator.precision);
+    });
+    return precision;
+}
+// ═══════════════════════════════════════
+// Chart registry for perform* callbacks
+// ═══════════════════════════════════════
+var lineChartRegistry = new WeakMap();
+/**
+ * perform* callbacks receive no `chart` — snap45 and pixel math need one,
+ * so createPointFigures registers the chart against the overlay each draw.
+ */
+function rememberLineChart(overlay, chart) {
+    lineChartRegistry.set(overlay, chart);
+}
+function lineChartOf(overlay) {
+    return lineChartRegistry.get(overlay);
+}
+// ═══════════════════════════════════════
+// 45° snapping
+// ═══════════════════════════════════════
+/**
+ * If Shift (or the persistent align-45 toggle) is active, snap the point
+ * currently being moved (`params.performPointIndex`) to the nearest 45°
+ * ray from `params.points[fixedIndex]`, preserving distance. Writes
+ * dataIndex/timestamp/value back into the dragged point.
+ */
+function applySnap45(overlay, params, fixedIndex) {
+    var event = params.event;
+    var chart = lineChartOf(overlay);
+    if (event === undefined || chart === undefined) {
+        return;
+    }
+    if (!isSnap45Active(chart, event) || !isNumber(event.x) || !isNumber(event.y)) {
+        return;
+    }
+    var fixed = params.points[fixedIndex];
+    if (!isValid(fixed)) {
+        return;
+    }
+    var from = chart.convertToPixel(fixed, { paneId: overlay.paneId });
+    if (!isNumber(from.x) || !isNumber(from.y)) {
+        return;
+    }
+    var snapped = snap45Coordinate({ x: event.x, y: event.y }, { x: from.x, y: from.y });
+    var converted = chart.convertFromPixel([snapped], { paneId: overlay.paneId });
+    var point = isArray(converted) ? converted[0] : converted;
+    var target = params.points[params.performPointIndex];
+    if (!isValid(target) || !isValid(point)) {
+        return;
+    }
+    target.timestamp = point.timestamp;
+    target.dataIndex = point.dataIndex;
+    target.value = point.value;
+}
+/**
+ * Label style/position fields honoring both kernel and consumer field
+ * casing — resolved regardless of `text` presence: the in-place editor
+ * needs the label's geometry even while the committed text is empty.
+ */
+function labelStyleOf(ext) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
+    return {
+        textColor: (_a = ext.textcolor) !== null && _a !== void 0 ? _a : ext.textColor,
+        fontSize: (_c = (_b = ext.fontsize) !== null && _b !== void 0 ? _b : ext.textSize) !== null && _c !== void 0 ? _c : 14,
+        bold: (_e = (_d = ext.bold) !== null && _d !== void 0 ? _d : ext.textBold) !== null && _e !== void 0 ? _e : false,
+        italic: (_g = (_f = ext.italic) !== null && _f !== void 0 ? _f : ext.textItalic) !== null && _g !== void 0 ? _g : false,
+        hAlign: (_j = (_h = ext.horzLabelsAlign) !== null && _h !== void 0 ? _h : ext.textHorizontalAlign) !== null && _j !== void 0 ? _j : 'center',
+        vAlign: (_l = (_k = ext.vertLabelsAlign) !== null && _k !== void 0 ? _k : ext.textVerticalAlign) !== null && _l !== void 0 ? _l : 'top'
+    };
+}
+/** Read label fields honoring both kernel and consumer field casing. */
+function labelSpecOf(ext) {
+    var text = ext.text;
+    if (!isValid(text) || text === '') {
+        return null;
+    }
+    if (ext.showLabel === false) {
+        return null;
+    }
+    return __assign({ text: text }, labelStyleOf(ext));
+}
+/**
+ * labelSpecOf honoring the in-flight editor buffer — while a session is
+ * open the figure paints the typed text; an empty buffer hides the label
+ * (and its line gap) live, matching the committed `text === ''` state.
+ */
+function liveLabelSpecOf(overlay, ext) {
+    var live = liveTextOf(overlay);
+    return labelSpecOf(live !== undefined ? __assign(__assign({}, ext), { text: live }) : ext);
+}
+/**
+ * Diagonal-label anchor math factored out of layoutDiagonalLabel: rotated
+ * with the line, anchored at 15%/50%/85% along the RENDERED span
+ * (extension included) and offset perpendicular when vAlign is
+ * top/bottom; `center`/`middle` keep the text on the line.
+ */
+function diagonalLabelAnchor(spec, lineStart, lineEnd, lineWidth) {
+    var _a, _b;
+    var fontSize = (_a = spec.fontSize) !== null && _a !== void 0 ? _a : 14;
+    var dx = lineEnd.x - lineStart.x;
+    var dy = lineEnd.y - lineStart.y;
+    var angle = Math.atan2(dy, dx);
+    // Keep text readable (never upside down).
+    if (angle > Math.PI / 2)
+        angle -= Math.PI;
+    if (angle < -Math.PI / 2)
+        angle += Math.PI;
+    var t = 0.5;
+    if (spec.hAlign === 'left')
+        t = 0.15;
+    else if (spec.hAlign === 'right')
+        t = 0.85;
+    var anchorX = lineStart.x + dx * t;
+    var anchorY = lineStart.y + dy * t;
+    var vAlign = (_b = spec.vAlign) !== null && _b !== void 0 ? _b : 'top';
+    var gap = 5;
+    var offsetPx = 0;
+    var baseline = 'middle';
+    if (vAlign === 'top') {
+        offsetPx = -(lineWidth / 2 + gap + fontSize);
+        baseline = 'bottom';
+    }
+    else if (vAlign === 'bottom') {
+        offsetPx = lineWidth / 2 + gap + fontSize;
+        baseline = 'top';
+    }
+    var perpX = -Math.sin(angle) * offsetPx;
+    var perpY = Math.cos(angle) * offsetPx;
+    return {
+        x: anchorX + perpX,
+        y: anchorY + perpY,
+        angle: angle,
+        baseline: baseline,
+        t: t
+    };
+}
+/**
+ * TradingView trend-line label layout: rotated with the line, anchored at
+ * 15%/50%/85% along the RENDERED line (extension included) and offset
+ * perpendicular when vAlign is top/bottom. `center`/`middle` puts the text
+ * on the line and reports a gap interval for the caller to cut out.
+ */
+function layoutDiagonalLabel(key, spec, lineStart, lineEnd, lineColor, lineWidth) {
+    var _a, _b;
+    var text = spec.text;
+    if (!isString(text) || text === '') {
+        return null;
+    }
+    var fontSize = (_a = spec.fontSize) !== null && _a !== void 0 ? _a : 14;
+    var textColor = (_b = spec.textColor) !== null && _b !== void 0 ? _b : lineColor;
+    var anchor = diagonalLabelAnchor(spec, lineStart, lineEnd, lineWidth);
+    var figure = {
+        key: key,
+        type: 'text',
+        attrs: {
+            x: anchor.x,
+            y: anchor.y,
+            text: text,
+            align: 'center',
+            baseline: anchor.baseline,
+            rotation: anchor.angle
+        },
+        styles: {
+            color: textColor,
+            size: fontSize,
+            weight: spec.bold === true ? 'bold' : 'normal',
+            style: spec.italic === true ? 'italic' : 'normal',
+            backgroundColor: 'transparent'
+        }
+    };
+    var dx = lineEnd.x - lineStart.x;
+    var dy = lineEnd.y - lineStart.y;
+    var onLine = spec.vAlign === 'center' || spec.vAlign === 'middle';
+    if (onLine && (dx !== 0 || dy !== 0)) {
+        var lineLen = Math.sqrt(dx * dx + dy * dy);
+        var textLen = calcTextWidth(text, fontSize, spec.bold === true ? 'bold' : 'normal') + 16;
+        var halfGap = Math.min(textLen / 2, lineLen * 0.4);
+        var gapT = [
+            Math.max(0, anchor.t - halfGap / lineLen),
+            Math.min(1, anchor.t + halfGap / lineLen)
+        ];
+        return { figure: figure, gap: gapT };
+    }
+    return { figure: figure };
+}
+/**
+ * Push a main-line figure, split in two around `gap` (a [t0,t1] interval
+ * along start→end) when provided. `explicitStyles` for extendData-driven
+ * tools; omit to inherit `overlay.styles.line` wholesale.
+ */
+function pushLineWithGap(figures, keyPrefix, lineStart, lineEnd, gap, explicitStyles) {
+    var makeFigure = function (key, a, b) {
+        var figure = {
+            key: key,
+            type: 'line',
+            attrs: { coordinates: [a, b] }
+        };
+        if (explicitStyles !== undefined) {
+            figure.styles = explicitStyles;
+        }
+        return figure;
+    };
+    if (gap === undefined) {
+        figures.push(makeFigure("".concat(keyPrefix, "_line"), lineStart, lineEnd));
+        return;
+    }
+    var dx = lineEnd.x - lineStart.x;
+    var dy = lineEnd.y - lineStart.y;
+    var midA = {
+        x: lineStart.x + dx * gap[0],
+        y: lineStart.y + dy * gap[0]
+    };
+    var midB = {
+        x: lineStart.x + dx * gap[1],
+        y: lineStart.y + dy * gap[1]
+    };
+    if (gap[0] > 0.01) {
+        figures.push(makeFigure("".concat(keyPrefix, "_line_a"), lineStart, midA));
+    }
+    if (gap[1] < 0.99) {
+        figures.push(makeFigure("".concat(keyPrefix, "_line_b"), midB, lineEnd));
+    }
+}
+/**
+ * Flat-label anchor math factored out of pushFlatLabel: centered (or 15%/
+ * 85% for hAlign left/right) along `x0..x1`, offset above/below the line
+ * when vAlign is top/bottom, unrotated.
+ */
+function flatLabelAnchor(spec, x0, x1, y, lineWidth) {
+    var _a;
+    var fontSize = (_a = spec.fontSize) !== null && _a !== void 0 ? _a : 14;
+    var leftX = Math.min(x0, x1);
+    var width = Math.abs(x1 - x0);
+    var tx = leftX + width * 0.5;
+    if (spec.hAlign === 'left')
+        tx = leftX + width * 0.15;
+    else if (spec.hAlign === 'right')
+        tx = leftX + width * 0.85;
+    var gap = 5;
+    var offsetY = 0;
+    var baseline = 'middle';
+    if (spec.vAlign === 'top') {
+        offsetY = -(lineWidth / 2 + gap + fontSize);
+        baseline = 'bottom';
+    }
+    else if (spec.vAlign === 'bottom') {
+        offsetY = lineWidth / 2 + gap + fontSize;
+        baseline = 'top';
+    }
+    return { x: tx, y: y + offsetY, angle: 0, baseline: baseline };
+}
+/**
+ * Non-rotated label over a horizontal span (horizontal* tools). `x0..x1`
+ * is the alignment range, `y` the line's vertical position.
+ */
+function pushFlatLabel(figures, key, spec, x0, x1, y, lineColor, lineWidth) {
+    var _a, _b;
+    var text = spec.text;
+    if (!isString(text) || text === '') {
+        return;
+    }
+    var fontSize = (_a = spec.fontSize) !== null && _a !== void 0 ? _a : 14;
+    var anchor = flatLabelAnchor(spec, x0, x1, y, lineWidth);
+    figures.push({
+        key: key,
+        type: 'text',
+        attrs: { x: anchor.x, y: anchor.y, text: text, align: 'center', baseline: anchor.baseline },
+        styles: {
+            color: (_b = spec.textColor) !== null && _b !== void 0 ? _b : lineColor,
+            size: fontSize,
+            weight: spec.bold === true ? 'bold' : 'normal',
+            style: spec.italic === true ? 'italic' : 'normal',
+            backgroundColor: 'transparent'
+        }
+    });
+}
+/**
+ * Vert-label anchor math factored out of pushVertLabel: rotated -90°,
+ * centered (or 15%/85% for hAlign left/right) along `y0..y1`, offset to
+ * the line's right/left when vAlign is top/bottom.
+ */
+function vertLabelAnchor(spec, x, y0, y1, lineWidth) {
+    var _a;
+    var fontSize = (_a = spec.fontSize) !== null && _a !== void 0 ? _a : 14;
+    var topY = Math.min(y0, y1);
+    var spanH = Math.abs(y1 - y0);
+    var ty = topY + spanH * 0.5;
+    if (spec.hAlign === 'left')
+        ty = topY + spanH * 0.15;
+    else if (spec.hAlign === 'right')
+        ty = topY + spanH * 0.85;
+    var gap = 5;
+    var offsetX = 0;
+    var baseline = 'middle';
+    if (spec.vAlign === 'top') {
+        offsetX = lineWidth / 2 + gap + fontSize;
+        baseline = 'bottom';
+    }
+    else if (spec.vAlign === 'bottom') {
+        offsetX = -(lineWidth / 2 + gap + fontSize);
+        baseline = 'top';
+    }
+    return { x: x + offsetX, y: ty, angle: -Math.PI / 2, baseline: baseline };
+}
+/**
+ * Rotated (-90°) label beside a vertical span (vertical* tools). `x` is
+ * the line's horizontal position, `y0..y1` the alignment range.
+ */
+function pushVertLabel(figures, key, spec, x, y0, y1, lineColor, lineWidth) {
+    var _a, _b;
+    var text = spec.text;
+    if (!isString(text) || text === '') {
+        return;
+    }
+    var fontSize = (_a = spec.fontSize) !== null && _a !== void 0 ? _a : 14;
+    var anchor = vertLabelAnchor(spec, x, y0, y1, lineWidth);
+    figures.push({
+        key: key,
+        type: 'text',
+        attrs: {
+            x: anchor.x,
+            y: anchor.y,
+            text: text,
+            align: 'center',
+            baseline: anchor.baseline,
+            rotation: anchor.angle
+        },
+        styles: {
+            color: (_b = spec.textColor) !== null && _b !== void 0 ? _b : lineColor,
+            size: fontSize,
+            weight: spec.bold === true ? 'bold' : 'normal',
+            style: spec.italic === true ? 'italic' : 'normal',
+            backgroundColor: 'transparent'
+        }
+    });
+}
+// ═══════════════════════════════════════
+// Price labels at anchors
+// ═══════════════════════════════════════
+/** Kernel-style price text 18px above an anchor point. */
+function pushAnchorPriceLabel(figures, key, coordinate, value, color, precision) {
+    if (!isNumber(value)) {
+        return;
+    }
+    figures.push({
+        key: key,
+        type: 'text',
+        attrs: {
+            x: coordinate.x,
+            y: coordinate.y - 18,
+            text: formatNum(value, precision),
+            align: 'center',
+            baseline: 'bottom'
+        },
+        styles: { color: color, size: 11, weight: 'normal', backgroundColor: 'transparent' }
+    });
+}
+/** Reference-style price text beside an anchor (dark background). */
+function pushSidePriceLabel(figures, key, coordinate, value, side, color, precision) {
+    if (!isNumber(value)) {
+        return;
+    }
+    figures.push({
+        key: key,
+        type: 'text',
+        attrs: {
+            x: coordinate.x + (side === 'right' ? 5 : -5),
+            y: coordinate.y,
+            text: formatPrecision$1(value, precision),
+            align: (side === 'right' ? 'left' : 'right'),
+            baseline: 'middle'
+        },
+        styles: {
+            color: color,
+            size: 10,
+            weight: 'normal',
+            backgroundColor: 'rgba(30, 30, 30, 0.8)',
+            paddingLeft: 4,
+            paddingRight: 4,
+            paddingTop: 2,
+            paddingBottom: 2
+        }
+    });
+}
+/**
+ * Kernel stats vocabulary: `+Δ  +N%  M bars  Dist: Xpx  Y°` joined inline.
+ * Returns [] when stats shouldn't render.
+ */
+function inlineStatsLines(input) {
+    var ext = input.ext, points = input.points, anchorA = input.anchorA, anchorB = input.anchorB, spanA = input.spanA, spanB = input.spanB, precision = input.precision, isActive = input.isActive;
+    var showStats = ext.alwaysShowStats === true || isActive;
+    var hasAny = ext.showPriceRange === true ||
+        ext.showPercentPriceRange === true ||
+        ext.showBarsRange === true ||
+        ext.showDistance === true ||
+        ext.showAngle === true;
+    if (!showStats || !hasAny || points.length < 2) {
+        return [];
+    }
+    var p1Value = points[0].value;
+    var p2Value = points[1].value;
+    var p1Index = points[0].dataIndex;
+    var p2Index = points[1].dataIndex;
+    var statLines = [];
+    if (ext.showPriceRange === true && isNumber(p1Value) && isNumber(p2Value)) {
+        var diff = p2Value - p1Value;
+        statLines.push("".concat(diff >= 0 ? '+' : '').concat(formatNum(diff, precision)));
+    }
+    if (ext.showPercentPriceRange === true && isNumber(p1Value) && isNumber(p2Value) && p1Value !== 0) {
+        var pct = ((p2Value - p1Value) / Math.abs(p1Value)) * 100;
+        statLines.push("".concat(pct >= 0 ? '+' : '').concat(formatNum(pct), "%"));
+    }
+    if (ext.showBarsRange === true && isNumber(p1Index) && isNumber(p2Index)) {
+        statLines.push("".concat(Math.abs(p2Index - p1Index), " bars"));
+    }
+    if (ext.showDistance === true) {
+        var dx = spanB.x - spanA.x;
+        var dy = spanB.y - spanA.y;
+        statLines.push("Dist: ".concat(formatNum(Math.sqrt(dx * dx + dy * dy), 1), "px"));
+    }
+    if (ext.showAngle === true) {
+        var dx = anchorB.x - anchorA.x;
+        var dy = anchorB.y - anchorA.y;
+        statLines.push("".concat(formatNum(Math.atan2(-dy, dx) * (180 / Math.PI), 1), "\u00B0"));
+    }
+    return statLines;
+}
+/**
+ * Position + push the inline stats text. `a`/`b` bracket the reference
+ * span (anchors or rendered tips). Kernel enum: 0 left, 1 top, 2 right
+ * (default), 3 bottom.
+ */
+function pushInlineStats(figures, key, statLines, statsPosition, a, b, color) {
+    if (statLines.length === 0) {
+        return;
+    }
+    var statsText = statLines.join('  ');
+    var statsPos = typeof statsPosition === 'string'
+        ? statsPosition === 'top' ? 1 : statsPosition === 'bottom' ? 3 : 2
+        : statsPosition !== null && statsPosition !== void 0 ? statsPosition : 2;
+    var midX = (a.x + b.x) / 2;
+    var midY = (a.y + b.y) / 2;
+    var sx = Math.max(a.x, b.x) + 8;
+    var sy = midY;
+    var sAlign = 'left';
+    var sBaseline = 'middle';
+    switch (statsPos) {
+        case 0:
+            sx = Math.min(a.x, b.x) - 8;
+            sy = midY;
+            sAlign = 'right';
+            break;
+        case 1:
+            sx = midX;
+            sy = Math.min(a.y, b.y) - 12;
+            sAlign = 'center';
+            sBaseline = 'bottom';
+            break;
+        case 3:
+            sx = midX;
+            sy = Math.max(a.y, b.y) + 12;
+            sAlign = 'center';
+            sBaseline = 'top';
+            break;
+    }
+    figures.push({
+        key: key,
+        type: 'text',
+        attrs: { x: sx, y: sy, text: statsText, align: sAlign, baseline: sBaseline },
+        styles: { color: color, size: 11, weight: 'normal', backgroundColor: 'transparent' }
+    });
+}
+/** Y-axis: faint strip between anchor prices + a pill per anchor. */
+function buildYAxisBandFigures(keyPrefix, params) {
+    var _a, _b;
+    var overlay = params.overlay, coordinates = params.coordinates, bounding = params.bounding, lineColor = params.lineColor, precision = params.precision, yAxis = params.yAxis;
+    var figures = [];
+    if (params.isSelected !== true) {
+        return figures;
+    }
+    if (coordinates.length >= 2) {
+        var stripTop = Math.min(coordinates[0].y, coordinates[1].y);
+        var stripH = Math.abs(coordinates[1].y - coordinates[0].y);
+        if (stripH > 0) {
+            figures.push({
+                key: "".concat(keyPrefix, "_ystrip"),
+                type: 'rect',
+                attrs: { x: 0, y: stripTop, width: bounding.width, height: stripH },
+                styles: { style: 'fill', color: alphaColor('#2962ff', 0.1) },
+                ignoreEvent: true
+            });
+        }
+    }
+    var p1 = buildYAxisPill(coordinates[0].y, (_a = overlay.points[0]) === null || _a === void 0 ? void 0 : _a.value, lineColor, precision !== null && precision !== void 0 ? precision : 2, bounding, yAxis, "".concat(keyPrefix, "_y0"));
+    if (p1 != null) {
+        figures.push(p1);
+    }
+    if (coordinates.length >= 2) {
+        var p2 = buildYAxisPill(coordinates[1].y, (_b = overlay.points[1]) === null || _b === void 0 ? void 0 : _b.value, lineColor, precision !== null && precision !== void 0 ? precision : 2, bounding, yAxis, "".concat(keyPrefix, "_y1"));
+        if (p2 != null) {
+            figures.push(p2);
+        }
+    }
+    return figures;
+}
+/** X-axis: faint strip between anchor positions + a date pill per anchor. */
+function buildXAxisBandFigures(keyPrefix, params) {
+    var _a, _b;
+    var overlay = params.overlay, coordinates = params.coordinates, bounding = params.bounding, lineColor = params.lineColor;
+    var figures = [];
+    if (params.isSelected !== true) {
+        return figures;
+    }
+    if (coordinates.length >= 2) {
+        var stripLeft = Math.min(coordinates[0].x, coordinates[1].x);
+        var stripW = Math.abs(coordinates[1].x - coordinates[0].x);
+        if (stripW > 0) {
+            figures.push({
+                key: "".concat(keyPrefix, "_xstrip"),
+                type: 'rect',
+                attrs: { x: stripLeft, y: 0, width: stripW, height: bounding.height },
+                styles: { style: 'fill', color: alphaColor('#2962ff', 0.1) },
+                ignoreEvent: true
+            });
+        }
+    }
+    var d0 = formatDate((_a = overlay.points[0]) === null || _a === void 0 ? void 0 : _a.timestamp);
+    if (d0 !== '') {
+        figures.push(buildXAxisPill(coordinates[0].x, d0, lineColor, "".concat(keyPrefix, "_x0")));
+    }
+    if (coordinates.length >= 2) {
+        var d1 = formatDate((_b = overlay.points[1]) === null || _b === void 0 ? void 0 : _b.timestamp);
+        if (d1 !== '') {
+            figures.push(buildXAxisPill(coordinates[1].x, d1, lineColor, "".concat(keyPrefix, "_x1")));
+        }
+    }
+    return figures;
+}
+// ═══════════════════════════════════════
+// In-place label text editor (TradingView parity)
+// ═══════════════════════════════════════
+/**
+ * overlay.points converted to pane CSS pixels — the same array
+ * createPointFigures receives as `coordinates`. Partial points are
+ * dropped, so a mid-draw overlay yields a short list.
+ */
+function overlayPixelCoordinates(chart, overlay) {
+    var e_1, _a;
+    var converted = chart.convertToPixel(overlay.points, { paneId: overlay.paneId });
+    if (!isArray(converted)) {
+        return [];
+    }
+    var coordinates = [];
+    try {
+        for (var converted_1 = __values(converted), converted_1_1 = converted_1.next(); !converted_1_1.done; converted_1_1 = converted_1.next()) {
+            var c = converted_1_1.value;
+            if (isValid(c) && isNumber(c.x) && isNumber(c.y)) {
+                coordinates.push({ x: c.x, y: c.y });
+            }
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (converted_1_1 && !converted_1_1.done && (_a = converted_1.return)) _a.call(converted_1);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    return coordinates;
+}
+/**
+ * The pane's main-widget bounding in the same CSS-pixel space
+ * createPointFigures receives — needed by label span math that runs to
+ * the pane edges (extended/ray/straight tools).
+ */
+function linePaneBounding(chart, overlay) {
+    var _a;
+    // 'main' = the overlay widget's rect — the same bounding createPointFigures gets.
+    return (_a = chart.getSize(overlay.paneId, 'main')) !== null && _a !== void 0 ? _a : undefined;
+}
+/**
+ * Canvas baseline → editor-box vertAlign. The rendered figure is bare
+ * text (no padding), so with `boxPadding: 0` the box edge/center lands on
+ * the exact pixel the figure's baseline occupies.
+ */
+function labelBaselineVertAlign(baseline) {
+    if (baseline === 'top') {
+        return 'top';
+    }
+    if (baseline === 'bottom') {
+        return 'bottom';
+    }
+    return 'middle';
+}
+/**
+ * Open the in-place DOM editor over a line's rendered label. The box
+ * mirrors the text figure: `boxPadding: 0` so the box edge sits on the
+ * baseline pixel, and horzAlign/vertAlign chosen so the editor's
+ * alignment-dependent rotation point equals attrs x/y — the same pivot
+ * the canvas `rotation` spins around (editor `angle` = figure rotation).
+ *
+ * Commit writes `extendData.text` via the safe-merge commitText; an empty
+ * commit writes `''` — the label hides but the line overlay is never
+ * removed (onEmpty suppresses the editor's default overlay removal).
+ */
+function openLineLabelEditor(chart, overlay, anchorFn) {
+    var readExt = function () { return (isObject(overlay.extendData) ? overlay.extendData : {}); };
+    openAnnotationEditor({
+        chart: chart,
+        overlay: overlay,
+        forbidLineBreaks: true,
+        data: function () {
+            var _a, _b, _c, _d, _e;
+            var ext = readExt();
+            var style = labelStyleOf(ext);
+            var anchor = anchorFn(chart, overlay, ext);
+            var horzAlign = (_a = anchor === null || anchor === void 0 ? void 0 : anchor.horzAlign) !== null && _a !== void 0 ? _a : 'center';
+            return {
+                text: (_c = (_b = liveTextOf(overlay)) !== null && _b !== void 0 ? _b : ext.text) !== null && _c !== void 0 ? _c : '',
+                fontSize: (_d = style.fontSize) !== null && _d !== void 0 ? _d : 14,
+                bold: style.bold,
+                italic: style.italic,
+                horzAlign: horzAlign,
+                vertAlign: anchor !== null ? labelBaselineVertAlign(anchor.baseline) : 'middle',
+                horzTextAlign: horzAlign,
+                angle: (_e = anchor === null || anchor === void 0 ? void 0 : anchor.angle) !== null && _e !== void 0 ? _e : 0,
+                boxPadding: 0
+            };
+        },
+        anchor: function () {
+            var _a, _b, _c;
+            var anchor = anchorFn(chart, overlay, readExt());
+            if (anchor !== null) {
+                return { x: anchor.x, y: anchor.y };
+            }
+            var coordinate = chart.convertToPixel((_a = overlay.points[0]) !== null && _a !== void 0 ? _a : {}, { paneId: overlay.paneId });
+            return { x: (_b = coordinate.x) !== null && _b !== void 0 ? _b : 0, y: (_c = coordinate.y) !== null && _c !== void 0 ? _c : 0 };
+        },
+        onCommit: function (value) {
+            commitText(chart, overlay, value);
+        },
+        onEmpty: function () {
+            commitText(chart, overlay, '');
+        }
+    });
+}
+/**
+ * The two template hooks every label-bearing line tool shares.
+ *
+ * - onDoubleClick anywhere on the overlay opens the editor over the label
+ *   (OverlayView already suppresses the hook while isDrawing()).
+ * - onClick opens it only when the click lands ON the label figure
+ *   (`figure.key === figureKey`) AND the overlay was already selected —
+ *   the view fires onClick before committing the click's new selection,
+ *   so getClickOverlayInfo() here still reports the pre-click state.
+ * Ghost/synced/locked overlays never open an editor.
+ */
+function lineLabelEditorHooks(figureKey, anchorFn) {
+    return {
+        onClick: function (_a) {
+            var _b;
+            var chart = _a.chart, overlay = _a.overlay, figure = _a.figure;
+            if (overlay.ghost || overlay.synced || overlay.lock || overlay.isDrawing()) {
+                return;
+            }
+            if ((figure === null || figure === void 0 ? void 0 : figure.key) !== figureKey) {
+                return;
+            }
+            var clickInfo = chart.getChartStore().getClickOverlayInfo();
+            if (((_b = clickInfo.overlay) === null || _b === void 0 ? void 0 : _b.id) === overlay.id && clickInfo.figureType !== 'none') {
+                openLineLabelEditor(chart, overlay, anchorFn);
+            }
+        },
+        onDoubleClick: function (_a) {
+            var chart = _a.chart, overlay = _a.overlay;
+            if (overlay.ghost || overlay.synced || overlay.lock || overlay.isDrawing()) {
+                return;
+            }
+            openLineLabelEditor(chart, overlay, anchorFn);
+        }
+    };
+}
+/**
+ * Anchor-fn factory shared by every label-bearing line tool. It re-runs
+ * the coordinate plumbing (points → pane pixels, pane bounding, label
+ * style, line width) and delegates only the tool-specific span math to
+ * `resolve` — the same math the tool's createPointFigures applies.
+ * Resolve returns null when the geometry isn't available (mid-draw).
+ */
+function lineLabelAnchorFn(resolve) {
+    return function (chart, overlay, ext) {
+        var bounding = linePaneBounding(chart, overlay);
+        if (bounding === undefined) {
+            return null;
+        }
+        return resolve(overlayPixelCoordinates(chart, overlay), bounding, ext, labelStyleOf(ext), lineSizeOf(overlay, chart, ext.lineWidth));
+    };
+}
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var SHAPE_DASH_MAP = {
+    solid: [],
+    dashed: [8, 4],
+    dotted: [2, 2]
+};
+/**
+ * Resolved border for fill-capable shapes. Priority: `overlay.styles`
+ * channel for the figure type (kernel settings dialog), then the
+ * extendData color channel, then the theme default.
+ */
+function shapeStrokeOf(overlay, chart, ext, channel) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+    var themePoly = chart.getStyles().overlay[channel];
+    var channelStyles = (_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a[channel]) !== null && _b !== void 0 ? _b : {};
+    var extStyle = (_c = ext.borderStyle) !== null && _c !== void 0 ? _c : ext.lineStyle;
+    var style = (_d = channelStyles.borderStyle) !== null && _d !== void 0 ? _d : (extStyle === 'solid' || extStyle === 'dotted' ? extStyle : extStyle !== undefined ? 'dashed' : themePoly.borderStyle);
+    var dashedValue = (_e = channelStyles.borderDashedValue) !== null && _e !== void 0 ? _e : (extStyle !== undefined ? SHAPE_DASH_MAP[extStyle] : themePoly.borderDashedValue);
+    return {
+        color: (_j = (_h = (_g = (_f = channelStyles.borderColor) !== null && _f !== void 0 ? _f : ext.borderColor) !== null && _g !== void 0 ? _g : ext.lineColor) !== null && _h !== void 0 ? _h : ext.color) !== null && _j !== void 0 ? _j : themePoly.borderColor,
+        size: (_m = (_l = (_k = channelStyles.borderSize) !== null && _k !== void 0 ? _k : ext.borderWidth) !== null && _l !== void 0 ? _l : ext.lineWidth) !== null && _m !== void 0 ? _m : themePoly.borderSize,
+        style: style,
+        dashedValue: dashedValue
+    };
+}
+/**
+ * Whether the shape body is filled. The consumer `background.enabled`
+ * wins over the kernel flat flags; default is filled.
+ */
+function shapeFillEnabled(ext) {
+    var _a, _b, _c;
+    var bg = ext.background;
+    if (isValid(bg) && isBoolean(bg.enabled)) {
+        return bg.enabled;
+    }
+    return (_c = (_b = (_a = ext.fillEnabled) !== null && _a !== void 0 ? _a : ext.fillBackground) !== null && _b !== void 0 ? _b : ext.showBackground) !== null && _c !== void 0 ? _c : true;
+}
+function normalizeOpacity(opacity) {
+    // Percent (20 = 20%) vs fraction (0.2 = 20%) — both spellings exist in
+    // the wild, so treat <=1 as a fraction.
+    return Math.max(0, Math.min(1, opacity <= 1 ? opacity : opacity / 100));
+}
+/**
+ * Resolved fill color honoring every field casing:
+ * `background{color,opacity}` (consumer) → `fillColor`+`fillOpacity`
+ * (kernel) → `backgroundColor`+`transparency` (TV) → stroke tint.
+ */
+function shapeFillColor(overlay, ext, strokeColor, channel) {
+    var _a, _b;
+    var channelStyles = (_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a[channel]) !== null && _b !== void 0 ? _b : {};
+    if (isValid(channelStyles.color)) {
+        // The kernel settings channel wins outright — string or gradient.
+        return channelStyles.color;
+    }
+    var bg = ext.background;
+    if (isValid(bg) && (isString(bg.color) || isNumber(bg.opacity))) {
+        var color = isString(bg.color) ? bg.color : strokeColor;
+        var opacity = isNumber(bg.opacity) ? bg.opacity : 20;
+        return alphaRgba(color, normalizeOpacity(opacity));
+    }
+    if (isString(ext.backgroundColor)) {
+        if (!ext.backgroundColor.startsWith('#')) {
+            return ext.backgroundColor;
+        }
+        var t_1 = isNumber(ext.transparency) ? ext.transparency : 80;
+        var pct_1 = t_1 <= 1 ? t_1 * 100 : t_1;
+        return alphaRgba(ext.backgroundColor, Math.max(0, Math.min(1, (100 - pct_1) / 100)));
+    }
+    if (isString(ext.fillColor)) {
+        var opacity = isNumber(ext.fillOpacity) ? ext.fillOpacity : 20;
+        return alphaRgba(ext.fillColor, normalizeOpacity(opacity));
+    }
+    var t = isNumber(ext.transparency) ? ext.transparency : 80;
+    var pct = t <= 1 ? t * 100 : t;
+    return alphaRgba(strokeColor, Math.max(0, Math.min(1, (100 - pct) / 100)));
+}
+/**
+ * Normalized text spec. Returns null when no text is configured, a master
+ * gate (`textEnabled`/`showLabel`) is off, or an external editor owns the
+ * text right now (`isEditing`).
+ */
+function shapeLabelSpecOf(ext) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;
+    if (ext.isEditing === true) {
+        return null;
+    }
+    if (ext.textEnabled === false || ext.showLabel === false) {
+        return null;
+    }
+    var text = ext.text;
+    if (!isString(text) || text === '') {
+        return null;
+    }
+    var hRaw = (_c = (_b = (_a = ext.horzAlign) !== null && _a !== void 0 ? _a : ext.textHorizontalAlign) !== null && _b !== void 0 ? _b : ext.horzLabelsAlign) !== null && _c !== void 0 ? _c : 'center';
+    var vRaw = (_f = (_e = (_d = ext.vertAlign) !== null && _d !== void 0 ? _d : ext.textVerticalAlign) !== null && _e !== void 0 ? _e : ext.vertLabelsAlign) !== null && _f !== void 0 ? _f : 'middle';
+    return {
+        text: text,
+        color: (_g = ext.textColor) !== null && _g !== void 0 ? _g : ext.textcolor,
+        fontSize: (_j = (_h = ext.textSize) !== null && _h !== void 0 ? _h : ext.fontsize) !== null && _j !== void 0 ? _j : 14,
+        bold: (_m = (_l = (_k = ext.isBold) !== null && _k !== void 0 ? _k : ext.bold) !== null && _l !== void 0 ? _l : ext.textBold) !== null && _m !== void 0 ? _m : false,
+        italic: (_q = (_p = (_o = ext.isItalic) !== null && _o !== void 0 ? _o : ext.italic) !== null && _p !== void 0 ? _p : ext.textItalic) !== null && _q !== void 0 ? _q : false,
+        hAlign: hRaw === 'left' || hRaw === 'right' ? hRaw : 'center',
+        vAlign: vRaw === 'top' || vRaw === 'bottom' ? vRaw : 'middle'
+    };
+}
+var TEXT_PAD = 8;
+/**
+ * In-box text figure (kernel rect pattern): alignment offsets the anchor
+ * inside the box; `width`/`height` clip the text bounds. `rotation`
+ * (radians around the text anchor) renders rotated labels — the TradingView
+ * ellipse tilts its inscribed text by the edge angle.
+ */
+function shapeTextFigure(key, spec, box, fallbackColor, rotation) {
+    var _a;
+    var tx = (box.left + box.right) / 2;
+    var ty = (box.top + box.bottom) / 2;
+    if (spec.hAlign === 'left') {
+        tx = box.left + TEXT_PAD;
+    }
+    else if (spec.hAlign === 'right') {
+        tx = box.right - TEXT_PAD;
+    }
+    if (spec.vAlign === 'top') {
+        ty = box.top + TEXT_PAD;
+    }
+    else if (spec.vAlign === 'bottom') {
+        ty = box.bottom - TEXT_PAD;
+    }
+    return {
+        key: key,
+        type: 'text',
+        attrs: {
+            x: tx,
+            y: ty,
+            text: spec.text,
+            align: spec.hAlign,
+            baseline: spec.vAlign === 'middle' ? 'middle' : spec.vAlign,
+            width: Math.max(0, box.right - box.left - TEXT_PAD * 2),
+            height: Math.max(0, box.bottom - box.top - TEXT_PAD * 2),
+            rotation: rotation
+        },
+        styles: {
+            color: (_a = spec.color) !== null && _a !== void 0 ? _a : fallbackColor,
+            size: spec.fontSize,
+            weight: spec.bold ? 'bold' : '600',
+            // `style` on a text figure is the fill/stroke draw mode — italic goes
+            // through fontStyle or the font string is never italicized.
+            fontStyle: spec.italic ? 'italic' : undefined,
+            backgroundColor: 'transparent'
+        }
+    };
+}
+/** "+ Add text" placeholder (kernel rect parity) for selected empty-text shapes. */
+function shapeTextPlaceholderFigure(key, box, color, rotation) {
+    return {
+        key: key,
+        type: 'text',
+        attrs: {
+            x: (box.left + box.right) / 2,
+            y: (box.top + box.bottom) / 2,
+            text: '+ Add text',
+            align: 'center',
+            baseline: 'middle',
+            rotation: rotation
+        },
+        styles: {
+            color: color,
+            size: 13,
+            weight: 'normal',
+            style: 'normal',
+            backgroundColor: 'transparent'
+        },
+        cursor: 'text'
+    };
+}
+/**
+ * Square drag handle at an arbitrary pixel position (computed corners,
+ * edge midpoints, generated controls — the channelCommon precedent). The
+ * factory `createAnchorFigures` only anchors at stored coordinates, so
+ * handles whose pixel position differs from `points[i]` are built here.
+ */
+function shapeHandleFigure(key, coordinate, options) {
+    var _a, _b, _c;
+    var half = options.isTouch === true ? ANCHOR_HALF_TOUCH : ANCHOR_HALF_MOUSE;
+    var cx = Math.round(coordinate.x) - 0.5;
+    var cy = Math.round(coordinate.y) - 0.5;
+    var shape = (_a = options.shape) !== null && _a !== void 0 ? _a : 'square';
+    return {
+        key: key,
+        type: shape === 'circle' ? 'circle' : 'rect',
+        attrs: shape === 'circle'
+            ? { x: cx, y: cy, r: half }
+            : { x: cx - half, y: cy - half, width: half * 2, height: half * 2 },
+        styles: {
+            style: 'stroke_fill',
+            color: '#ffffff',
+            borderColor: '#1592E6',
+            borderSize: 1.5
+        },
+        pointIndex: options.pointIndex,
+        moveDirection: (_b = options.moveDirection) !== null && _b !== void 0 ? _b : 'both',
+        cursor: (_c = options.cursor) !== null && _c !== void 0 ? _c : 'pointer'
+    };
+}
+// ═══════════════════════════════════════
+// Point ↔ pixel helpers (union-narrowed)
+// ═══════════════════════════════════════
+function pointToCoordinate$2(chart, paneId, point) {
+    var converted = chart.convertToPixel(point, { paneId: paneId });
+    var c = isArray(converted) ? converted[0] : converted;
+    if (isValid(c) && isNumber(c.x) && isNumber(c.y)) {
+        return { x: c.x, y: c.y };
+    }
+    return null;
+}
+function coordinateToPoint$2(chart, paneId, coordinate) {
+    var converted = chart.convertFromPixel([coordinate], { paneId: paneId });
+    var point = isArray(converted) ? converted[0] : converted;
+    return isValid(point) ? point : null;
+}
+/**
+ * Move `target` to the pixel position `prevPx + (dx, dy)` — exact
+ * translation regardless of axis scale (log axes included).
+ */
+function translatePointByPixelDelta(chart, paneId, target, prevPx, dx, dy) {
+    var point = coordinateToPoint$2(chart, paneId, { x: prevPx.x + dx, y: prevPx.y + dy });
+    if (point !== null) {
+        target.timestamp = point.timestamp;
+        target.dataIndex = point.dataIndex;
+        target.value = point.value;
+    }
+}
+// ═══════════════════════════════════════
+// Shift constraints
+// ═══════════════════════════════════════
+/** Square constraint: equal pixel extents on both axes, direction kept. */
+function squareCoordinate(to, from) {
+    var dx = to.x - from.x;
+    var dy = to.y - from.y;
+    var side = Math.max(Math.abs(dx), Math.abs(dy));
+    return {
+        x: from.x + (dx < 0 ? -side : side),
+        y: from.y + (dy < 0 ? -side : side)
+    };
+}
+/**
+ * Shift (or the persistent align-45 toggle) → rewrite the moving point so
+ * its pixel offset from `points[fixedIndex]` is square — TV's Shift-square
+ * for rectangle/ellipse drawing. Same call shape as `applySnap45`.
+ */
+function applySquareSnap(overlay, params, fixedIndex) {
+    var event = params.event;
+    var chart = lineChartOf(overlay);
+    if (event === undefined || chart === undefined) {
+        return;
+    }
+    if (!isSnap45Active(chart, event) || !isNumber(event.x) || !isNumber(event.y)) {
+        return;
+    }
+    var fixed = params.points[fixedIndex];
+    if (!isValid(fixed)) {
+        return;
+    }
+    var from = pointToCoordinate$2(chart, overlay.paneId, fixed);
+    if (from === null) {
+        return;
+    }
+    var point = coordinateToPoint$2(chart, overlay.paneId, squareCoordinate({ x: event.x, y: event.y }, from));
+    var target = params.points[params.performPointIndex];
+    if (point === null || !isValid(target)) {
+        return;
+    }
+    target.timestamp = point.timestamp;
+    target.dataIndex = point.dataIndex;
+    target.value = point.value;
+}
+// ═══════════════════════════════════════
+// Per-period visibility (kernel ellipse parity)
+// ═══════════════════════════════════════
+/**
+ * Fails OPEN — no configured range → visible. `enabled === false` hides on
+ * that band; otherwise the period span must sit inside [min, max].
+ * Mirrors the kernel ellipse `isEllipseVisibleAtPeriod` gate.
+ */
+function hiddenAtPeriod(ext, period) {
+    if (period === null) {
+        return false;
+    }
+    var key = PERIOD_VIS_KEY[period.type];
+    var range = ext[key];
+    if (!isValid(range)) {
+        return false;
+    }
+    if (range.enabled === false) {
+        return true;
+    }
+    if (!isNumber(period.span)) {
+        return false;
+    }
+    var min = isNumber(range.min) ? range.min : Number.MIN_SAFE_INTEGER;
+    var max = isNumber(range.max) ? range.max : Number.MAX_SAFE_INTEGER;
+    return period.span < min || period.span > max;
+}
+/** Sample a quadratic Bezier into `segments` line-ready coordinates. */
+function sampleQuadratic(p0, pc, p1, segments) {
+    var steps = Math.max(2, Math.floor(segments));
+    var pts = [];
+    for (var i = 0; i <= steps; i++) {
+        var t = i / steps;
+        var mt = 1 - t;
+        pts.push({
+            x: mt * mt * p0.x + 2 * mt * t * pc.x + t * t * p1.x,
+            y: mt * mt * p0.y + 2 * mt * t * pc.y + t * t * p1.y
+        });
+    }
+    return pts;
+}
+function catmullRom(t, p0, p1, p2, p3) {
+    var t2 = t * t;
+    var t3 = t2 * t;
+    return 0.5 * (2 * p1 +
+        (-p0 + p2) * t +
+        (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
+        (-p0 + 3 * p1 - 3 * p2 + p3) * t3);
+}
+/**
+ * Catmull-Rom spline through all four control points (the curve passes
+ * through every anchor — reference doubleCurve renderer). Phantom
+ * endpoints mirror the boundary tangents.
+ */
+function sampleCatmullRom4(p0, p1, p2, p3, segments) {
+    var per = Math.max(1, Math.floor(segments / 3));
+    var phantom0 = {
+        x: p0.x - (p1.x - p0.x),
+        y: p0.y - (p1.y - p0.y)
+    };
+    var phantom3 = {
+        x: p3.x + (p3.x - p2.x),
+        y: p3.y + (p3.y - p2.y)
+    };
+    var pts = [];
+    for (var i = 0; i <= per; i++) {
+        var t = i / per;
+        pts.push({
+            x: catmullRom(t, phantom0.x, p0.x, p1.x, p2.x),
+            y: catmullRom(t, phantom0.y, p0.y, p1.y, p2.y)
+        });
+    }
+    for (var i = 1; i <= per; i++) {
+        var t = i / per;
+        pts.push({
+            x: catmullRom(t, p0.x, p1.x, p2.x, p3.x),
+            y: catmullRom(t, p0.y, p1.y, p2.y, p3.y)
+        });
+    }
+    for (var i = 1; i <= per; i++) {
+        var t = i / per;
+        pts.push({
+            x: catmullRom(t, p1.x, p2.x, p3.x, phantom3.x),
+            y: catmullRom(t, p1.y, p2.y, p3.y, phantom3.y)
+        });
+    }
+    return pts;
+}
+/**
+ * S-curve intermediates between the two endpoints (reference doubleCurve
+ * generation): 1/3 and 2/3 along the segment, offset ±0.25·len along the
+ * perpendicular. Position-invariant (unlike TV's raw `e.add(t).scaled`).
+ */
+function sCurveIntermediates(p0, p3) {
+    var dx = p3.x - p0.x;
+    var dy = p3.y - p0.y;
+    var len = Math.sqrt(dx * dx + dy * dy);
+    var px = len > 0 ? -dy / len : 0;
+    var py = len > 0 ? dx / len : 0;
+    var offset = len * 0.25;
+    return [
+        { x: p0.x + dx / 3 + px * offset, y: p0.y + dy / 3 + py * offset },
+        { x: p0.x + (2 * dx) / 3 - px * offset, y: p0.y + (2 * dy) / 3 - py * offset }
+    ];
+}
+/**
+ * Quadratic-Bezier control midpoint + perpendicular offset (TV
+ * BezierQuadro generation): mid(p1,p2) + 0.15·len perpendicular.
+ */
+function quadControlOffset(p1, p2) {
+    var dx = p2.x - p1.x;
+    var dy = p2.y - p1.y;
+    var len = Math.sqrt(dx * dx + dy * dy);
+    var px = len > 0 ? -dy / len : 0;
+    var py = len > 0 ? dx / len : 0;
+    var offset = len * 0.15;
+    return {
+        x: (p1.x + p2.x) / 2 + px * offset,
+        y: (p1.y + p2.y) / 2 + py * offset
+    };
+}
+// ═══════════════════════════════════════
+// Rotated rectangle / parallelogram corners
+// ═══════════════════════════════════════
+/**
+ * The four corners of the rotated rectangle (TradingView
+ * LineToolRotatedRectangle): `p1`→`p2` is the quad's CENTERLINE — the
+ * rectangle expands symmetrically by the unsigned perpendicular
+ * distance of `p3` to the p1p2 line on BOTH sides (full width =
+ * 2·distance). `n` is TV's right normal Point(edge.y, -edge.x)·dist.
+ * Order: [p1+n, p2+n, p2−n, p1−n].
+ */
+function rotatedRectCorners(p1, p2, p3) {
+    var ex = p2.x - p1.x;
+    var ey = p2.y - p1.y;
+    var len = Math.sqrt(ex * ex + ey * ey);
+    if (len === 0) {
+        return [p1, p1, p1, p1];
+    }
+    var nx = ey / len;
+    var ny = -ex / len;
+    var half = Math.abs((p3.x - p1.x) * nx + (p3.y - p1.y) * ny);
+    var ox = nx * half;
+    var oy = ny * half;
+    return [
+        { x: p1.x + ox, y: p1.y + oy },
+        { x: p2.x + ox, y: p2.y + oy },
+        { x: p2.x - ox, y: p2.y - oy },
+        { x: p1.x - ox, y: p1.y - oy }
+    ];
+}
+/** Frame for segment `a`→`b`; null when the edge is degenerate (<1e-9 px). */
+function edgeFrameOf(a, b) {
+    var dx = b.x - a.x;
+    var dy = b.y - a.y;
+    var len = Math.sqrt(dx * dx + dy * dy);
+    if (len < 1e-9) {
+        return null;
+    }
+    return { ux: dx / len, uy: dy / len, nx: -dy / len, ny: dx / len, len: len };
+}
+/**
+ * Signed perpendicular distance from `p` to the infinite line `a`→`b` in
+ * left-normal units. `Math.abs()` reproduces TradingView's unsigned
+ * `distanceToLine().distance`; the sign reports which side `p` sits on
+ * (positive = the Point(-dy, dx) side). Degenerate edges → 0.
+ */
+function signedLineDistance(a, b, p) {
+    var frame = edgeFrameOf(a, b);
+    if (frame === null) {
+        return 0;
+    }
+    return (p.x - a.x) * frame.nx + (p.y - a.y) * frame.ny;
+}
+/**
+ * N-sample perimeter of a rotated ellipse: semi-axis `a` along `angle`
+ * (radians), semi-axis `b` perpendicular — the TradingView
+ * translate/rotate/scale ellipse, rendered as a polygon so it also
+ * serves as the point-in-polygon hit target.
+ */
+function sampleRotatedEllipsePolygon(cx, cy, a, b, angle, n) {
+    var cos = Math.cos(angle);
+    var sin = Math.sin(angle);
+    var steps = Math.max(3, Math.floor(n));
+    var pts = [];
+    for (var i = 0; i < steps; i++) {
+        var t = (2 * Math.PI * i) / steps;
+        var u = a * Math.cos(t);
+        var v = b * Math.sin(t);
+        pts.push({ x: cx + u * cos - v * sin, y: cy + u * sin + v * cos });
+    }
+    return pts;
+}
+/**
+ * TradingView LineToolArc curve. TV draws a 60° circular arc — radius
+ * `u` (the chord length) centered on the chord's perpendicular bisector
+ * at ∓(√3/2)·u — then scales it perpendicular to the chord so the apex
+ * lands at signed distance `d`, i.e. an affine-stretched (elliptical)
+ * arc through p1, apex = mid + n̂·d, p2. `d` is `p3`'s signed
+ * left-normal distance; |d| < 1 or a degenerate chord renders as the
+ * bare chord (TV's `distance < 1 → line` fallback).
+ */
+function sampleTVArc(p1, p2, p3, segments) {
+    var frame = edgeFrameOf(p1, p2);
+    if (frame === null) {
+        return [p1, p2];
+    }
+    var d = signedLineDistance(p1, p2, p3);
+    if (Math.abs(d) < 1) {
+        return [p1, p2];
+    }
+    var u = frame.len;
+    var k = d / (u * (1 - Math.sqrt(3) / 2));
+    var steps = Math.max(2, Math.floor(segments));
+    var pts = [];
+    for (var i = 0; i <= steps; i++) {
+        var theta = (2 * Math.PI) / 3 - (i / steps) * (Math.PI / 3);
+        var xl = u / 2 + u * Math.cos(theta);
+        var yl = (u * Math.sin(theta) - (u * Math.sqrt(3)) / 2) * k;
+        pts.push({
+            x: p1.x + xl * frame.ux + yl * frame.nx,
+            y: p1.y + xl * frame.uy + yl * frame.ny
+        });
+    }
+    return pts;
+}
+// ═══════════════════════════════════════
+// Unlimited-step restore settle
+// ═══════════════════════════════════════
+/**
+ * Overlays armed through `onDrawStart` — i.e. created empty for a live
+ * draw. Restored overlays never fire onDrawStart (`override` advances
+ * `currentStep` past START before createOverlay reaches the hook), so the
+ * set distinguishes "user is drawing right now" from "deserialized into a
+ * drawing state" — a distinction persisted data alone cannot express.
+ */
+var ARMED_DRAWS = new WeakSet();
+/** Mark an overlay as a live draw — call from the template's `onDrawStart`. */
+function markDrawArmed(overlay) {
+    ARMED_DRAWS.add(overlay);
+}
+/**
+ * Kernel gap workaround for `totalStep: MAX_SAFE_INTEGER` tools: a
+ * restored overlay lands in the drawing-progress slot (`override` can
+ * never satisfy `points.length >= totalStep - 1`), eats the user's next
+ * click, and is skipped by the serializer. When such an overlay owns the
+ * slot and is NOT a live draw (never armed through onDrawStart), finish it
+ * and hand it to the committed overlay list.
+ *
+ * Called from createPointFigures — the earliest hook that runs after
+ * restore, with a live `chart`. Degenerate restores (< 2 points) are left
+ * in place rather than removed mid-render.
+ */
+function settleRestoredUnlimited(overlay, chart) {
+    var _a;
+    if (!overlay.isDrawing() || overlay.isStart() || ARMED_DRAWS.has(overlay)) {
+        return;
+    }
+    if (overlay.points.length < 2) {
+        return;
+    }
+    var store = chart.getChartStore();
+    if (((_a = store.getProgressOverlayInfo()) === null || _a === void 0 ? void 0 : _a.overlay) !== overlay) {
+        return;
+    }
+    overlay.forceComplete();
+    store.progressOverlayComplete();
+}
+/** Minimum rendered radius for the circle tool (kernel constant). */
+var MIN_RADIUS_PX = 5;
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+function getBoxData$5(overlay) {
     var _a, _b, _c, _d, _e, _f, _g;
     // extendData may be absent at runtime when the overlay was created
     // without a payload — treat as empty rather than crash the figure path.
@@ -37750,17 +39450,40 @@ function getFigureStyle(overlay) {
         outlineBorder: styles.outlineBorder
     };
 }
-function openEditor$9(chart, overlay) {
+var TEXT_WRAP_HANDLE_KEY = 'text_wrap_handle';
+/** Smallest wrap width the handle can leave — keeps the box grabbable. */
+var MIN_WRAP_WIDTH_PX = 60;
+/** Bar index → pane-pixel X, or null when the axis can't convert. */
+function indexToPaneX$1(chart, paneId, dataIndex) {
+    try {
+        var converted = chart.convertToPixel({ dataIndex: dataIndex }, { paneId: paneId });
+        var c = isArray(converted) ? converted[0] : converted;
+        return isValid(c) && isNumber(c.x) ? c.x : null;
+    }
+    catch (_a) {
+        return null;
+    }
+}
+/**
+ * Merge a patch into `extendData` in place — the prescribed mutation path
+ * for perform* callbacks (positionCommon's writePositionExt pattern).
+ */
+function writeTextExt(overlay, patch) {
+    var base = isObject(overlay.extendData) ? overlay.extendData : {};
+    overlay.extendData = __assign(__assign({}, base), patch);
+    overlay.invalidateFigures();
+}
+function openEditor$8(chart, overlay) {
     // Mirror/ghost/locked overlays never open an editor — editing happens on
     // the owning chart and propagates through the sync layer.
     if (overlay.ghost || overlay.synced || overlay.lock) {
         return;
     }
-    var wordWrapEnabled = getBoxData$9(overlay).wordWrapWidth !== undefined;
+    var wordWrapEnabled = getBoxData$5(overlay).wordWrapWidth !== undefined;
     openOverlayTextEditor({
         chart: chart,
         overlay: overlay,
-        data: function () { return getBoxData$9(overlay); },
+        data: function () { return getBoxData$5(overlay); },
         wordWrapEnabled: wordWrapEnabled,
         forbidLineBreaks: !wordWrapEnabled,
         onCommit: function (value) {
@@ -37786,7 +39509,7 @@ var textNote = {
         if (coordinates.length === 0) {
             return [];
         }
-        var data = getBoxData$9(overlay);
+        var data = getBoxData$5(overlay);
         var attrs = __assign({ x: coordinates[0].x, y: coordinates[0].y }, data);
         var figures = [
             {
@@ -37805,19 +39528,60 @@ var textNote = {
             lock: overlay.lock,
             keyPrefix: 'anchor_'
         })), false));
+        // TradingView's wrap-width handle: a square on the box's right edge,
+        // shown only when word wrapping is enabled (wordWrapWidth set) —
+        // dragging it resizes the wrap width, not the anchor.
+        var interactive = !overlay.lock && !overlay.isDrawing() &&
+            ((isSelected !== null && isSelected !== void 0 ? isSelected : false) || (isHovered !== null && isHovered !== void 0 ? isHovered : false));
+        if (interactive && data.wordWrapWidth !== undefined) {
+            var box = computeTextBoxLayout(data, coordinates[0]);
+            figures.push(shapeHandleFigure(TEXT_WRAP_HANDLE_KEY, { x: box.boxLeft + box.boxWidth, y: box.boxTop + box.boxHeight / 2 }, { pointIndex: 0, moveDirection: 'horz', cursor: 'ew-resize', isTouch: isTouch }));
+        }
         return figures;
+    },
+    // Wrap-handle drags claim pointIndex 0 with 'horz' constraint: the kernel
+    // writes the cursor's dataIndex into points[0]. Restore the anchor and
+    // store the pointer's px distance from the box's left edge instead —
+    // the positionCommon `pos_width_handle` pattern.
+    performEventPressedMove: function (params) {
+        var _a;
+        if (params.figureKey !== TEXT_WRAP_HANDLE_KEY) {
+            return;
+        }
+        var chart = lineChartOf(this);
+        var ext = (_a = this.extendData) !== null && _a !== void 0 ? _a : {};
+        var moved = params.points[0];
+        var prev = params.prevPoints[0];
+        if (chart === undefined || ext.wordWrapWidth === undefined) {
+            return;
+        }
+        var cursorIndex = isValid(moved) ? moved.dataIndex : undefined;
+        if (isValid(moved) && isValid(prev)) {
+            moved.timestamp = prev.timestamp;
+            moved.dataIndex = prev.dataIndex;
+            moved.value = prev.value;
+        }
+        var prevPx = isValid(prev) ? pointToCoordinate$2(chart, this.paneId, prev) : null;
+        var cursorX = isNumber(cursorIndex) ? indexToPaneX$1(chart, this.paneId, cursorIndex) : null;
+        if (prevPx === null || cursorX === null) {
+            return;
+        }
+        var box = computeTextBoxLayout(getBoxData$5(this), prevPx);
+        writeTextExt(this, {
+            wordWrapWidth: Math.max(cursorX - box.boxLeft, MIN_WRAP_WIDTH_PX)
+        });
     },
     onDrawEnd: function (_a) {
         var overlay = _a.overlay, chart = _a.chart;
         // Placing a text tool drops straight into editing (TV parity) — but
         // only for locally drawn, completed overlays.
         if (!overlay.isDrawing()) {
-            openEditor$9(chart, overlay);
+            openEditor$8(chart, overlay);
         }
     },
     onDoubleClick: function (_a) {
         var overlay = _a.overlay, chart = _a.chart;
-        openEditor$9(chart, overlay);
+        openEditor$8(chart, overlay);
     }
 };
 
@@ -37835,8 +39599,7 @@ var textNote = {
  * limitations under the License.
  */
 var STYLE_KEY$8 = 'anchoredNote';
-var DEFAULT_STEM_GAP = 10;
-var DEFAULT_MARKER_RADIUS = 3;
+var DEFAULT_ANCHORED$1 = true;
 function getNoteStyles$2(overlay) {
     return resolvedTextStyles(overlay, STYLE_KEY$8);
 }
@@ -37848,91 +39611,110 @@ function getText$5(overlay) {
     }
     return (_b = (_a = liveTextOf(overlay)) !== null && _a !== void 0 ? _a : extendData === null || extendData === void 0 ? void 0 : extendData.text) !== null && _b !== void 0 ? _b : '';
 }
-function getBoxData$8(overlay) {
+/** Live pane-px pin position — fx/fy fractions when anchored. */
+function notePoint$1(overlay, chart, bounding) {
+    var _a, _b, _c;
+    var converted = chart.convertToPixel((_a = overlay.points[0]) !== null && _a !== void 0 ? _a : {}, { paneId: overlay.paneId });
+    var dataPx = { x: (_b = converted.x) !== null && _b !== void 0 ? _b : 0, y: (_c = converted.y) !== null && _c !== void 0 ? _c : 0 };
+    var bound = bounding !== null && bounding !== void 0 ? bounding : annotationBoundingOf(overlay);
+    if (bound === undefined) {
+        return dataPx;
+    }
+    return notePxPoint(overlay, bound, dataPx, DEFAULT_ANCHORED$1);
+}
+/**
+ * Editor box mirroring the rendered tooltip: same fixed width, same wrap
+ * and padding — the invisible textarea lands exactly over the box glyphs.
+ */
+function noteEditorData$1(overlay, chart) {
     var _a;
     var styles = getNoteStyles$2(overlay);
-    return __assign(__assign({}, baseTextBoxData(getText$5(overlay), styles)), { horzAlign: 'center', vertAlign: 'bottom', horzTextAlign: resolvedHorzTextAlign(overlay, 'center'), offsetY: (_a = styles.stemGap) !== null && _a !== void 0 ? _a : DEFAULT_STEM_GAP });
+    var bound = (_a = annotationBoundingOf(overlay)) !== null && _a !== void 0 ? _a : { width: Number.MAX_SAFE_INTEGER, height: 0};
+    var layout = noteTooltipLayout(__assign(__assign({}, baseTextBoxData(getText$5(overlay), styles)), { text: getText$5(overlay) }), notePoint$1(overlay, chart, bound), bound);
+    return __assign(__assign({}, baseTextBoxData(getText$5(overlay), styles)), { wordWrapWidth: layout.textWidth, boxWidth: layout.width, boxHeight: layout.height, boxPaddingHorz: NOTE_TOOLTIP_HORZ_PADDING, boxPaddingVert: NOTE_TOOLTIP_VERT_PADDING, lineSpacing: NOTE_TOOLTIP_LINE_SPACING, horzAlign: 'left', vertAlign: 'top', horzTextAlign: 'left' });
 }
-function openEditor$8(chart, overlay) {
+/** Editor anchor = the tooltip's top-left corner in pane pixels. */
+function noteEditorAnchor$1(overlay, chart) {
+    var _a;
+    var bound = (_a = annotationBoundingOf(overlay)) !== null && _a !== void 0 ? _a : { width: Number.MAX_SAFE_INTEGER, height: 0};
+    var layout = noteTooltipLayout(__assign(__assign({}, baseTextBoxData(getText$5(overlay), getNoteStyles$2(overlay))), { text: getText$5(overlay) }), notePoint$1(overlay, chart, bound), bound);
+    return { x: layout.left, y: layout.top };
+}
+function openEditor$7(chart, overlay) {
     openAnnotationEditor({
         chart: chart,
         overlay: overlay,
-        data: function () { return getBoxData$8(overlay); },
-        anchor: function () { var _a; return pointToCoordinate$3(chart, overlay.paneId, (_a = overlay.points[0]) !== null && _a !== void 0 ? _a : {}); },
-        forbidLineBreaks: true,
+        data: function () { return noteEditorData$1(overlay, chart); },
+        anchor: function () { return noteEditorAnchor$1(overlay, chart); },
+        wordWrapEnabled: true,
         onCommit: function (value) {
             commitText(chart, overlay, value);
         }
     });
 }
-var anchoredNote = __assign({ name: 'anchoredNote', totalStep: 2, 
-    // geometry escapes the anchor hull (control points / fixed-size box)
-    // or user-widened boxes — must not be view-culled
-    cullable: false, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, styles: {
+/** Persist the pane fraction for an anchored note that hasn't one yet. */
+function ensureAnchoredFractions$1(chart, overlay) {
+    if (!isAnchoredNote(overlay, DEFAULT_ANCHORED$1)) {
+        return;
+    }
+    var ed = overlay.extendData;
+    var bounding = annotationBoundingOf(overlay);
+    if (bounding === undefined || (typeof (ed === null || ed === void 0 ? void 0 : ed.fx) === 'number' && typeof ed.fy === 'number')) {
+        return;
+    }
+    writeAnchoredFractions(overlay, notePoint$1(overlay, chart, bounding), bounding);
+}
+var anchoredNote = {
+    name: 'anchoredNote',
+    totalStep: 2,
+    // The pin + tooltip escape the anchor hull and are fixed-pixel sized —
+    // hull-based viewport culling would clip them.
+    cullable: false,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    styles: {
         anchoredNote: {
+            // Same TradingView note defaults as 'simpleTag'.
             color: '#FFFFFF',
             backgroundColor: '#2962FF',
             borderColor: '#2962FF',
             borderWidth: 1,
             backgroundRoundRect: 4,
-            fontSize: 12,
-            boxPaddingHorz: 8,
-            boxPaddingVert: 4,
+            fontSize: 14,
             markerColor: '#2962FF',
-            markerRadius: DEFAULT_MARKER_RADIUS,
-            stemGap: DEFAULT_STEM_GAP
+            drawBackground: true,
+            drawBorder: false
         }
-    }, createPointFigures: function (_a) {
-        var _b, _c;
-        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
+    },
+    createPointFigures: function (_a) {
+        var overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, chart = _a.chart, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
+        rememberAnnotationContext(overlay, chart, bounding);
         if (coordinates.length === 0) {
             return [];
         }
-        var point = coordinates[0];
-        var styles = getNoteStyles$2(overlay);
-        var data = getBoxData$8(overlay);
-        var attrs = __assign({ x: point.x, y: point.y }, data);
-        var layout = getRichTextLayout(attrs);
-        var markerColor = (_b = styles.markerColor) !== null && _b !== void 0 ? _b : styles.backgroundColor;
-        var markerRadius = (_c = styles.markerRadius) !== null && _c !== void 0 ? _c : DEFAULT_MARKER_RADIUS;
-        var boxBottom = layout.boxTop + layout.boxHeight;
-        var figures = [
-            // Stem from pill bottom down to the anchor dot.
-            {
-                key: 'stem',
-                type: 'line',
-                attrs: {
-                    coordinates: [
-                        { x: point.x, y: boxBottom },
-                        { x: point.x, y: point.y - markerRadius }
-                    ]
-                },
-                styles: { color: markerColor, size: 2 },
-                ignoreEvent: true
-            },
-            // Anchor dot at the exact point.
-            {
-                key: 'marker',
-                type: 'circle',
-                attrs: { x: point.x, y: point.y, r: markerRadius },
-                styles: { style: 'fill', color: markerColor },
-                ignoreEvent: true
-            },
-            {
-                key: 'notePill',
-                type: 'richText',
-                attrs: attrs,
-                styles: richTextFigureStyle(styles),
-                bounds: {
-                    x: layout.boxLeft,
-                    y: layout.boxTop,
-                    width: layout.boxWidth,
-                    height: layout.boxHeight
-                }
+        var px = notePxPoint(overlay, bounding, coordinates[0], DEFAULT_ANCHORED$1);
+        // Lazily pin: anchored with no fractions yet (API-created or legacy
+        // payload) — fix the pin at the spot it currently renders instead of
+        // silently tracking the data point.
+        if (!overlay.isDrawing() && isAnchoredNote(overlay, DEFAULT_ANCHORED$1)) {
+            var ed = overlay.extendData;
+            if (!(typeof (ed === null || ed === void 0 ? void 0 : ed.fx) === 'number' && typeof ed.fy === 'number')) {
+                writeAnchoredFractions(overlay, px, bounding);
             }
-        ];
+        }
+        var showTooltip = !overlay.isDrawing() &&
+            (isSelected === true || isHovered === true || liveTextOf(overlay) !== undefined);
+        var figures = createPinNoteFigures({
+            point: px,
+            text: getText$5(overlay),
+            styles: getNoteStyles$2(overlay),
+            bounding: bounding,
+            dark: paneIsDark(chart),
+            showTooltip: showTooltip
+        });
         figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
-            coordinates: coordinates,
+            coordinates: [px],
             isSelected: isSelected,
             isHovered: isHovered,
             isTouch: isTouch,
@@ -37941,7 +39723,37 @@ var anchoredNote = __assign({ name: 'anchoredNote', totalStep: 2,
             keyPrefix: 'anchor_'
         })), false));
         return figures;
-    } }, textEditorHooks(openEditor$8));
+    },
+    // `this` is the overlay — the perform params carry none.
+    performEventPressedMove: function (params) {
+        var _a, _b;
+        if (params.event !== undefined && isAnchoredNote(this, DEFAULT_ANCHORED$1)) {
+            var px = { x: (_a = params.event.x) !== null && _a !== void 0 ? _a : 0, y: (_b = params.event.y) !== null && _b !== void 0 ? _b : 0 };
+            revertAnchoredPointWrite(this, params, px, annotationBoundingOf(this));
+        }
+    },
+    performEventBodyMove: function (params) {
+        var chart = annotationChartOf(this);
+        if (params.event !== undefined && chart !== undefined && isAnchoredNote(this, DEFAULT_ANCHORED$1)) {
+            revertAnchoredBodyMove(this, chart, params);
+        }
+    },
+    onDrawEnd: function (_a) {
+        var overlay = _a.overlay, chart = _a.chart;
+        var ed = overlay.extendData;
+        if (isValid(ed) && !isObject(ed)) {
+            overlay.extendData = { text: getText$5(overlay) };
+        }
+        ensureAnchoredFractions$1(chart, overlay);
+        if (!overlay.isDrawing()) {
+            openEditor$7(chart, overlay);
+        }
+    },
+    onDoubleClick: function (_a) {
+        var overlay = _a.overlay, chart = _a.chart;
+        openEditor$7(chart, overlay);
+    }
+};
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -37961,7 +39773,7 @@ function getStyles(overlay) {
     // merges styles.textNote + styles.anchoredText + the generic text.* writes.
     return resolvedTextStyles(overlay, 'anchoredText');
 }
-function getBoxData$7(overlay) {
+function getBoxData$4(overlay) {
     var _a, _b, _c, _d;
     var extendData = (_a = overlay.extendData) !== null && _a !== void 0 ? _a : {};
     var styles = getStyles(overlay);
@@ -38020,13 +39832,13 @@ function captureScreenFraction(chart, overlay) {
     ext.anchorValue = point.value;
     chart.overrideOverlay({ id: overlay.id, paneId: overlay.paneId, extendData: ext });
 }
-function openEditor$7(chart, overlay) {
-    var data = getBoxData$7(overlay);
+function openEditor$6(chart, overlay) {
+    var data = getBoxData$4(overlay);
     var wordWrapEnabled = data.wordWrapWidth !== undefined;
     openAnnotationEditor({
         chart: chart,
         overlay: overlay,
-        data: function () { return getBoxData$7(overlay); },
+        data: function () { return getBoxData$4(overlay); },
         // The editor must cover the RENDERED box (screen-fraction position),
         // not the data point — they diverge once the chart scrolls. The DOM
         // layer lives inside the main-widget host, so fractions apply to the
@@ -38066,7 +39878,7 @@ var anchoredText = {
             return [];
         }
         var position = resolveScreenPosition(overlay, coordinates[0], bounding);
-        var data = getBoxData$7(overlay);
+        var data = getBoxData$4(overlay);
         var attrs = __assign({ x: position.x, y: position.y }, data);
         var layout = getRichTextLayout(attrs);
         var figures = [
@@ -38106,9 +39918,9 @@ var anchoredText = {
     },
     onDrawEnd: function (e) {
         captureScreenFraction(e.chart, e.overlay);
-        textEditorHooks(openEditor$7).onDrawEnd(e);
+        textEditorHooks(openEditor$6).onDrawEnd(e);
     },
-    onDoubleClick: textEditorHooks(openEditor$7).onDoubleClick,
+    onDoubleClick: textEditorHooks(openEditor$6).onDoubleClick,
     onPressedMoveEnd: function (e) {
         captureScreenFraction(e.chart, e.overlay);
     }
@@ -38141,19 +39953,19 @@ function getText$4(overlay) {
     }
     return (_b = (_a = liveTextOf(overlay)) !== null && _a !== void 0 ? _a : extendData === null || extendData === void 0 ? void 0 : extendData.text) !== null && _b !== void 0 ? _b : '';
 }
-function getBoxData$6(overlay) {
+function getBoxData$3(overlay) {
     var _a;
     var extendData = (_a = overlay.extendData) !== null && _a !== void 0 ? _a : {};
     var styles = getCalloutStyles(overlay);
     return __assign(__assign({}, baseTextBoxData(getText$4(overlay), styles)), { wordWrapWidth: extendData.wordWrapWidth, horzAlign: 'center', vertAlign: 'middle', horzTextAlign: resolvedHorzTextAlign(overlay, 'center') });
 }
-function openEditor$6(chart, overlay) {
-    var data = getBoxData$6(overlay);
+function openEditor$5(chart, overlay) {
+    var data = getBoxData$3(overlay);
     var wordWrapEnabled = data.wordWrapWidth !== undefined;
     openAnnotationEditor({
         chart: chart,
         overlay: overlay,
-        data: function () { return getBoxData$6(overlay); },
+        data: function () { return getBoxData$3(overlay); },
         // The box lives at point 1 — the editor must anchor there, not point 0.
         anchor: function () { var _a; return pointToCoordinate$3(chart, overlay.paneId, (_a = overlay.points[1]) !== null && _a !== void 0 ? _a : {}); },
         wordWrapEnabled: wordWrapEnabled,
@@ -38187,7 +39999,7 @@ var callout = __assign({ name: 'callout', totalStep: 3,
             return [];
         }
         var styles = getCalloutStyles(overlay);
-        var data = getBoxData$6(overlay);
+        var data = getBoxData$3(overlay);
         var connectorColor = (_b = styles.connectorColor) !== null && _b !== void 0 ? _b : styles.borderColor;
         var connectorWidth = (_c = styles.connectorWidth) !== null && _c !== void 0 ? _c : 2;
         var arrowSize = (_d = styles.arrowSize) !== null && _d !== void 0 ? _d : 8;
@@ -38230,8 +40042,7 @@ var callout = __assign({ name: 'callout', totalStep: 3,
                         { x: target.x, y: target.y }
                     ]
                 },
-                styles: { color: connectorColor, size: connectorWidth },
-                ignoreEvent: true
+                styles: { color: connectorColor, size: connectorWidth }
             });
             // Arrowhead at the target — filled triangle along the ray direction.
             var angle = Math.atan2(target.y - startY, target.x - startX);
@@ -38251,8 +40062,7 @@ var callout = __assign({ name: 'callout', totalStep: 3,
                         }
                     ]
                 },
-                styles: { style: 'fill', color: connectorColor },
-                ignoreEvent: true
+                styles: { style: 'fill', color: connectorColor }
             });
             // The text box IS the second anchor — dragging it moves point 1.
             figures.push({
@@ -38279,7 +40089,7 @@ var callout = __assign({ name: 'callout', totalStep: 3,
             keyPrefix: 'anchor_'
         })), false));
         return figures;
-    } }, textEditorHooks(openEditor$6));
+    } }, textEditorHooks(openEditor$5));
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -38308,16 +40118,16 @@ function getText$3(overlay) {
     }
     return (_b = (_a = liveTextOf(overlay)) !== null && _a !== void 0 ? _a : extendData === null || extendData === void 0 ? void 0 : extendData.text) !== null && _b !== void 0 ? _b : '';
 }
-function getBoxData$5(overlay) {
+function getBoxData$2(overlay) {
     var _a;
     var styles = getCommentStyles(overlay);
     return __assign(__assign({}, baseTextBoxData(getText$3(overlay), styles)), { horzAlign: 'center', vertAlign: 'bottom', horzTextAlign: resolvedHorzTextAlign(overlay, 'center'), offsetY: (_a = styles.tailHeight) !== null && _a !== void 0 ? _a : DEFAULT_TAIL_HEIGHT });
 }
-function openEditor$5(chart, overlay) {
+function openEditor$4(chart, overlay) {
     openAnnotationEditor({
         chart: chart,
         overlay: overlay,
-        data: function () { return getBoxData$5(overlay); },
+        data: function () { return getBoxData$2(overlay); },
         anchor: function () { var _a; return pointToCoordinate$3(chart, overlay.paneId, (_a = overlay.points[0]) !== null && _a !== void 0 ? _a : {}); },
         onCommit: function (value) {
             commitText(chart, overlay, value);
@@ -38342,7 +40152,7 @@ var comment = __assign({ name: 'comment', totalStep: 2, needDefaultPointFigure: 
         }
         var point = coordinates[0];
         var styles = getCommentStyles(overlay);
-        var data = getBoxData$5(overlay);
+        var data = getBoxData$2(overlay);
         var attrs = __assign({ x: point.x, y: point.y }, data);
         // Capsule = fully rounded rect: radius is half the laid-out height.
         var layout = getRichTextLayout(attrs);
@@ -38374,8 +40184,7 @@ var comment = __assign({ name: 'comment', totalStep: 2, needDefaultPointFigure: 
                         { x: point.x + tailHalf, y: boxBottom - 1 }
                     ]
                 },
-                styles: { style: 'fill', color: styles.backgroundColor },
-                ignoreEvent: true
+                styles: { style: 'fill', color: styles.backgroundColor }
             }
         ];
         figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
@@ -38388,7 +40197,7 @@ var comment = __assign({ name: 'comment', totalStep: 2, needDefaultPointFigure: 
             keyPrefix: 'anchor_'
         })), false));
         return figures;
-    } }, textEditorHooks(openEditor$5));
+    } }, textEditorHooks(openEditor$4));
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -38454,8 +40263,7 @@ var flagMark = {
                     width: poleWidth,
                     height: poleHeight
                 },
-                styles: { style: 'fill', color: poleColor },
-                ignoreEvent: true
+                styles: { style: 'fill', color: poleColor }
             },
             // Pennant — rectangle with a V notch in the right edge (swallowtail).
             {
@@ -38506,6 +40314,7 @@ var flagMark = {
  * limitations under the License.
  */
 var STYLE_KEY$4 = 'note';
+var DEFAULT_ANCHORED = false;
 function getNoteStyles$1(overlay) {
     return resolvedTextStyles(overlay, STYLE_KEY$4);
 }
@@ -38518,56 +40327,111 @@ function getText$2(overlay) {
     }
     return (_b = (_a = liveTextOf(overlay)) !== null && _a !== void 0 ? _a : extendData === null || extendData === void 0 ? void 0 : extendData.text) !== null && _b !== void 0 ? _b : '';
 }
-function getBoxData$4(overlay) {
-    var styles = getNoteStyles$1(overlay);
-    return __assign(__assign({}, baseTextBoxData(getText$2(overlay), styles)), { horzAlign: 'center', vertAlign: 'middle', horzTextAlign: resolvedHorzTextAlign(overlay, 'center') });
+/** Live pane-px pin position — fx/fy fractions when anchored. */
+function notePoint(overlay, chart, bounding) {
+    var _a, _b, _c;
+    var converted = chart.convertToPixel((_a = overlay.points[0]) !== null && _a !== void 0 ? _a : {}, { paneId: overlay.paneId });
+    var dataPx = { x: (_b = converted.x) !== null && _b !== void 0 ? _b : 0, y: (_c = converted.y) !== null && _c !== void 0 ? _c : 0 };
+    var bound = bounding !== null && bounding !== void 0 ? bounding : annotationBoundingOf(overlay);
+    if (bound === undefined) {
+        return dataPx;
+    }
+    return notePxPoint(overlay, bound, dataPx, DEFAULT_ANCHORED);
 }
-function openEditor$4(chart, overlay) {
+/**
+ * Editor box mirroring the rendered tooltip: same fixed width, same wrap
+ * and padding — the invisible textarea lands exactly over the box glyphs.
+ */
+function noteEditorData(overlay, chart) {
+    var _a;
+    var styles = getNoteStyles$1(overlay);
+    var bound = (_a = annotationBoundingOf(overlay)) !== null && _a !== void 0 ? _a : { width: Number.MAX_SAFE_INTEGER, height: 0};
+    var layout = noteTooltipLayout(__assign(__assign({}, baseTextBoxData(getText$2(overlay), styles)), { text: getText$2(overlay) }), notePoint(overlay, chart, bound), bound);
+    return __assign(__assign({}, baseTextBoxData(getText$2(overlay), styles)), { wordWrapWidth: layout.textWidth, boxWidth: layout.width, boxHeight: layout.height, boxPaddingHorz: NOTE_TOOLTIP_HORZ_PADDING, boxPaddingVert: NOTE_TOOLTIP_VERT_PADDING, lineSpacing: NOTE_TOOLTIP_LINE_SPACING, horzAlign: 'left', vertAlign: 'top', horzTextAlign: 'left' });
+}
+/** Editor anchor = the tooltip's top-left corner in pane pixels. */
+function noteEditorAnchor(overlay, chart) {
+    var _a;
+    var bound = (_a = annotationBoundingOf(overlay)) !== null && _a !== void 0 ? _a : { width: Number.MAX_SAFE_INTEGER, height: 0};
+    var layout = noteTooltipLayout(__assign(__assign({}, baseTextBoxData(getText$2(overlay), getNoteStyles$1(overlay))), { text: getText$2(overlay) }), notePoint(overlay, chart, bound), bound);
+    return { x: layout.left, y: layout.top };
+}
+function openEditor$3(chart, overlay) {
     openAnnotationEditor({
         chart: chart,
         overlay: overlay,
-        data: function () { return getBoxData$4(overlay); },
-        forbidLineBreaks: true,
+        data: function () { return noteEditorData(overlay, chart); },
+        anchor: function () { return noteEditorAnchor(overlay, chart); },
+        wordWrapEnabled: true,
         onCommit: function (value) {
             commitText(chart, overlay, value);
         }
     });
 }
-var simpleTag = __assign({ name: 'simpleTag', totalStep: 2, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, styles: {
+/** Persist the pane fraction for an anchored note that hasn't one yet. */
+function ensureAnchoredFractions(chart, overlay) {
+    if (!isAnchoredNote(overlay, DEFAULT_ANCHORED)) {
+        return;
+    }
+    var ed = overlay.extendData;
+    var bounding = annotationBoundingOf(overlay);
+    if (bounding === undefined || (typeof (ed === null || ed === void 0 ? void 0 : ed.fx) === 'number' && typeof ed.fy === 'number')) {
+        return;
+    }
+    writeAnchoredFractions(overlay, notePoint(overlay, chart, bounding), bounding);
+}
+var simpleTag = {
+    name: 'simpleTag',
+    totalStep: 2,
+    // The pin + tooltip escape the anchor hull and are fixed-pixel sized —
+    // hull-based viewport culling would clip them.
+    cullable: false,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    styles: {
         note: {
+            // TradingView note defaults: white text on the marker-blue tooltip,
+            // background drawn, border off, 4px corners.
             color: '#FFFFFF',
             backgroundColor: '#2962FF',
             borderColor: '#2962FF',
             borderWidth: 1,
             backgroundRoundRect: 4,
-            fontSize: 12,
-            boxPaddingHorz: 8,
-            boxPaddingVert: 4
+            fontSize: 14,
+            markerColor: '#2962FF',
+            drawBackground: true,
+            drawBorder: false
         }
-    }, createPointFigures: function (_a) {
-        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
+    },
+    createPointFigures: function (_a) {
+        var overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, chart = _a.chart, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
+        rememberAnnotationContext(overlay, chart, bounding);
         if (coordinates.length === 0) {
             return [];
         }
-        var data = getBoxData$4(overlay);
-        var attrs = __assign({ x: coordinates[0].x, y: coordinates[0].y }, data);
-        var layout = getRichTextLayout(attrs);
-        var figures = [
-            {
-                key: 'notePill',
-                type: 'richText',
-                attrs: attrs,
-                styles: richTextFigureStyle(getNoteStyles$1(overlay)),
-                bounds: {
-                    x: layout.boxLeft,
-                    y: layout.boxTop,
-                    width: layout.boxWidth,
-                    height: layout.boxHeight
-                }
+        var px = notePxPoint(overlay, bounding, coordinates[0], DEFAULT_ANCHORED);
+        // Lazily pin: anchored with no fractions yet (API-created, legacy
+        // payload, or `anchored` flipped on through settings) — fix the pin at
+        // the spot it currently renders instead of silently tracking data.
+        if (!overlay.isDrawing() && isAnchoredNote(overlay, DEFAULT_ANCHORED)) {
+            var ed = overlay.extendData;
+            if (!(typeof (ed === null || ed === void 0 ? void 0 : ed.fx) === 'number' && typeof ed.fy === 'number')) {
+                writeAnchoredFractions(overlay, px, bounding);
             }
-        ];
+        }
+        var showTooltip = !overlay.isDrawing() &&
+            (isSelected === true || isHovered === true || liveTextOf(overlay) !== undefined);
+        var figures = createPinNoteFigures({
+            point: px,
+            text: getText$2(overlay),
+            styles: getNoteStyles$1(overlay),
+            bounding: bounding,
+            dark: paneIsDark(chart),
+            showTooltip: showTooltip
+        });
         figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
-            coordinates: coordinates,
+            coordinates: [px],
             isSelected: isSelected,
             isHovered: isHovered,
             isTouch: isTouch,
@@ -38576,7 +40440,41 @@ var simpleTag = __assign({ name: 'simpleTag', totalStep: 2, needDefaultPointFigu
             keyPrefix: 'anchor_'
         })), false));
         return figures;
-    } }, textEditorHooks(openEditor$4));
+    },
+    // `this` is the overlay — the perform params carry none.
+    performEventPressedMove: function (params) {
+        var _a, _b;
+        // Anchored pins drag the FIXED point — the stored data anchor is the
+        // restore target (TV keeps `fixedPoint` separate from `points()`).
+        if (params.event !== undefined && isAnchoredNote(this, DEFAULT_ANCHORED)) {
+            var px = { x: (_a = params.event.x) !== null && _a !== void 0 ? _a : 0, y: (_b = params.event.y) !== null && _b !== void 0 ? _b : 0 };
+            revertAnchoredPointWrite(this, params, px, annotationBoundingOf(this));
+        }
+    },
+    performEventBodyMove: function (params) {
+        var chart = annotationChartOf(this);
+        if (params.event !== undefined && chart !== undefined && isAnchoredNote(this, DEFAULT_ANCHORED)) {
+            revertAnchoredBodyMove(this, chart, params);
+        }
+    },
+    onDrawEnd: function (_a) {
+        var overlay = _a.overlay, chart = _a.chart;
+        var ed = overlay.extendData;
+        if (isValid(ed) && !isObject(ed)) {
+            // Legacy string extendData — normalize so anchored/fx/fy fields can
+            // merge alongside the text without string-index spread corruption.
+            overlay.extendData = { text: getText$2(overlay) };
+        }
+        ensureAnchoredFractions(chart, overlay);
+        if (!overlay.isDrawing()) {
+            openEditor$3(chart, overlay);
+        }
+    },
+    onDoubleClick: function (_a) {
+        var overlay = _a.overlay, chart = _a.chart;
+        openEditor$3(chart, overlay);
+    }
+};
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -38592,11 +40490,27 @@ var simpleTag = __assign({ name: 'simpleTag', totalStep: 2, needDefaultPointFigu
  * limitations under the License.
  */
 var STYLE_KEY$3 = 'textNote';
-var STEM_HEIGHT = 50;
-var ARROW_HALF_WIDTH$1 = 4;
-var ARROW_HEIGHT = 5;
+/** P1 marker: filled disc + TV's circle border ring. */
+var P1_CIRCLE_RADIUS = 5;
+var P1_RING_RADIUS = 8;
+/** Label separation from the P2 endpoint along the line direction. */
+var PRICE_LABEL_OFFSET = 6;
+/** Custom label separation above the line midpoint. */
+var TEXT_LABEL_OFFSET = 4;
+/** Price label inner padding (TV label padding). */
+var PRICE_LABEL_PADDING_HORZ = 6;
+var PRICE_LABEL_PADDING_VERT = 4;
 function getNoteStyles(overlay) {
     return resolvedTextStyles(overlay, STYLE_KEY$3);
+}
+function getPriceLabelStyles(overlay, fallbackColor) {
+    var _a, _b;
+    var resolved = resolvedTextStyles(overlay, 'priceLabel');
+    return __assign(__assign({}, resolved), { backgroundColor: (_a = resolved.backgroundColor) !== null && _a !== void 0 ? _a : fallbackColor, borderColor: (_b = resolved.borderColor) !== null && _b !== void 0 ? _b : fallbackColor });
+}
+function getLineColor(overlay) {
+    var _a, _b, _c;
+    return (_c = (_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a.line) === null || _b === void 0 ? void 0 : _b.color) !== null && _c !== void 0 ? _c : '#2962FF';
 }
 function getText$1(overlay) {
     var _a, _b;
@@ -38609,24 +40523,85 @@ function getText$1(overlay) {
     }
     return (_b = (_a = liveTextOf(overlay)) !== null && _a !== void 0 ? _a : extendData === null || extendData === void 0 ? void 0 : extendData.text) !== null && _b !== void 0 ? _b : '';
 }
-function getBoxData$3(overlay) {
+/** The P1 price as shown on the y-axis — symbol precision formatted. */
+function getPriceText(chart, overlay) {
+    var _a, _b, _c;
+    var value = (_a = overlay.points[0]) === null || _a === void 0 ? void 0 : _a.value;
+    var precision = (_c = (_b = chart.getSymbol()) === null || _b === void 0 ? void 0 : _b.pricePrecision) !== null && _c !== void 0 ? _c : 2;
+    return isNumber(value) ? formatPrecision$1(value, precision) : '';
+}
+/**
+ * TradingView `alignByAngle` — buckets the line angle into the label's
+ * box-anchor alignment at P2 (canvas y points down):
+ *   up-pointing    [-135°,-45°] → centered / bottom (label above P2)
+ *   right-pointing  (-45°,45°)  → left / middle    (label right of P2)
+ *   down-pointing   [45°,135°]  → centered / top   (label below P2)
+ *   left-pointing   otherwise   → right / middle   (label left of P2)
+ */
+function alignByAngle(angleDeg) {
+    if (angleDeg >= -45 && angleDeg < 45) {
+        return { horzAlign: 'left', vertAlign: 'middle' };
+    }
+    if (angleDeg >= 45 && angleDeg < 135) {
+        return { horzAlign: 'center', vertAlign: 'top' };
+    }
+    if (angleDeg >= -135 && angleDeg < -45) {
+        return { horzAlign: 'center', vertAlign: 'bottom' };
+    }
+    return { horzAlign: 'right', vertAlign: 'middle' };
+}
+function lineAngleDeg(p1, p2) {
+    return Math.round((180 * Math.atan2(p2.y - p1.y, p2.x - p1.x)) / Math.PI);
+}
+/**
+ * The custom label anchor — midpoint of the line pushed along the screen-up
+ * normal by half the font size plus a gap (TradingView lifts the text off
+ * the line). `rad` is the rotation the figure applies, readable ±90°.
+ */
+function customTextAnchor(p1, p2, fontSize) {
+    var segLen = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+    var mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+    if (segLen === 0) {
+        return { anchor: mid, rad: 0 };
+    }
+    var dir = { x: (p2.x - p1.x) / segLen, y: (p2.y - p1.y) / segLen };
+    // Up-normal of the segment (negative screen-y side).
+    var normal = { x: -dir.y, y: dir.x };
+    if (normal.y > 0) {
+        normal = { x: -normal.x, y: -normal.y };
+    }
+    var rad = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+    // Keep the text right-side up — flip lines pointing left.
+    if (rad > Math.PI / 2) {
+        rad -= Math.PI;
+    }
+    else if (rad < -Math.PI / 2) {
+        rad += Math.PI;
+    }
+    var lift = fontSize / 2 + TEXT_LABEL_OFFSET;
+    return {
+        anchor: { x: mid.x + normal.x * lift, y: mid.y + normal.y * lift },
+        rad: rad
+    };
+}
+/** The custom label's box — midpoint of the line, offset above, rotated. */
+function customTextData(overlay) {
     var styles = getNoteStyles(overlay);
     return __assign(__assign({}, baseTextBoxData(getText$1(overlay), styles)), { horzAlign: 'center', vertAlign: 'bottom', horzTextAlign: 'center' });
 }
-function openEditor$3(chart, overlay) {
+function openEditor$2(chart, overlay) {
     openAnnotationEditor({
         chart: chart,
         overlay: overlay,
-        data: function () { return getBoxData$3(overlay); },
-        // The label renders at the arrow TIP (pt.y - 63 with baseline 'bottom'),
-        // not at the anchor point — without the raised anchor the editor box
-        // covers the stem while the caret blinks 60px below the glyphs.
+        data: function () { return customTextData(overlay); },
+        // Editor anchors at the (unrotated) label anchor — the canvas figure
+        // rotates around it; the DOM textarea stays axis-aligned.
         anchor: function () {
-            var _a;
-            var c = pointToCoordinate$3(chart, overlay.paneId, (_a = overlay.points[0]) !== null && _a !== void 0 ? _a : {});
-            return { x: c.x, y: c.y - (STEM_HEIGHT + ARROW_HEIGHT + 8) };
+            var _a, _b, _c;
+            var p1 = pointToCoordinate$3(chart, overlay.paneId, (_a = overlay.points[0]) !== null && _a !== void 0 ? _a : {});
+            var p2 = pointToCoordinate$3(chart, overlay.paneId, (_b = overlay.points[1]) !== null && _b !== void 0 ? _b : {});
+            return customTextAnchor(p1, p2, (_c = getNoteStyles(overlay).fontSize) !== null && _c !== void 0 ? _c : 12).anchor;
         },
-        forbidLineBreaks: true,
         onCommit: function (value) {
             commitText(chart, overlay, value);
         }
@@ -38634,15 +40609,29 @@ function openEditor$3(chart, overlay) {
 }
 var simpleAnnotation = {
     name: 'simpleAnnotation',
-    totalStep: 2,
+    // Two points: P1 = price anchor (circle), P2 = label end.
+    totalStep: 3,
+    // The price label + rotated text escape the segment hull — and the label
+    // is fixed-pixel sized — hull-based culling would clip it.
+    cullable: false,
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
+    // TradingView's renderer draws the line + price label itself — there is
+    // no separate y-axis price-line figure on this tool.
     needDefaultYAxisFigure: false,
     styles: {
         textNote: {
             color: '#FFFFFF',
             fontSize: 12,
             bold: false
+        },
+        priceLabel: {
+            color: '#FFFFFF',
+            backgroundColor: '#2962FF',
+            borderColor: '#2962FF',
+            borderWidth: 1,
+            backgroundRoundRect: 4,
+            fontSize: 12
         },
         line: {
             color: '#2962FF',
@@ -38655,60 +40644,112 @@ var simpleAnnotation = {
         }
     },
     createPointFigures: function (_a) {
-        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
+        var _b, _c, _d, _e, _f, _g, _h;
+        var overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, chart = _a.chart, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
+        rememberAnnotationContext(overlay, chart, bounding);
         if (coordinates.length === 0) {
             return [];
         }
-        var _b = coordinates[0], x = _b.x, y = _b.y;
-        var stemTop = y - 6;
-        var stemBottom = stemTop - STEM_HEIGHT;
-        var arrowTip = stemBottom - ARROW_HEIGHT;
-        var styles = overlay.styles;
-        var figures = [
-            {
-                key: 'stem',
+        var p1 = coordinates[0];
+        var lineColor = getLineColor(overlay);
+        var lineStyle = (_b = overlay.styles) === null || _b === void 0 ? void 0 : _b.line;
+        var figures = [];
+        // P1 circle + TradingView's circle border ring.
+        figures.push({
+            key: 'p1Circle',
+            type: 'circle',
+            attrs: { x: p1.x, y: p1.y, r: P1_CIRCLE_RADIUS },
+            styles: { style: 'fill', color: lineColor }
+        }, {
+            key: 'p1Ring',
+            type: 'circle',
+            attrs: { x: p1.x, y: p1.y, r: P1_RING_RADIUS },
+            styles: { style: 'stroke', color: lineColor, borderSize: 1.5 },
+            ignoreEvent: true
+        });
+        if (coordinates.length >= 2) {
+            var p2 = coordinates[1];
+            var angleDeg = lineAngleDeg(p1, p2);
+            var segLen = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+            var dir = segLen > 0 ? { x: (p2.x - p1.x) / segLen, y: (p2.y - p1.y) / segLen } : { x: 1, y: 0 };
+            // P1 → P2 solid line (the hit body — line figures hit-test by
+            // distance to the segment).
+            figures.push({
+                key: 'line',
                 type: 'line',
-                attrs: { coordinates: [{ x: x, y: stemTop }, { x: x, y: stemBottom }] },
-                styles: styles === null || styles === void 0 ? void 0 : styles.line
-            },
-            {
-                key: 'arrow',
-                type: 'polygon',
-                attrs: {
-                    coordinates: [
-                        { x: x, y: stemBottom },
-                        { x: x - ARROW_HALF_WIDTH$1, y: arrowTip },
-                        { x: x + ARROW_HALF_WIDTH$1, y: arrowTip }
-                    ]
-                },
-                styles: styles === null || styles === void 0 ? void 0 : styles.polygon
-            },
-            {
-                key: 'label',
-                type: 'text',
-                attrs: {
-                    x: x,
-                    y: arrowTip - 2,
-                    text: getText$1(overlay),
-                    align: 'center',
-                    baseline: 'bottom'
-                },
+                attrs: { coordinates: [p1, p2] },
+                styles: lineStyle,
+                cursor: 'move'
+            });
+            // Price label at P2 — formatted P1 price, aligned by line angle.
+            var priceStyles = getPriceLabelStyles(overlay, lineColor);
+            var priceText = getPriceText(chart, overlay);
+            var _j = alignByAngle(angleDeg), horzAlign = _j.horzAlign, vertAlign = _j.vertAlign;
+            var anchorX = p2.x + dir.x * PRICE_LABEL_OFFSET;
+            var anchorY = p2.y + dir.y * PRICE_LABEL_OFFSET;
+            var priceData = {
+                text: priceText,
+                fontSize: (_d = (_c = priceStyles.fontSize) !== null && _c !== void 0 ? _c : getNoteStyles(overlay).fontSize) !== null && _d !== void 0 ? _d : 12,
+                bold: priceStyles.bold,
+                italic: priceStyles.italic,
+                fontFamily: priceStyles.fontFamily,
+                boxPaddingHorz: PRICE_LABEL_PADDING_HORZ,
+                boxPaddingVert: PRICE_LABEL_PADDING_VERT,
+                horzAlign: horzAlign,
+                vertAlign: vertAlign,
+                horzTextAlign: horzAlign
+            };
+            var priceAttrs = __assign({ x: anchorX, y: anchorY }, priceData);
+            var priceLayout = getRichTextLayout(priceAttrs);
+            figures.push({
+                key: 'priceLabel',
+                type: 'richText',
+                attrs: priceAttrs,
                 styles: {
-                    color: getNoteStyles(overlay).color,
-                    size: getNoteStyles(overlay).fontSize,
-                    family: getNoteStyles(overlay).fontFamily,
-                    weight: getNoteStyles(overlay).bold === true ? 'bold' : 'normal',
-                    fontStyle: getNoteStyles(overlay).italic === true ? 'italic' : undefined,
-                    style: 'fill'
+                    color: (_e = priceStyles.color) !== null && _e !== void 0 ? _e : '#FFFFFF',
+                    backgroundColor: priceStyles.backgroundColor,
+                    borderColor: priceStyles.borderColor,
+                    borderWidth: (_f = priceStyles.borderWidth) !== null && _f !== void 0 ? _f : 1,
+                    backgroundRoundRect: (_g = priceStyles.backgroundRoundRect) !== null && _g !== void 0 ? _g : 4
                 },
                 bounds: {
-                    x: x - 40,
-                    y: arrowTip - 24,
-                    width: 80,
-                    height: 26
-                }
+                    x: priceLayout.boxLeft,
+                    y: priceLayout.boxTop,
+                    width: priceLayout.boxWidth,
+                    height: priceLayout.boxHeight
+                },
+                cursor: 'move'
+            });
+            // Custom text along the line — centered on the midpoint, rotated to
+            // the line angle (normalized to stay readable, ±90°).
+            var text = getText$1(overlay);
+            if (text !== '' && segLen > 0) {
+                var fontSize = (_h = getNoteStyles(overlay).fontSize) !== null && _h !== void 0 ? _h : 12;
+                var _k = customTextAnchor(p1, p2, fontSize), textAnchor = _k.anchor, rad = _k.rad;
+                var textData = customTextData(overlay);
+                var textAttrs = __assign(__assign({ x: textAnchor.x, y: textAnchor.y }, textData), { angle: rad });
+                var textLayout = getRichTextLayout(textAttrs);
+                var pad = fontSize;
+                figures.push({
+                    key: 'label',
+                    type: 'richText',
+                    attrs: textAttrs,
+                    styles: {
+                        color: getNoteStyles(overlay).color,
+                        // TV draws the custom text without a background — glyphs only.
+                        backgroundColor: 'transparent'
+                    },
+                    // Rotated geometry — a padded AABB approximates the hit area.
+                    bounds: {
+                        x: Math.min.apply(Math, __spreadArray([], __read(textLayout.polygonPoints.map(function (c) { return c.x; })), false)) - pad / 2,
+                        y: Math.min.apply(Math, __spreadArray([], __read(textLayout.polygonPoints.map(function (c) { return c.y; })), false)) - pad / 2,
+                        width: Math.max.apply(Math, __spreadArray([], __read(textLayout.polygonPoints.map(function (c) { return c.x; })), false)) - Math.min.apply(Math, __spreadArray([], __read(textLayout.polygonPoints.map(function (c) { return c.x; })), false)) + pad,
+                        height: Math.max.apply(Math, __spreadArray([], __read(textLayout.polygonPoints.map(function (c) { return c.y; })), false)) - Math.min.apply(Math, __spreadArray([], __read(textLayout.polygonPoints.map(function (c) { return c.y; })), false)) + pad
+                    },
+                    cursor: 'text'
+                });
             }
-        ];
+        }
         figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
             coordinates: coordinates,
             isSelected: isSelected,
@@ -38716,9 +40757,17 @@ var simpleAnnotation = {
             isTouch: isTouch,
             isDrawing: overlay.isDrawing(),
             lock: overlay.lock,
+            midPoint: true,
             keyPrefix: 'anchor_'
         })), false));
         return figures;
+    },
+    // `this` is the overlay — the perform params carry none.
+    performEventPressedMove: function (params) {
+        snapP2(this, params);
+    },
+    performEventMoveForDrawing: function (params) {
+        snapP2(this, params);
     },
     onDrawEnd: function (_a) {
         var overlay = _a.overlay, chart = _a.chart;
@@ -38729,10 +40778,49 @@ var simpleAnnotation = {
             overlay.extendData = { text: getText$1(overlay) };
             overlay.invalidateFigures();
         }
-        openEditor$3(chart, overlay);
+        if (!overlay.isDrawing()) {
+            openEditor$2(chart, overlay);
+        }
     },
-    onDoubleClick: textEditorHooks(openEditor$3).onDoubleClick
+    onDoubleClick: function (_a) {
+        var overlay = _a.overlay, chart = _a.chart;
+        openEditor$2(chart, overlay);
+    }
 };
+/**
+ * Shift (or the align-45 toggle) snaps the dragged endpoint onto the
+ * nearest 45° ray from the OTHER endpoint — same constraint the line
+ * tools apply (TradingView angle snap).
+ */
+function snapP2(overlay, params) {
+    var event = params.event;
+    var chart = annotationChartOf(overlay);
+    if (event === undefined || chart === undefined || !isSnap45Active(chart, event)) {
+        return;
+    }
+    if (!isNumber(event.x) || !isNumber(event.y)) {
+        return;
+    }
+    var fixedIndex = params.performPointIndex === 0 ? 1 : 0;
+    var fixed = params.points[fixedIndex];
+    if (!isValid(fixed)) {
+        return;
+    }
+    var from = pointToCoordinate$3(chart, overlay.paneId, fixed);
+    var snapped = snap45Coordinate({ x: event.x, y: event.y }, from);
+    var converted = chart.convertFromPixel([snapped], { paneId: overlay.paneId });
+    var point = Array.isArray(converted) ? converted[0] : converted;
+    var target = params.points[params.performPointIndex];
+    if (!isValid(target) || !isValid(point)) {
+        return;
+    }
+    if (isNumber(point.timestamp))
+        target.timestamp = point.timestamp;
+    if (isNumber(point.dataIndex))
+        target.dataIndex = point.dataIndex;
+    if (isNumber(point.value))
+        target.value = point.value;
+}
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -38780,12 +40868,12 @@ function getLabelText(chart, overlay, isCandle) {
     var value = (_b = (_a = overlay.points[0]) === null || _a === void 0 ? void 0 : _a.value) !== null && _b !== void 0 ? _b : 0;
     return formatPrecision$1(value, getPrecision(chart, overlay, isCandle));
 }
-function getBoxData$2(chart, overlay, isCandle) {
+function getBoxData$1(chart, overlay, isCandle) {
     var _a;
     var styles = getLabelStyles(overlay);
     return __assign(__assign({}, baseTextBoxData(getLabelText(chart, overlay, isCandle), styles)), { bold: (_a = styles.bold) !== null && _a !== void 0 ? _a : true, horzAlign: 'left', vertAlign: 'middle', horzTextAlign: resolvedHorzTextAlign(overlay, 'center') });
 }
-function openEditor$2(chart, overlay) {
+function openEditor$1(chart, overlay) {
     var _a;
     var styles = getLabelStyles(overlay);
     var tipWidth = (_a = styles.tipWidth) !== null && _a !== void 0 ? _a : DEFAULT_TIP_WIDTH;
@@ -38794,7 +40882,7 @@ function openEditor$2(chart, overlay) {
         overlay: overlay,
         // Editor re-derives the label on each keystroke — once the user commits
         // a custom text it replaces the price display; empty removes the tool.
-        data: function () { return getBoxData$2(chart, overlay, overlay.paneId === PaneIdConstants.CANDLE); },
+        data: function () { return getBoxData$1(chart, overlay, overlay.paneId === PaneIdConstants.CANDLE); },
         anchor: function () {
             var _a;
             var coordinate = pointToCoordinate$3(chart, overlay.paneId, (_a = overlay.points[0]) !== null && _a !== void 0 ? _a : {});
@@ -38833,7 +40921,7 @@ var priceLabel = __assign({ name: 'priceLabel', totalStep: 2, needDefaultPointFi
         var point = coordinates[0];
         var styles = getLabelStyles(overlay);
         var isCandle = (_b = yAxis === null || yAxis === void 0 ? void 0 : yAxis.isInCandle()) !== null && _b !== void 0 ? _b : true;
-        var data = getBoxData$2(chart, overlay, isCandle);
+        var data = getBoxData$1(chart, overlay, isCandle);
         var tipWidth = (_c = styles.tipWidth) !== null && _c !== void 0 ? _c : DEFAULT_TIP_WIDTH;
         var attrs = __assign({ x: point.x + tipWidth, y: point.y }, data);
         var layout = getRichTextLayout(attrs);
@@ -38849,8 +40937,7 @@ var priceLabel = __assign({ name: 'priceLabel', totalStep: 2, needDefaultPointFi
                         { x: point.x + tipWidth, y: point.y + layout.boxHeight / 2 }
                     ]
                 },
-                styles: { style: 'fill', color: styles.backgroundColor },
-                ignoreEvent: true
+                styles: { style: 'fill', color: styles.backgroundColor }
             },
             {
                 key: 'labelPill',
@@ -38876,7 +40963,7 @@ var priceLabel = __assign({ name: 'priceLabel', totalStep: 2, needDefaultPointFi
             keyPrefix: 'anchor_'
         })), false));
         return figures;
-    } }, textEditorHooks(openEditor$2));
+    } }, textEditorHooks(openEditor$1));
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -38911,12 +40998,12 @@ function getDirection(overlay) {
     var extendData = overlay.extendData;
     return (extendData === null || extendData === void 0 ? void 0 : extendData.direction) === 'down' ? 'down' : 'up';
 }
-function getBoxData$1(overlay) {
+function getBoxData(overlay) {
     var _a;
     var styles = getSignpostStyles(overlay);
     return __assign(__assign({}, baseTextBoxData(getText(overlay), styles)), { bold: (_a = styles.bold) !== null && _a !== void 0 ? _a : true, horzAlign: 'center', vertAlign: 'middle', horzTextAlign: resolvedHorzTextAlign(overlay, 'center') });
 }
-function openEditor$1(chart, overlay) {
+function openEditor(chart, overlay) {
     var _a;
     var styles = getSignpostStyles(overlay);
     var poleHeight = (_a = styles.poleHeight) !== null && _a !== void 0 ? _a : 40;
@@ -38924,7 +41011,7 @@ function openEditor$1(chart, overlay) {
     openAnnotationEditor({
         chart: chart,
         overlay: overlay,
-        data: function () { return getBoxData$1(overlay); },
+        data: function () { return getBoxData(overlay); },
         // Text sits in the sign board at the far end of the pole.
         anchor: function () {
             var _a;
@@ -38956,7 +41043,7 @@ var signpost = __assign({ name: 'signpost', totalStep: 2, needDefaultPointFigure
         }
         var point = coordinates[0];
         var styles = getSignpostStyles(overlay);
-        var data = getBoxData$1(overlay);
+        var data = getBoxData(overlay);
         var direction = getDirection(overlay);
         var isUp = direction === 'up';
         var poleHeight = (_b = styles.poleHeight) !== null && _b !== void 0 ? _b : 40;
@@ -38978,8 +41065,7 @@ var signpost = __assign({ name: 'signpost', totalStep: 2, needDefaultPointFigure
                     width: POLE_WIDTH,
                     height: poleHeight
                 },
-                styles: { style: 'fill', color: poleColor },
-                ignoreEvent: true
+                styles: { style: 'fill', color: poleColor }
             },
             // Sign board — flat pentagon with an arrow tip on the right edge.
             {
@@ -39001,265 +41087,16 @@ var signpost = __assign({ name: 'signpost', totalStep: 2, needDefaultPointFigure
                 key: 'signText',
                 type: 'richText',
                 attrs: __assign({ x: point.x - ARROW_TIP / 2, y: headCenterY }, data),
-                styles: { color: styles.color },
-                ignoreEvent: true
+                styles: { color: styles.color }
             },
             // Base dot at the anchor.
             {
                 key: 'base',
                 type: 'circle',
                 attrs: { x: point.x, y: point.y, r: BASE_RADIUS },
-                styles: { style: 'fill', color: poleColor },
-                ignoreEvent: true
+                styles: { style: 'fill', color: poleColor }
             }
         ];
-        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
-            coordinates: coordinates,
-            isSelected: isSelected,
-            isHovered: isHovered,
-            isTouch: isTouch,
-            isDrawing: overlay.isDrawing(),
-            lock: overlay.lock,
-            keyPrefix: 'anchor_'
-        })), false));
-        return figures;
-    } }, textEditorHooks(openEditor$1));
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-var STYLE_KEY = 'table';
-var DEFAULT_ROWS = 3;
-var DEFAULT_COLS = 3;
-var DEFAULT_TABLE_WIDTH = 300;
-var DEFAULT_TABLE_HEIGHT = 120;
-var DEFAULT_CELL_PADDING = 4;
-function getTableStyles(overlay) {
-    return resolvedTextStyles(overlay, STYLE_KEY);
-}
-function getExtendData(overlay) {
-    var extendData = overlay.extendData;
-    // Legacy string payloads can't express a grid — start empty instead.
-    if (isString(extendData) || extendData === undefined) {
-        return {};
-    }
-    return extendData;
-}
-function getGrid(overlay) {
-    var _a, _b, _c, _d;
-    var live = liveTextOf(overlay);
-    if (live !== undefined) {
-        return tsvToGrid(live);
-    }
-    var extendData = getExtendData(overlay);
-    var rows = Math.max(1, (_a = extendData.rows) !== null && _a !== void 0 ? _a : DEFAULT_ROWS);
-    var cols = Math.max(1, (_b = extendData.cols) !== null && _b !== void 0 ? _b : DEFAULT_COLS);
-    var cells = [];
-    for (var i = 0; i < rows * cols; i++) {
-        cells.push((_d = (_c = extendData.cells) === null || _c === void 0 ? void 0 : _c[i]) !== null && _d !== void 0 ? _d : '');
-    }
-    return { rows: rows, cols: cols, cells: cells };
-}
-function gridToTsv(rows, cols, cells) {
-    var lines = [];
-    for (var r = 0; r < rows; r++) {
-        lines.push(cells.slice(r * cols, (r + 1) * cols).join('\t'));
-    }
-    return lines.join('\n');
-}
-function tsvToGrid(tsv) {
-    var e_1, _a, e_2, _b;
-    var _c;
-    var lines = tsv.split(/\r\n|\r|\n/);
-    var grid = lines.map(function (line) { return line.split('\t'); });
-    var rows = grid.length;
-    var cols = 0;
-    try {
-        for (var grid_1 = __values(grid), grid_1_1 = grid_1.next(); !grid_1_1.done; grid_1_1 = grid_1.next()) {
-            var row = grid_1_1.value;
-            cols = Math.max(cols, row.length);
-        }
-    }
-    catch (e_1_1) { e_1 = { error: e_1_1 }; }
-    finally {
-        try {
-            if (grid_1_1 && !grid_1_1.done && (_a = grid_1.return)) _a.call(grid_1);
-        }
-        finally { if (e_1) throw e_1.error; }
-    }
-    var cells = [];
-    try {
-        for (var grid_2 = __values(grid), grid_2_1 = grid_2.next(); !grid_2_1.done; grid_2_1 = grid_2.next()) {
-            var row = grid_2_1.value;
-            for (var c = 0; c < cols; c++) {
-                cells.push((_c = row[c]) !== null && _c !== void 0 ? _c : '');
-            }
-        }
-    }
-    catch (e_2_1) { e_2 = { error: e_2_1 }; }
-    finally {
-        try {
-            if (grid_2_1 && !grid_2_1.done && (_b = grid_2.return)) _b.call(grid_2);
-        }
-        finally { if (e_2) throw e_2.error; }
-    }
-    return { rows: rows, cols: cols, cells: cells };
-}
-function getBoxData(overlay) {
-    var _a, _b, _c;
-    var styles = getTableStyles(overlay);
-    var extendData = getExtendData(overlay);
-    var _d = getGrid(overlay), rows = _d.rows, cols = _d.cols, cells = _d.cells;
-    return __assign(__assign({}, baseTextBoxData((_a = liveTextOf(overlay)) !== null && _a !== void 0 ? _a : gridToTsv(rows, cols, cells), styles)), { boxWidth: (_b = extendData.tableWidth) !== null && _b !== void 0 ? _b : DEFAULT_TABLE_WIDTH, boxHeight: (_c = extendData.tableHeight) !== null && _c !== void 0 ? _c : DEFAULT_TABLE_HEIGHT, horzAlign: 'left', vertAlign: 'top' });
-}
-function openEditor(chart, overlay) {
-    openAnnotationEditor({
-        chart: chart,
-        overlay: overlay,
-        data: function () { return getBoxData(overlay); },
-        anchor: function () { var _a; return pointToCoordinate$3(chart, overlay.paneId, (_a = overlay.points[0]) !== null && _a !== void 0 ? _a : {}); },
-        allowTab: true,
-        onCommit: function (value) {
-            var _a = tsvToGrid(value), rows = _a.rows, cols = _a.cols, cells = _a.cells;
-            chart.overrideOverlay({
-                id: overlay.id,
-                paneId: overlay.paneId,
-                extendData: __assign(__assign({}, (getExtendData(overlay))), { rows: rows, cols: cols, cells: cells })
-            });
-        }
-    });
-}
-var table = __assign({ name: 'table', totalStep: 2, 
-    // geometry escapes the anchor hull (control points / fixed-size box)
-    // or user-widened boxes — must not be view-culled
-    cullable: false, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, styles: {
-        table: {
-            color: '#131722',
-            backgroundColor: '#FFFFFF',
-            borderColor: '#787B86',
-            backgroundEnabled: true,
-            borderEnabled: true,
-            fontSize: 12,
-            textAlign: 'center',
-            cellPadding: DEFAULT_CELL_PADDING
-        }
-    }, createPointFigures: function (_a) {
-        var _b, _c, _d, _e, _f, _g;
-        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
-        if (coordinates.length === 0) {
-            return [];
-        }
-        var point = coordinates[0];
-        var styles = getTableStyles(overlay);
-        var extendData = getExtendData(overlay);
-        var _h = getGrid(overlay), rows = _h.rows, cols = _h.cols, cells = _h.cells;
-        var tableWidth = (_b = extendData.tableWidth) !== null && _b !== void 0 ? _b : DEFAULT_TABLE_WIDTH;
-        var tableHeight = (_c = extendData.tableHeight) !== null && _c !== void 0 ? _c : DEFAULT_TABLE_HEIGHT;
-        var cellPadding = (_d = styles.cellPadding) !== null && _d !== void 0 ? _d : DEFAULT_CELL_PADDING;
-        var cellWidth = tableWidth / cols;
-        var cellHeight = tableHeight / rows;
-        var backgroundEnabled = (_e = styles.backgroundEnabled) !== null && _e !== void 0 ? _e : true;
-        var borderEnabled = (_f = styles.borderEnabled) !== null && _f !== void 0 ? _f : true;
-        var borderColor = styles.borderColor;
-        var textAlign = (_g = styles.textAlign) !== null && _g !== void 0 ? _g : 'center';
-        var figures = [];
-        // Background fill — one rect for the whole grid.
-        if (backgroundEnabled) {
-            figures.push({
-                key: 'background',
-                type: 'rect',
-                attrs: { x: point.x, y: point.y, width: tableWidth, height: tableHeight },
-                styles: { style: 'fill', color: styles.backgroundColor },
-                ignoreEvent: true
-            });
-        }
-        // Grid lines — rows+1 horizontal, cols+1 vertical.
-        if (borderEnabled) {
-            for (var r = 0; r <= rows; r++) {
-                var y = point.y + r * cellHeight;
-                figures.push({
-                    key: "gridH_".concat(r),
-                    type: 'line',
-                    attrs: {
-                        coordinates: [
-                            { x: point.x, y: y },
-                            { x: point.x + tableWidth, y: y }
-                        ]
-                    },
-                    styles: { color: borderColor, size: 1 },
-                    ignoreEvent: true
-                });
-            }
-            for (var c = 0; c <= cols; c++) {
-                var x = point.x + c * cellWidth;
-                figures.push({
-                    key: "gridV_".concat(c),
-                    type: 'line',
-                    attrs: {
-                        coordinates: [
-                            { x: x, y: point.y },
-                            { x: x, y: point.y + tableHeight }
-                        ]
-                    },
-                    styles: { color: borderColor, size: 1 },
-                    ignoreEvent: true
-                });
-            }
-        }
-        // Cell texts — richText so bold/italic/fontFamily render consistently;
-        // no box background, just the glyphs.
-        var cellData = __assign(__assign({}, baseTextBoxData('', styles)), { vertAlign: 'middle', horzTextAlign: textAlign });
-        for (var r = 0; r < rows; r++) {
-            for (var c = 0; c < cols; c++) {
-                var content = cells[r * cols + c];
-                if (content === '') {
-                    continue;
-                }
-                var cellLeft = point.x + c * cellWidth;
-                var cellMidY = point.y + r * cellHeight + cellHeight / 2;
-                var anchorX = cellLeft + cellWidth / 2;
-                var horzAlign = 'center';
-                if (textAlign === 'left') {
-                    anchorX = cellLeft + cellPadding;
-                    horzAlign = 'left';
-                }
-                else if (textAlign === 'right') {
-                    anchorX = cellLeft + cellWidth - cellPadding;
-                    horzAlign = 'right';
-                }
-                var attrs = __assign(__assign({ x: anchorX, y: cellMidY }, cellData), { text: content, horzAlign: horzAlign });
-                figures.push({
-                    key: "cell_".concat(r, "_").concat(c),
-                    type: 'richText',
-                    attrs: attrs,
-                    styles: { color: styles.color },
-                    ignoreEvent: true
-                });
-            }
-        }
-        // Outer border + whole-grid hit body for dragging.
-        figures.push({
-            key: 'frame',
-            type: 'rect',
-            attrs: { x: point.x, y: point.y, width: tableWidth, height: tableHeight },
-            styles: {
-                style: 'stroke',
-                color: 'transparent',
-                borderColor: borderEnabled ? borderColor : 'transparent',
-                borderSize: borderEnabled ? 1 : 0
-            },
-            bounds: { x: point.x, y: point.y, width: tableWidth, height: tableHeight }
-        });
         figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
             coordinates: coordinates,
             isSelected: isSelected,
@@ -39285,13 +41122,794 @@ var table = __assign({ name: 'table', totalStep: 2,
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+var STYLE_KEY = 'table';
+var DEFAULT_ROWS = 3;
+var DEFAULT_COLS = 3;
+var DEFAULT_TABLE_WIDTH = 300;
+var DEFAULT_TABLE_HEIGHT = 120;
+var DEFAULT_CELL_PADDING = 4;
+var MIN_CELL_SIZE = 20;
+var EDGE_HANDLE_THICKNESS = 8;
+var CORNER_HANDLE_SIZE = 12;
+// ── Session state (not persisted) ────────────────────────────────────
+/** Index (r*cols+c) of the selected cell — drives the highlight figure. */
+var activeCells = new WeakMap();
+/** Index of the cell whose editor is live — routes liveText to it. */
+var editingCells = new WeakMap();
+var tableDragStates = new WeakMap();
+function getTableStyles(overlay) {
+    return resolvedTextStyles(overlay, STYLE_KEY);
+}
+function getExtendData(overlay) {
+    var extendData = overlay.extendData;
+    // Legacy string payloads can't express a grid — start empty instead.
+    if (isString(extendData) || extendData === undefined) {
+        return {};
+    }
+    return extendData;
+}
+/**
+ * Resolved grid: uniform column widths / row heights unless the additive
+ * `colWidths`/`rowHeights` arrays exist (any resize materializes them).
+ */
+function getGrid(overlay) {
+    var _a, _b, _c, _d, _e, _f, _g, _h;
+    var extendData = getExtendData(overlay);
+    var rows = Math.max(1, (_a = extendData.rows) !== null && _a !== void 0 ? _a : DEFAULT_ROWS);
+    var cols = Math.max(1, (_b = extendData.cols) !== null && _b !== void 0 ? _b : DEFAULT_COLS);
+    var editing = editingCells.get(overlay);
+    var live = liveTextOf(overlay);
+    var cells = [];
+    for (var i = 0; i < rows * cols; i++) {
+        cells.push(editing === i && live !== undefined ? live : (_d = (_c = extendData.cells) === null || _c === void 0 ? void 0 : _c[i]) !== null && _d !== void 0 ? _d : '');
+    }
+    var width = (_e = extendData.tableWidth) !== null && _e !== void 0 ? _e : DEFAULT_TABLE_WIDTH;
+    var height = (_f = extendData.tableHeight) !== null && _f !== void 0 ? _f : DEFAULT_TABLE_HEIGHT;
+    var colWidths = ((_g = extendData.colWidths) === null || _g === void 0 ? void 0 : _g.length) === cols
+        ? __spreadArray([], __read(extendData.colWidths), false) : new Array(cols).fill(width / cols);
+    var rowHeights = ((_h = extendData.rowHeights) === null || _h === void 0 ? void 0 : _h.length) === rows
+        ? __spreadArray([], __read(extendData.rowHeights), false) : new Array(rows).fill(height / rows);
+    return {
+        rows: rows,
+        cols: cols,
+        cells: cells,
+        colWidths: colWidths,
+        rowHeights: rowHeights,
+        width: colWidths.reduce(function (a, b) { return a + b; }, 0),
+        height: rowHeights.reduce(function (a, b) { return a + b; }, 0)
+    };
+}
+/** Pixel-space offsets — cumulative sizes, one entry per gridline. */
+function offsetsOf(sizes) {
+    var e_1, _a;
+    var offsets = [0];
+    try {
+        for (var sizes_1 = __values(sizes), sizes_1_1 = sizes_1.next(); !sizes_1_1.done; sizes_1_1 = sizes_1.next()) {
+            var s = sizes_1_1.value;
+            offsets.push(offsets[offsets.length - 1] + s);
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (sizes_1_1 && !sizes_1_1.done && (_a = sizes_1.return)) _a.call(sizes_1);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    return offsets;
+}
+function cellRect(origin, grid, r, c) {
+    var xs = offsetsOf(grid.colWidths);
+    var ys = offsetsOf(grid.rowHeights);
+    return {
+        x: origin.x + xs[c],
+        y: origin.y + ys[r],
+        width: grid.colWidths[c],
+        height: grid.rowHeights[r]
+    };
+}
+/** Parse `cell_r_c` / `celltext_r_c` figure keys back to a flat index. */
+function cellIndexFromKey(key, cols) {
+    if (key === undefined) {
+        return null;
+    }
+    var match = /^cell(?:text)?_(\d+)_(\d+)$/.exec(key);
+    if (match === null) {
+        return null;
+    }
+    return Number(match[1]) * cols + Number(match[2]);
+}
+/** Hit-test which cell a pane px point falls into (context menu, clicks). */
+function cellIndexAt(origin, grid, px) {
+    if (px.x < origin.x || px.y < origin.y || px.x > origin.x + grid.width || px.y > origin.y + grid.height) {
+        return null;
+    }
+    var xs = offsetsOf(grid.colWidths);
+    var ys = offsetsOf(grid.rowHeights);
+    var c = grid.cols - 1;
+    var r = grid.rows - 1;
+    for (var i = 0; i < grid.cols; i++) {
+        if (px.x <= origin.x + xs[i + 1]) {
+            c = i;
+            break;
+        }
+    }
+    for (var i = 0; i < grid.rows; i++) {
+        if (px.y <= origin.y + ys[i + 1]) {
+            r = i;
+            break;
+        }
+    }
+    return r * grid.cols + c;
+}
+/** Write cells/geometry through override so sync + undo see the change. */
+function applyGrid(chart, overlay, patch) {
+    chart.overrideOverlay({
+        id: overlay.id,
+        paneId: overlay.paneId,
+        extendData: __assign(__assign({}, getExtendData(overlay)), patch)
+    });
+}
+/** In-place drag write — bypasses override() replay; the gesture owns it. */
+function patchExtendData(overlay, patch) {
+    overlay.extendData = __assign(__assign({}, getExtendData(overlay)), patch);
+}
+// ── Cell structure operations (context menu) ─────────────────────────
+function insertRowAt(grid, r) {
+    var _a;
+    var cells = __spreadArray([], __read(grid.cells), false);
+    cells.splice.apply(cells, __spreadArray([r * grid.cols, 0], __read(new Array(grid.cols).fill('')), false));
+    var rowHeights = __spreadArray([], __read(grid.rowHeights), false);
+    rowHeights.splice(r, 0, (_a = rowHeights[Math.max(0, r - 1)]) !== null && _a !== void 0 ? _a : grid.height / grid.rows);
+    return { rows: grid.rows + 1, cells: cells, rowHeights: rowHeights, tableHeight: rowHeights.reduce(function (a, b) { return a + b; }, 0) };
+}
+function removeRowAt(grid, r) {
+    if (grid.rows <= 1) {
+        return null;
+    }
+    var cells = __spreadArray([], __read(grid.cells), false);
+    cells.splice(r * grid.cols, grid.cols);
+    var rowHeights = __spreadArray([], __read(grid.rowHeights), false);
+    rowHeights.splice(r, 1);
+    return { rows: grid.rows - 1, cells: cells, rowHeights: rowHeights, tableHeight: rowHeights.reduce(function (a, b) { return a + b; }, 0) };
+}
+function insertColAt(grid, c) {
+    var _a;
+    var cells = [];
+    for (var r = 0; r < grid.rows; r++) {
+        cells.push.apply(cells, __spreadArray(__spreadArray(__spreadArray([], __read(grid.cells.slice(r * grid.cols, r * grid.cols + c)), false), [''], false), __read(grid.cells.slice(r * grid.cols + c, (r + 1) * grid.cols)), false));
+    }
+    var colWidths = __spreadArray([], __read(grid.colWidths), false);
+    colWidths.splice(c, 0, (_a = colWidths[Math.max(0, c - 1)]) !== null && _a !== void 0 ? _a : grid.width / grid.cols);
+    return { cols: grid.cols + 1, cells: cells, colWidths: colWidths, tableWidth: colWidths.reduce(function (a, b) { return a + b; }, 0) };
+}
+function removeColAt(grid, c) {
+    if (grid.cols <= 1) {
+        return null;
+    }
+    var cells = [];
+    for (var r = 0; r < grid.rows; r++) {
+        cells.push.apply(cells, __spreadArray(__spreadArray([], __read(grid.cells.slice(r * grid.cols, r * grid.cols + c)), false), __read(grid.cells.slice(r * grid.cols + c + 1, (r + 1) * grid.cols)), false));
+    }
+    var colWidths = __spreadArray([], __read(grid.colWidths), false);
+    colWidths.splice(c, 1);
+    return { cols: grid.cols - 1, cells: cells, colWidths: colWidths, tableWidth: colWidths.reduce(function (a, b) { return a + b; }, 0) };
+}
+// ── Per-cell editing ─────────────────────────────────────────────────
+/** Editor box for one cell — wraps + clips inside the cell rect. */
+function cellEditorData(overlay, grid, index) {
+    var _a, _b;
+    var styles = getTableStyles(overlay);
+    var cellPadding = (_a = styles.cellPadding) !== null && _a !== void 0 ? _a : DEFAULT_CELL_PADDING;
+    var textAlign = (_b = styles.textAlign) !== null && _b !== void 0 ? _b : 'center';
+    var rect = cellRect({ x: 0, y: 0 }, grid, Math.floor(index / grid.cols), index % grid.cols);
+    return __assign(__assign({}, baseTextBoxData(grid.cells[index], styles)), { wordWrapWidth: Math.max(1, rect.width - 2 * cellPadding), boxWidth: rect.width, boxHeight: rect.height, boxPaddingHorz: cellPadding, boxPaddingVert: cellPadding, horzAlign: 'left', vertAlign: 'middle', horzTextAlign: textAlign });
+}
+function writeCell(chart, overlay, index, value) {
+    var grid = getGrid(overlay);
+    var cells = __spreadArray([], __read(grid.cells), false);
+    cells[index] = value;
+    if (cells.every(function (c) { return c === ''; })) {
+        // Fully-empty content removes the overlay (previous behavior kept).
+        chart.removeOverlay({ id: overlay.id, paneId: overlay.paneId });
+        return;
+    }
+    applyGrid(chart, overlay, { cells: cells });
+}
+/**
+ * Open the shared invisible-textarea editor bound to a single cell. Tab /
+ * Shift-Tab hop to the next/previous cell (TradingView switchActiveCell):
+ * the textarea ships no Tab-move hook, so a capture-phase listener on it
+ * commits the session and re-opens the neighbor.
+ */
+function openCellEditor(chart, overlay, index) {
+    if (overlay.ghost || overlay.synced || overlay.lock) {
+        return;
+    }
+    var grid = getGrid(overlay);
+    if (index < 0 || index >= grid.cells.length) {
+        index = 0;
+    }
+    var cellIndex = index;
+    activeCells.set(overlay, cellIndex);
+    overlay.invalidateFigures();
+    var session = openOverlayTextEditor({
+        chart: chart,
+        overlay: overlay,
+        data: function () { return cellEditorData(overlay, getGrid(overlay), cellIndex); },
+        anchor: function () {
+            var _a;
+            var origin = pointToCoordinate$3(chart, overlay.paneId, (_a = overlay.points[0]) !== null && _a !== void 0 ? _a : {});
+            var live = getGrid(overlay);
+            var rect = cellRect(origin, live, Math.floor(cellIndex / live.cols), cellIndex % live.cols);
+            return { x: rect.x, y: rect.y + rect.height / 2 };
+        },
+        forbidLineBreaks: true,
+        onCommit: function (value) {
+            editingCells.delete(overlay);
+            writeCell(chart, overlay, cellIndex, value);
+        },
+        onEmpty: function () {
+            editingCells.delete(overlay);
+            writeCell(chart, overlay, cellIndex, '');
+        }
+    });
+    editingCells.set(overlay, cellIndex);
+    // The just-opened wrapper is the last text-editor child of this pane's
+    // DOM layer — attach Tab navigation directly to its textarea.
+    var layer = getPaneDomLayer(chart, overlay.paneId);
+    var editors = layer === null || layer === void 0 ? void 0 : layer.getElement().querySelectorAll('[data-name="text-editor"] textarea');
+    var textarea = editors === null || editors === void 0 ? void 0 : editors[editors.length - 1];
+    textarea === null || textarea === void 0 ? void 0 : textarea.addEventListener('keydown', function (e) {
+        if (e.key !== 'Tab' || e.isComposing) {
+            return;
+        }
+        e.preventDefault();
+        var total = getGrid(overlay).cells.length;
+        var next = (cellIndex + (e.shiftKey ? -1 : 1) + total) % total;
+        // close() commits the live value synchronously; reopen on the target.
+        session.close('hotkey');
+        if (chart.getOverlayById(overlay.id) !== null) {
+            openCellEditor(chart, overlay, next);
+        }
+    });
+}
+// ── Context menu (TradingView `additionalActions`) ───────────────────
+var MENU_STYLE = {
+    position: 'absolute',
+    display: 'flex',
+    flexDirection: 'column',
+    minWidth: '160px',
+    padding: '4px 0',
+    borderRadius: '6px',
+    boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+    fontSize: '12px',
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, Ubuntu, sans-serif",
+    userSelect: 'none'
+};
+function openTableMenu(chart, overlay, px, cellIndex) {
+    var e_2, _a;
+    var layer = getPaneDomLayer(chart, overlay.paneId);
+    if (layer === null) {
+        return;
+    }
+    var grid = getGrid(overlay);
+    var row = Math.floor(cellIndex / grid.cols);
+    var col = cellIndex % grid.cols;
+    var dark = paneIsDark(chart);
+    var menu = createDom('div', __assign(__assign({}, MENU_STYLE), { left: "".concat(Math.round(px.x), "px"), top: "".concat(Math.round(px.y), "px"), background: dark ? '#1e222d' : '#ffffff', border: "1px solid ".concat(dark ? '#363c4e' : '#e0e3eb'), color: dark ? '#d1d4dc' : '#131722' }));
+    var items = [
+        { label: 'Insert row above', run: function () { applyGrid(chart, overlay, insertRowAt(getGrid(overlay), row)); } },
+        { label: 'Insert row below', run: function () { applyGrid(chart, overlay, insertRowAt(getGrid(overlay), row + 1)); } },
+        { label: 'Insert column left', run: function () { applyGrid(chart, overlay, insertColAt(getGrid(overlay), col)); } },
+        { label: 'Insert column right', run: function () { applyGrid(chart, overlay, insertColAt(getGrid(overlay), col + 1)); } },
+        {
+            label: 'Remove row',
+            run: function () {
+                var patch = removeRowAt(getGrid(overlay), row);
+                if (patch === null) {
+                    chart.removeOverlay({ id: overlay.id, paneId: overlay.paneId });
+                }
+                else {
+                    applyGrid(chart, overlay, patch);
+                }
+            }
+        },
+        {
+            label: 'Remove column',
+            run: function () {
+                var patch = removeColAt(getGrid(overlay), col);
+                if (patch === null) {
+                    chart.removeOverlay({ id: overlay.id, paneId: overlay.paneId });
+                }
+                else {
+                    applyGrid(chart, overlay, patch);
+                }
+            }
+        },
+        { label: 'Remove table', run: function () { return chart.removeOverlay({ id: overlay.id, paneId: overlay.paneId }); } }
+    ];
+    var unmounts = [];
+    var close = function () {
+        unmounts.forEach(function (u) { u(); });
+        unmounts.length = 0;
+    };
+    var _loop_1 = function (item) {
+        var entry = createDom('div', { padding: '6px 14px', cursor: 'default', whiteSpace: 'nowrap' });
+        entry.textContent = item.label;
+        entry.addEventListener('mouseenter', function () {
+            entry.style.background = dark ? '#2a2e39' : '#f0f3fa';
+        });
+        entry.addEventListener('mouseleave', function () {
+            entry.style.background = '';
+        });
+        entry.addEventListener('mousedown', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        });
+        entry.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            close();
+            item.run();
+        });
+        menu.appendChild(entry);
+    };
+    try {
+        for (var items_1 = __values(items), items_1_1 = items_1.next(); !items_1_1.done; items_1_1 = items_1.next()) {
+            var item = items_1_1.value;
+            _loop_1(item);
+        }
+    }
+    catch (e_2_1) { e_2 = { error: e_2_1 }; }
+    finally {
+        try {
+            if (items_1_1 && !items_1_1.done && (_a = items_1.return)) _a.call(items_1);
+        }
+        finally { if (e_2) throw e_2.error; }
+    }
+    unmounts.push(layer.mount(menu, { interactive: true, zIndex: 10 }));
+    // Outside press / Escape closes — listen once, self-remove.
+    var onDocDown = function (e) {
+        if (!menu.contains(e.target)) {
+            close();
+        }
+    };
+    var onDocKey = function (e) {
+        if (e.key === 'Escape') {
+            close();
+        }
+    };
+    document.addEventListener('mousedown', onDocDown);
+    document.addEventListener('keydown', onDocKey);
+    unmounts.push(function () {
+        document.removeEventListener('mousedown', onDocDown);
+        document.removeEventListener('keydown', onDocKey);
+    });
+}
+// ── Resize routing keys ──────────────────────────────────────────────
+var CORNER_KEYS = new Set(['resize_tl', 'resize_tr', 'resize_br', 'resize_bl']);
+function isResizeKey(key) {
+    if (key === undefined) {
+        return false;
+    }
+    return CORNER_KEYS.has(key) || /^rowEdge_\d+$/.test(key) || /^colEdge_\d+$/.test(key);
+}
+var table = {
+    name: 'table',
+    totalStep: 2,
+    // Cell texts, edges and handles escape the anchor hull; fixed-size box.
+    cullable: false,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    styles: {
+        table: {
+            color: '#131722',
+            backgroundColor: '#FFFFFF',
+            borderColor: '#787B86',
+            backgroundEnabled: true,
+            borderEnabled: true,
+            fontSize: 12,
+            textAlign: 'center',
+            cellPadding: DEFAULT_CELL_PADDING,
+            activeCellColor: '#2962FF'
+        }
+    },
+    createPointFigures: function (_a) {
+        var e_3, _b;
+        var _c, _d, _e, _f, _g, _h;
+        var overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, chart = _a.chart, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
+        rememberAnnotationContext(overlay, chart, bounding);
+        if (coordinates.length === 0) {
+            return [];
+        }
+        var point = coordinates[0];
+        var styles = getTableStyles(overlay);
+        var grid = getGrid(overlay);
+        var cellPadding = (_c = styles.cellPadding) !== null && _c !== void 0 ? _c : DEFAULT_CELL_PADDING;
+        var backgroundEnabled = (_d = styles.backgroundEnabled) !== null && _d !== void 0 ? _d : true;
+        var borderEnabled = (_e = styles.borderEnabled) !== null && _e !== void 0 ? _e : true;
+        var borderColor = styles.borderColor;
+        var textAlign = (_f = styles.textAlign) !== null && _f !== void 0 ? _f : 'center';
+        var xs = offsetsOf(grid.colWidths);
+        var ys = offsetsOf(grid.rowHeights);
+        var figures = [];
+        if (backgroundEnabled) {
+            figures.push({
+                key: 'background',
+                type: 'rect',
+                attrs: { x: point.x, y: point.y, width: grid.width, height: grid.height },
+                styles: { style: 'fill', color: styles.backgroundColor },
+                ignoreEvent: true
+            });
+        }
+        // Outer border + whole-grid hit body for dragging — pushed BEFORE the
+        // cell rects so per-cell hover/click targets win (dispatch walks
+        // last-registered first).
+        figures.push({
+            key: 'frame',
+            type: 'rect',
+            attrs: { x: point.x, y: point.y, width: grid.width, height: grid.height },
+            styles: {
+                style: 'stroke',
+                color: 'transparent',
+                borderColor: borderEnabled ? borderColor : 'transparent',
+                borderSize: borderEnabled ? 1 : 0
+            },
+            bounds: { x: point.x, y: point.y, width: grid.width, height: grid.height }
+        });
+        // Per-cell hit targets — every cell clickable, text or not. Later in
+        // the array than 'frame' → they win hover (text cursor) and clicks.
+        for (var r = 0; r < grid.rows; r++) {
+            for (var c = 0; c < grid.cols; c++) {
+                var rect = cellRect(point, grid, r, c);
+                figures.push({
+                    key: "cell_".concat(r, "_").concat(c),
+                    type: 'rect',
+                    attrs: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+                    styles: { style: 'fill', color: 'transparent' },
+                    cursor: 'text',
+                    bounds: rect
+                });
+            }
+        }
+        // Cell texts — wrap inside the cell, clip to its height (TV cells clip
+        // overflow; maxHeight trims wrapped lines to the cell).
+        var cellData = __assign(__assign({}, baseTextBoxData('', styles)), { vertAlign: 'middle', horzTextAlign: textAlign });
+        for (var r = 0; r < grid.rows; r++) {
+            for (var c = 0; c < grid.cols; c++) {
+                var content = grid.cells[r * grid.cols + c];
+                if (content === '') {
+                    continue;
+                }
+                var rect = cellRect(point, grid, r, c);
+                var anchorX = rect.x + rect.width / 2;
+                var horzAlign = 'center';
+                if (textAlign === 'left') {
+                    anchorX = rect.x + cellPadding;
+                    horzAlign = 'left';
+                }
+                else if (textAlign === 'right') {
+                    anchorX = rect.x + rect.width - cellPadding;
+                    horzAlign = 'right';
+                }
+                var attrs = __assign(__assign({ x: anchorX, y: rect.y + rect.height / 2 }, cellData), { text: content, horzAlign: horzAlign, wordWrapWidth: Math.max(1, rect.width - 2 * cellPadding), maxHeight: Math.max(1, rect.height - 2 * cellPadding) });
+                figures.push({
+                    key: "celltext_".concat(r, "_").concat(c),
+                    type: 'richText',
+                    attrs: attrs,
+                    styles: { color: styles.color },
+                    cursor: 'text',
+                    ignoreEvent: true
+                });
+            }
+        }
+        // Grid lines — cumulative offsets, rows+1 horizontal, cols+1 vertical.
+        if (borderEnabled) {
+            for (var r = 0; r <= grid.rows; r++) {
+                var y = point.y + ys[r];
+                figures.push({
+                    key: "gridH_".concat(r),
+                    type: 'line',
+                    attrs: {
+                        coordinates: [
+                            { x: point.x, y: y },
+                            { x: point.x + grid.width, y: y }
+                        ]
+                    },
+                    styles: { color: borderColor, size: 1 },
+                    ignoreEvent: true
+                });
+            }
+            for (var c = 0; c <= grid.cols; c++) {
+                var x = point.x + xs[c];
+                figures.push({
+                    key: "gridV_".concat(c),
+                    type: 'line',
+                    attrs: {
+                        coordinates: [
+                            { x: x, y: point.y },
+                            { x: x, y: point.y + grid.height }
+                        ]
+                    },
+                    styles: { color: borderColor, size: 1 },
+                    ignoreEvent: true
+                });
+            }
+        }
+        // Selected-cell highlight — TradingView marks the active cell.
+        var activeIndex = activeCells.get(overlay);
+        if ((isSelected === true || isHovered === true) && isNumber(activeIndex) && activeIndex < grid.cells.length) {
+            var rect = cellRect(point, grid, Math.floor(activeIndex / grid.cols), activeIndex % grid.cols);
+            figures.push({
+                key: 'cellSel',
+                type: 'rect',
+                attrs: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+                styles: {
+                    style: 'stroke_fill',
+                    color: "".concat((_g = styles.activeCellColor) !== null && _g !== void 0 ? _g : '#2962FF', "33"),
+                    borderColor: (_h = styles.activeCellColor) !== null && _h !== void 0 ? _h : '#2962FF',
+                    borderSize: 1.5
+                },
+                ignoreEvent: true
+            });
+        }
+        // Row/column resize strips on the internal gridlines (selected only —
+        // TradingView surfaces them through its active-edge hit zones).
+        if (isSelected === true && !overlay.lock && !overlay.isDrawing()) {
+            var half = EDGE_HANDLE_THICKNESS / 2;
+            for (var r = 1; r < grid.rows; r++) {
+                var y = point.y + ys[r];
+                figures.push({
+                    key: "rowEdge_".concat(r),
+                    type: 'rect',
+                    attrs: { x: point.x, y: y - half, width: grid.width, height: EDGE_HANDLE_THICKNESS },
+                    styles: { style: 'fill', color: 'transparent' },
+                    cursor: 'ns-resize'
+                });
+            }
+            for (var c = 1; c < grid.cols; c++) {
+                var x = point.x + xs[c];
+                figures.push({
+                    key: "colEdge_".concat(c),
+                    type: 'rect',
+                    attrs: { x: x - half, y: point.y, width: EDGE_HANDLE_THICKNESS, height: grid.height },
+                    styles: { style: 'fill', color: 'transparent' },
+                    cursor: 'ew-resize'
+                });
+            }
+            // Corner resize handles — TV's four corner anchors. These are
+            // non-point figures: drags reach performEventBodyMove keyed by
+            // `figureKey` and resize instead of translating.
+            var cs = CORNER_HANDLE_SIZE;
+            var corners = [
+                { key: 'resize_tl', x: point.x, y: point.y, cursor: 'nwse-resize' },
+                { key: 'resize_tr', x: point.x + grid.width, y: point.y, cursor: 'nesw-resize' },
+                { key: 'resize_br', x: point.x + grid.width, y: point.y + grid.height, cursor: 'nwse-resize' },
+                { key: 'resize_bl', x: point.x, y: point.y + grid.height, cursor: 'nesw-resize' }
+            ];
+            try {
+                for (var corners_1 = __values(corners), corners_1_1 = corners_1.next(); !corners_1_1.done; corners_1_1 = corners_1.next()) {
+                    var corner = corners_1_1.value;
+                    figures.push({
+                        key: corner.key,
+                        type: 'rect',
+                        attrs: { x: corner.x - cs / 2, y: corner.y - cs / 2, width: cs, height: cs },
+                        styles: {
+                            style: 'stroke_fill',
+                            color: '#ffffff',
+                            borderColor: '#1592E6',
+                            borderSize: 1.5
+                        },
+                        cursor: corner.cursor
+                    });
+                }
+            }
+            catch (e_3_1) { e_3 = { error: e_3_1 }; }
+            finally {
+                try {
+                    if (corners_1_1 && !corners_1_1.done && (_b = corners_1.return)) _b.call(corners_1);
+                }
+                finally { if (e_3) throw e_3.error; }
+            }
+        }
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isTouch: isTouch,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_'
+        })), false));
+        return figures;
+    },
+    onPressedMoveStart: function (_a) {
+        var overlay = _a.overlay, figure = _a.figure, x = _a.x, y = _a.y;
+        var key = figure === null || figure === void 0 ? void 0 : figure.key;
+        if (isResizeKey(key)) {
+            var grid = getGrid(overlay);
+            tableDragStates.set(overlay, {
+                px: { x: x !== null && x !== void 0 ? x : 0, y: y !== null && y !== void 0 ? y : 0 },
+                colWidths: __spreadArray([], __read(grid.colWidths), false),
+                rowHeights: __spreadArray([], __read(grid.rowHeights), false)
+            });
+        }
+    },
+    // `this` is the overlay — the perform params carry none.
+    performEventBodyMove: function (params) {
+        var _a;
+        var key = params.figureKey;
+        var event = params.event;
+        var state = tableDragStates.get(this);
+        if (!isResizeKey(key) || event === undefined || state === undefined) {
+            return;
+        }
+        var chart = annotationChartOf(this);
+        if (chart === undefined || !isNumber(event.x) || !isNumber(event.y)) {
+            return;
+        }
+        var dx = event.x - state.px.x;
+        var dy = event.y - state.px.y;
+        var prev = (_a = params.prevPoints[0]) !== null && _a !== void 0 ? _a : {};
+        // Row/column edge drags resize ONE band — the kernel's translate is
+        // reverted and the delta lands on the adjacent row/column.
+        var rowEdge = /^rowEdge_(\d+)$/.exec(key);
+        if (rowEdge !== null) {
+            var i = Number(rowEdge[1]);
+            this.points = params.prevPoints.map(function (p) { return (__assign({}, p)); });
+            var rowHeights = __spreadArray([], __read(state.rowHeights), false);
+            rowHeights[i - 1] = Math.max(MIN_CELL_SIZE, rowHeights[i - 1] + dy);
+            patchExtendData(this, { rowHeights: rowHeights, tableHeight: rowHeights.reduce(function (a, b) { return a + b; }, 0) });
+            return;
+        }
+        var colEdge = /^colEdge_(\d+)$/.exec(key);
+        if (colEdge !== null) {
+            var j = Number(colEdge[1]);
+            this.points = params.prevPoints.map(function (p) { return (__assign({}, p)); });
+            var colWidths = __spreadArray([], __read(state.colWidths), false);
+            colWidths[j - 1] = Math.max(MIN_CELL_SIZE, colWidths[j - 1] + dx);
+            patchExtendData(this, { colWidths: colWidths, tableWidth: colWidths.reduce(function (a, b) { return a + b; }, 0) });
+            return;
+        }
+        // Corner drags resize the whole table; the top-left anchor moves with
+        // the cursor for the TL/TR/BL corners (opposite corner stays put).
+        var grid = getGrid(this);
+        var w0 = state.colWidths.reduce(function (a, b) { return a + b; }, 0);
+        var h0 = state.rowHeights.reduce(function (a, b) { return a + b; }, 0);
+        var minW = grid.cols * MIN_CELL_SIZE;
+        var minH = grid.rows * MIN_CELL_SIZE;
+        var effDx = dx;
+        var effDy = dy;
+        switch (key) {
+            case 'resize_tl':
+                effDx = Math.min(dx, w0 - minW);
+                effDy = Math.min(dy, h0 - minH);
+                break;
+            case 'resize_tr':
+                effDx = Math.max(dx, minW - w0);
+                effDy = Math.min(dy, h0 - minH);
+                break;
+            case 'resize_br':
+                effDx = Math.max(dx, minW - w0);
+                effDy = Math.max(dy, minH - h0);
+                break;
+            case 'resize_bl':
+                effDx = Math.min(dx, w0 - minW);
+                effDy = Math.max(dy, minH - h0);
+                break;
+        }
+        var newW = key === 'resize_tl' || key === 'resize_bl' ? w0 - effDx : w0 + effDx;
+        var newH = key === 'resize_tl' || key === 'resize_tr' ? h0 - effDy : h0 + effDy;
+        // Restore the kernel-translated points, then re-apply only the axes a
+        // given corner owns (TL both, TR y-only, BL x-only, BR none) — pixel
+        // space → data point so log/percent scales stay exact.
+        this.points = params.prevPoints.map(function (p) { return (__assign({}, p)); });
+        var prevPx = pointToCoordinate$3(chart, this.paneId, prev);
+        var moveX = key === 'resize_tl' || key === 'resize_bl' ? effDx : 0;
+        var moveY = key === 'resize_tl' || key === 'resize_tr' ? effDy : 0;
+        if (moveX !== 0 || moveY !== 0) {
+            var converted = chart.convertFromPixel([{ x: prevPx.x + moveX, y: prevPx.y + moveY }], { paneId: this.paneId });
+            var point = Array.isArray(converted) ? converted[0] : converted;
+            var target = this.points[0];
+            if (isValid(point) && isValid(target)) {
+                if (isNumber(point.timestamp))
+                    target.timestamp = point.timestamp;
+                if (isNumber(point.dataIndex))
+                    target.dataIndex = point.dataIndex;
+                if (isNumber(point.value))
+                    target.value = point.value;
+            }
+        }
+        // Explicit bands scale proportionally on a corner resize (TV parity);
+        // a uniform table just stores the new outer size.
+        if (getExtendData(this).colWidths !== undefined || getExtendData(this).rowHeights !== undefined) {
+            var colWidths = state.colWidths.map(function (w) { return Math.max(MIN_CELL_SIZE, w * (newW / w0)); });
+            var rowHeights = state.rowHeights.map(function (h) { return Math.max(MIN_CELL_SIZE, h * (newH / h0)); });
+            patchExtendData(this, {
+                colWidths: colWidths,
+                rowHeights: rowHeights,
+                tableWidth: colWidths.reduce(function (a, b) { return a + b; }, 0),
+                tableHeight: rowHeights.reduce(function (a, b) { return a + b; }, 0)
+            });
+        }
+        else {
+            patchExtendData(this, { tableWidth: newW, tableHeight: newH });
+        }
+    },
+    onClick: function (_a) {
+        var _b;
+        var overlay = _a.overlay, chart = _a.chart, figure = _a.figure, x = _a.x, y = _a.y;
+        var grid = getGrid(overlay);
+        var index = cellIndexFromKey(figure === null || figure === void 0 ? void 0 : figure.key, grid.cols);
+        if (index === null && isNumber(x) && isNumber(y)) {
+            index = cellIndexAt(pointToCoordinate$3(chart, overlay.paneId, (_b = overlay.points[0]) !== null && _b !== void 0 ? _b : {}), grid, { x: x, y: y });
+        }
+        if (index === null) {
+            return;
+        }
+        if (activeCells.get(overlay) === index) {
+            // Second click on the active cell edits it (TradingView).
+            openCellEditor(chart, overlay, index);
+            return;
+        }
+        activeCells.set(overlay, index);
+        overlay.invalidateFigures();
+    },
+    onDoubleClick: function (_a) {
+        var _b;
+        var overlay = _a.overlay, chart = _a.chart, figure = _a.figure, x = _a.x, y = _a.y;
+        var grid = getGrid(overlay);
+        var index = cellIndexFromKey(figure === null || figure === void 0 ? void 0 : figure.key, grid.cols);
+        if (index === null && isNumber(x) && isNumber(y)) {
+            index = cellIndexAt(pointToCoordinate$3(chart, overlay.paneId, (_b = overlay.points[0]) !== null && _b !== void 0 ? _b : {}), grid, { x: x, y: y });
+        }
+        openCellEditor(chart, overlay, index !== null && index !== void 0 ? index : 0);
+    },
+    onRightClick: function (_a) {
+        var _b;
+        var overlay = _a.overlay, chart = _a.chart, figure = _a.figure, x = _a.x, y = _a.y;
+        var grid = getGrid(overlay);
+        var index = cellIndexFromKey(figure === null || figure === void 0 ? void 0 : figure.key, grid.cols);
+        if (index === null && isNumber(x) && isNumber(y)) {
+            index = cellIndexAt(pointToCoordinate$3(chart, overlay.paneId, (_b = overlay.points[0]) !== null && _b !== void 0 ? _b : {}), grid, { x: x, y: y });
+        }
+        if (index === null) {
+            return;
+        }
+        activeCells.set(overlay, index);
+        overlay.invalidateFigures();
+        openTableMenu(chart, overlay, { x: x !== null && x !== void 0 ? x : 0, y: y !== null && y !== void 0 ? y : 0 }, index);
+    },
+    onDrawEnd: function (_a) {
+        var overlay = _a.overlay, chart = _a.chart;
+        if (!overlay.isDrawing()) {
+            openCellEditor(chart, overlay, 0);
+        }
+    }
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 var FIB_TREND_COLOR = '#787b86';
 var FIB_TREND_DASH = [4, 4];
 var FIB_FILL_ALPHA = 0.1;
 var FIB_LABEL_SIZE = 12;
 /** Cull margin (px) for vertical lines outside the pane. */
 var FIB_TIME_CULL = 100;
-/** 'fibonacciLine' default — TV retracement set + hidden extension rows. */
+/** 'fibonacciLine' default — TradingView's 24-level retracement set. */
 var FIB_RETRACEMENT_LEVELS = [
     { visible: true, coeff: 0, color: '#787b86' },
     { visible: true, coeff: 0.236, color: '#f23645' },
@@ -39301,7 +41919,21 @@ var FIB_RETRACEMENT_LEVELS = [
     { visible: true, coeff: 0.786, color: '#00bcd4' },
     { visible: true, coeff: 1, color: '#787b86' },
     { visible: false, coeff: 1.272, color: '#ff9800' },
-    { visible: false, coeff: 1.618, color: '#2962ff' }
+    { visible: false, coeff: 1.414, color: '#e91e63' },
+    { visible: false, coeff: 1.618, color: '#2962ff' },
+    { visible: false, coeff: 2.272, color: '#ff9800' },
+    { visible: false, coeff: 2.414, color: '#e91e63' },
+    { visible: false, coeff: 2.618, color: '#f23645' },
+    { visible: false, coeff: 3.618, color: '#9c27b0' },
+    { visible: false, coeff: 4.236, color: '#e91e63' },
+    { visible: false, coeff: 4.618, color: '#673ab7' },
+    { visible: false, coeff: 5.618, color: '#3f51b5' },
+    { visible: false, coeff: 6.618, color: '#2962ff' },
+    { visible: false, coeff: 7.618, color: '#00bcd4' },
+    { visible: false, coeff: 8.618, color: '#089981' },
+    { visible: false, coeff: 9.618, color: '#4caf50' },
+    { visible: false, coeff: 10.618, color: '#ff9800' },
+    { visible: false, coeff: 11.618, color: '#f23645' }
 ];
 /** 'fibChannel' / 'fibExtension' default — consumer's 11-level set. */
 var FIB_EXTENSION_LEVELS = [
@@ -39598,8 +42230,7 @@ var fibChannel = {
                     attrs: {
                         coordinates: [a.start, a.end, b.end, b.start]
                     },
-                    styles: { style: 'fill', color: fibAlphaColor(levels[i].color, FIB_FILL_ALPHA) },
-                    ignoreEvent: true
+                    styles: { style: 'fill', color: fibAlphaColor(levels[i].color, FIB_FILL_ALPHA) }
                 });
             }
         }
@@ -39624,8 +42255,7 @@ var fibChannel = {
                     align: 'right',
                     baseline: 'bottom'
                 },
-                styles: { color: line.level.color, size: labelSize, backgroundColor: 'transparent' },
-                ignoreEvent: true
+                styles: { color: line.level.color, size: labelSize, backgroundColor: 'transparent' }
             });
         });
         figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
@@ -39753,8 +42383,7 @@ var fibExtension = {
                             { x: leftX, y: yB }
                         ]
                     },
-                    styles: { style: 'fill', color: fibAlphaColor(levels[i].color, FIB_FILL_ALPHA) },
-                    ignoreEvent: true
+                    styles: { style: 'fill', color: fibAlphaColor(levels[i].color, FIB_FILL_ALPHA) }
                 });
             }
         }
@@ -39777,8 +42406,7 @@ var fibExtension = {
                     align: 'left',
                     baseline: 'bottom'
                 },
-                styles: { color: level.color, size: labelSize, backgroundColor: 'transparent' },
-                ignoreEvent: true
+                styles: { color: level.color, size: labelSize, backgroundColor: 'transparent' }
             });
         });
         figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
@@ -39877,8 +42505,7 @@ var fibRetracement = {
                             { x: leftX, y: yB }
                         ]
                     },
-                    styles: { style: 'fill', color: fibAlphaColor(levels[i].color, FIB_FILL_ALPHA) },
-                    ignoreEvent: true
+                    styles: { style: 'fill', color: fibAlphaColor(levels[i].color, FIB_FILL_ALPHA) }
                 });
             }
         }
@@ -39911,8 +42538,7 @@ var fibRetracement = {
                     align: 'left',
                     baseline: 'bottom'
                 },
-                styles: { color: level.color, size: labelSize, backgroundColor: 'transparent' },
-                ignoreEvent: true
+                styles: { color: level.color, size: labelSize, backgroundColor: 'transparent' }
             });
         });
         figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
@@ -40030,8 +42656,7 @@ var fibTimeExtension = {
                             { x: xA, y: bounding.height }
                         ]
                     },
-                    styles: { style: 'fill', color: fibAlphaColor(positions[i].level.color, FIB_FILL_ALPHA) },
-                    ignoreEvent: true
+                    styles: { style: 'fill', color: fibAlphaColor(positions[i].level.color, FIB_FILL_ALPHA) }
                 });
             }
         }
@@ -40058,8 +42683,7 @@ var fibTimeExtension = {
                         align: 'left',
                         baseline: 'bottom'
                     },
-                    styles: { color: level.color, size: labelSize, backgroundColor: 'transparent' },
-                    ignoreEvent: true
+                    styles: { color: level.color, size: labelSize, backgroundColor: 'transparent' }
                 });
             }
         });
@@ -40146,8 +42770,7 @@ var fibTimeZone = {
                             { x: xA, y: bounding.height }
                         ]
                     },
-                    styles: { style: 'fill', color: fibAlphaColor(positions[i].level.color, FIB_FILL_ALPHA) },
-                    ignoreEvent: true
+                    styles: { style: 'fill', color: fibAlphaColor(positions[i].level.color, FIB_FILL_ALPHA) }
                 });
             }
         }
@@ -40174,8 +42797,7 @@ var fibTimeZone = {
                         align: 'left',
                         baseline: 'bottom'
                     },
-                    styles: { color: level.color, size: labelSize, backgroundColor: 'transparent' },
-                    ignoreEvent: true
+                    styles: { color: level.color, size: labelSize, backgroundColor: 'transparent' }
                 });
             }
         });
@@ -40192,549 +42814,6 @@ var fibTimeZone = {
         return figures;
     }
 };
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-/**
- * Effective main-line color: `styles.line` (kernel settings channel) wins,
- * then the extendData color channel (consumer tools), then the chart theme
- * default so secondary elements (arrows/labels/pills) match the line even
- * when `overlay.styles` is unset.
- */
-function lineColorOf(overlay, chart, extColor) {
-    var _a, _b, _c, _d;
-    return (_d = (_c = (_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a.line) === null || _b === void 0 ? void 0 : _b.color) !== null && _c !== void 0 ? _c : extColor) !== null && _d !== void 0 ? _d : chart.getStyles().overlay.line.color;
-}
-/** Effective line width — for label offset math and explicit-style figures. */
-function lineSizeOf(overlay, chart, extWidth) {
-    var _a, _b, _c, _d;
-    return (_d = (_c = (_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a.line) === null || _b === void 0 ? void 0 : _b.size) !== null && _c !== void 0 ? _c : extWidth) !== null && _d !== void 0 ? _d : chart.getStyles().overlay.line.size;
-}
-/** Explicit line-figure styles for tools driven by extendData styling. */
-function lineStyleOverrides(overlay, chart, ext) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;
-    var themeLine = chart.getStyles().overlay.line;
-    var extStyle = ext === null || ext === void 0 ? void 0 : ext.lineStyle;
-    // 'dotted' is a first-class LineType — figures render it via dashedValue.
-    var style = (_c = (_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a.line) === null || _b === void 0 ? void 0 : _b.style) !== null && _c !== void 0 ? _c : (extStyle === 'dashed' || extStyle === 'dotted' ? extStyle : 'solid');
-    var dashedValue = (_f = (_e = (_d = overlay.styles) === null || _d === void 0 ? void 0 : _d.line) === null || _e === void 0 ? void 0 : _e.dashedValue) !== null && _f !== void 0 ? _f : (extStyle === 'dotted' ? [2, 2] : extStyle === 'dashed' ? [6, 4] : [2, 2]);
-    return {
-        color: (_l = (_k = (_j = (_h = (_g = overlay.styles) === null || _g === void 0 ? void 0 : _g.line) === null || _h === void 0 ? void 0 : _h.color) !== null && _j !== void 0 ? _j : ext === null || ext === void 0 ? void 0 : ext.lineColor) !== null && _k !== void 0 ? _k : ext === null || ext === void 0 ? void 0 : ext.color) !== null && _l !== void 0 ? _l : themeLine.color,
-        size: (_q = (_p = (_o = (_m = overlay.styles) === null || _m === void 0 ? void 0 : _m.line) === null || _o === void 0 ? void 0 : _o.size) !== null && _p !== void 0 ? _p : ext === null || ext === void 0 ? void 0 : ext.lineWidth) !== null && _q !== void 0 ? _q : themeLine.size,
-        style: style,
-        dashedValue: dashedValue
-    };
-}
-// ═══════════════════════════════════════
-// Precision
-// ═══════════════════════════════════════
-/**
- * Display precision for price labels/pills: symbol precision on candle
- * panes, max indicator precision on indicator panes (fibonacciLine pattern).
- */
-function pricePrecisionOf(chart, overlay, yAxis, override) {
-    var _a, _b, _c;
-    if (isNumber(override)) {
-        return override;
-    }
-    if ((_a = yAxis === null || yAxis === void 0 ? void 0 : yAxis.isInCandle()) !== null && _a !== void 0 ? _a : true) {
-        return (_c = (_b = chart.getSymbol()) === null || _b === void 0 ? void 0 : _b.pricePrecision) !== null && _c !== void 0 ? _c : 2;
-    }
-    var precision = 0;
-    var indicators = chart.getIndicators({ paneId: overlay.paneId });
-    indicators.forEach(function (indicator) {
-        precision = Math.max(precision, indicator.precision);
-    });
-    return precision;
-}
-// ═══════════════════════════════════════
-// Chart registry for perform* callbacks
-// ═══════════════════════════════════════
-var lineChartRegistry = new WeakMap();
-/**
- * perform* callbacks receive no `chart` — snap45 and pixel math need one,
- * so createPointFigures registers the chart against the overlay each draw.
- */
-function rememberLineChart(overlay, chart) {
-    lineChartRegistry.set(overlay, chart);
-}
-function lineChartOf(overlay) {
-    return lineChartRegistry.get(overlay);
-}
-// ═══════════════════════════════════════
-// 45° snapping
-// ═══════════════════════════════════════
-/**
- * If Shift (or the persistent align-45 toggle) is active, snap the point
- * currently being moved (`params.performPointIndex`) to the nearest 45°
- * ray from `params.points[fixedIndex]`, preserving distance. Writes
- * dataIndex/timestamp/value back into the dragged point.
- */
-function applySnap45(overlay, params, fixedIndex) {
-    var event = params.event;
-    var chart = lineChartOf(overlay);
-    if (event === undefined || chart === undefined) {
-        return;
-    }
-    if (!isSnap45Active(chart, event) || !isNumber(event.x) || !isNumber(event.y)) {
-        return;
-    }
-    var fixed = params.points[fixedIndex];
-    if (!isValid(fixed)) {
-        return;
-    }
-    var from = chart.convertToPixel(fixed, { paneId: overlay.paneId });
-    if (!isNumber(from.x) || !isNumber(from.y)) {
-        return;
-    }
-    var snapped = snap45Coordinate({ x: event.x, y: event.y }, { x: from.x, y: from.y });
-    var converted = chart.convertFromPixel([snapped], { paneId: overlay.paneId });
-    var point = isArray(converted) ? converted[0] : converted;
-    var target = params.points[params.performPointIndex];
-    if (!isValid(target) || !isValid(point)) {
-        return;
-    }
-    target.timestamp = point.timestamp;
-    target.dataIndex = point.dataIndex;
-    target.value = point.value;
-}
-/** Read label fields honoring both kernel and consumer field casing. */
-function labelSpecOf(ext) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
-    var text = ext.text;
-    if (!isValid(text) || text === '') {
-        return null;
-    }
-    if (ext.showLabel === false) {
-        return null;
-    }
-    return {
-        text: text,
-        textColor: (_a = ext.textcolor) !== null && _a !== void 0 ? _a : ext.textColor,
-        fontSize: (_c = (_b = ext.fontsize) !== null && _b !== void 0 ? _b : ext.textSize) !== null && _c !== void 0 ? _c : 14,
-        bold: (_e = (_d = ext.bold) !== null && _d !== void 0 ? _d : ext.textBold) !== null && _e !== void 0 ? _e : false,
-        italic: (_g = (_f = ext.italic) !== null && _f !== void 0 ? _f : ext.textItalic) !== null && _g !== void 0 ? _g : false,
-        hAlign: (_j = (_h = ext.horzLabelsAlign) !== null && _h !== void 0 ? _h : ext.textHorizontalAlign) !== null && _j !== void 0 ? _j : 'center',
-        vAlign: (_l = (_k = ext.vertLabelsAlign) !== null && _k !== void 0 ? _k : ext.textVerticalAlign) !== null && _l !== void 0 ? _l : 'top'
-    };
-}
-/**
- * TradingView trend-line label layout: rotated with the line, anchored at
- * 15%/50%/85% along the RENDERED line (extension included) and offset
- * perpendicular when vAlign is top/bottom. `center`/`middle` puts the text
- * on the line and reports a gap interval for the caller to cut out.
- */
-function layoutDiagonalLabel(key, spec, lineStart, lineEnd, lineColor, lineWidth) {
-    var _a, _b, _c;
-    var text = spec.text;
-    if (!isString(text) || text === '') {
-        return null;
-    }
-    var fontSize = (_a = spec.fontSize) !== null && _a !== void 0 ? _a : 14;
-    var textColor = (_b = spec.textColor) !== null && _b !== void 0 ? _b : lineColor;
-    var dx = lineEnd.x - lineStart.x;
-    var dy = lineEnd.y - lineStart.y;
-    var angle = Math.atan2(dy, dx);
-    // Keep text readable (never upside down).
-    if (angle > Math.PI / 2)
-        angle -= Math.PI;
-    if (angle < -Math.PI / 2)
-        angle += Math.PI;
-    var t = 0.5;
-    if (spec.hAlign === 'left')
-        t = 0.15;
-    else if (spec.hAlign === 'right')
-        t = 0.85;
-    var anchorX = lineStart.x + dx * t;
-    var anchorY = lineStart.y + dy * t;
-    var vAlign = (_c = spec.vAlign) !== null && _c !== void 0 ? _c : 'top';
-    var gap = 5;
-    var offsetPx = 0;
-    var baseline = 'middle';
-    if (vAlign === 'top') {
-        offsetPx = -(lineWidth / 2 + gap + fontSize);
-        baseline = 'bottom';
-    }
-    else if (vAlign === 'bottom') {
-        offsetPx = lineWidth / 2 + gap + fontSize;
-        baseline = 'top';
-    }
-    var perpX = -Math.sin(angle) * offsetPx;
-    var perpY = Math.cos(angle) * offsetPx;
-    var figure = {
-        key: key,
-        type: 'text',
-        attrs: {
-            x: anchorX + perpX,
-            y: anchorY + perpY,
-            text: text,
-            align: 'center',
-            baseline: baseline,
-            rotation: angle
-        },
-        styles: {
-            color: textColor,
-            size: fontSize,
-            weight: spec.bold === true ? 'bold' : 'normal',
-            style: spec.italic === true ? 'italic' : 'normal',
-            backgroundColor: 'transparent'
-        },
-        ignoreEvent: true
-    };
-    var onLine = vAlign === 'center' || vAlign === 'middle';
-    if (onLine && (dx !== 0 || dy !== 0)) {
-        var lineLen = Math.sqrt(dx * dx + dy * dy);
-        var textLen = calcTextWidth(text, fontSize, spec.bold === true ? 'bold' : 'normal') + 16;
-        var halfGap = Math.min(textLen / 2, lineLen * 0.4);
-        var gapT = [
-            Math.max(0, t - halfGap / lineLen),
-            Math.min(1, t + halfGap / lineLen)
-        ];
-        return { figure: figure, gap: gapT };
-    }
-    return { figure: figure };
-}
-/**
- * Push a main-line figure, split in two around `gap` (a [t0,t1] interval
- * along start→end) when provided. `explicitStyles` for extendData-driven
- * tools; omit to inherit `overlay.styles.line` wholesale.
- */
-function pushLineWithGap(figures, keyPrefix, lineStart, lineEnd, gap, explicitStyles) {
-    var makeFigure = function (key, a, b) {
-        var figure = {
-            key: key,
-            type: 'line',
-            attrs: { coordinates: [a, b] }
-        };
-        if (explicitStyles !== undefined) {
-            figure.styles = explicitStyles;
-        }
-        return figure;
-    };
-    if (gap === undefined) {
-        figures.push(makeFigure("".concat(keyPrefix, "_line"), lineStart, lineEnd));
-        return;
-    }
-    var dx = lineEnd.x - lineStart.x;
-    var dy = lineEnd.y - lineStart.y;
-    var midA = {
-        x: lineStart.x + dx * gap[0],
-        y: lineStart.y + dy * gap[0]
-    };
-    var midB = {
-        x: lineStart.x + dx * gap[1],
-        y: lineStart.y + dy * gap[1]
-    };
-    if (gap[0] > 0.01) {
-        figures.push(makeFigure("".concat(keyPrefix, "_line_a"), lineStart, midA));
-    }
-    if (gap[1] < 0.99) {
-        figures.push(makeFigure("".concat(keyPrefix, "_line_b"), midB, lineEnd));
-    }
-}
-/**
- * Non-rotated label over a horizontal span (horizontal* tools). `x0..x1`
- * is the alignment range, `y` the line's vertical position.
- */
-function pushFlatLabel(figures, key, spec, x0, x1, y, lineColor, lineWidth) {
-    var _a, _b;
-    var text = spec.text;
-    if (!isString(text) || text === '') {
-        return;
-    }
-    var fontSize = (_a = spec.fontSize) !== null && _a !== void 0 ? _a : 14;
-    var leftX = Math.min(x0, x1);
-    var width = Math.abs(x1 - x0);
-    var tx = leftX + width * 0.5;
-    if (spec.hAlign === 'left')
-        tx = leftX + width * 0.15;
-    else if (spec.hAlign === 'right')
-        tx = leftX + width * 0.85;
-    var gap = 5;
-    var offsetY = 0;
-    var baseline = 'middle';
-    if (spec.vAlign === 'top') {
-        offsetY = -(lineWidth / 2 + gap + fontSize);
-        baseline = 'bottom';
-    }
-    else if (spec.vAlign === 'bottom') {
-        offsetY = lineWidth / 2 + gap + fontSize;
-        baseline = 'top';
-    }
-    figures.push({
-        key: key,
-        type: 'text',
-        attrs: { x: tx, y: y + offsetY, text: text, align: 'center', baseline: baseline },
-        styles: {
-            color: (_b = spec.textColor) !== null && _b !== void 0 ? _b : lineColor,
-            size: fontSize,
-            weight: spec.bold === true ? 'bold' : 'normal',
-            style: spec.italic === true ? 'italic' : 'normal',
-            backgroundColor: 'transparent'
-        },
-        ignoreEvent: true
-    });
-}
-/**
- * Rotated (-90°) label beside a vertical span (vertical* tools). `x` is
- * the line's horizontal position, `y0..y1` the alignment range.
- */
-function pushVertLabel(figures, key, spec, x, y0, y1, lineColor, lineWidth) {
-    var _a, _b;
-    var text = spec.text;
-    if (!isString(text) || text === '') {
-        return;
-    }
-    var fontSize = (_a = spec.fontSize) !== null && _a !== void 0 ? _a : 14;
-    var topY = Math.min(y0, y1);
-    var spanH = Math.abs(y1 - y0);
-    var ty = topY + spanH * 0.5;
-    if (spec.hAlign === 'left')
-        ty = topY + spanH * 0.15;
-    else if (spec.hAlign === 'right')
-        ty = topY + spanH * 0.85;
-    var gap = 5;
-    var offsetX = 0;
-    var baseline = 'middle';
-    if (spec.vAlign === 'top') {
-        offsetX = lineWidth / 2 + gap + fontSize;
-        baseline = 'bottom';
-    }
-    else if (spec.vAlign === 'bottom') {
-        offsetX = -(lineWidth / 2 + gap + fontSize);
-        baseline = 'top';
-    }
-    figures.push({
-        key: key,
-        type: 'text',
-        attrs: {
-            x: x + offsetX,
-            y: ty,
-            text: text,
-            align: 'center',
-            baseline: baseline,
-            rotation: -Math.PI / 2
-        },
-        styles: {
-            color: (_b = spec.textColor) !== null && _b !== void 0 ? _b : lineColor,
-            size: fontSize,
-            weight: spec.bold === true ? 'bold' : 'normal',
-            style: spec.italic === true ? 'italic' : 'normal',
-            backgroundColor: 'transparent'
-        },
-        ignoreEvent: true
-    });
-}
-// ═══════════════════════════════════════
-// Price labels at anchors
-// ═══════════════════════════════════════
-/** Kernel-style price text 18px above an anchor point. */
-function pushAnchorPriceLabel(figures, key, coordinate, value, color, precision) {
-    if (!isNumber(value)) {
-        return;
-    }
-    figures.push({
-        key: key,
-        type: 'text',
-        attrs: {
-            x: coordinate.x,
-            y: coordinate.y - 18,
-            text: formatNum(value, precision),
-            align: 'center',
-            baseline: 'bottom'
-        },
-        styles: { color: color, size: 11, weight: 'normal', backgroundColor: 'transparent' },
-        ignoreEvent: true
-    });
-}
-/** Reference-style price text beside an anchor (dark background). */
-function pushSidePriceLabel(figures, key, coordinate, value, side, color, precision) {
-    if (!isNumber(value)) {
-        return;
-    }
-    figures.push({
-        key: key,
-        type: 'text',
-        attrs: {
-            x: coordinate.x + (side === 'right' ? 5 : -5),
-            y: coordinate.y,
-            text: formatPrecision$1(value, precision),
-            align: (side === 'right' ? 'left' : 'right'),
-            baseline: 'middle'
-        },
-        styles: {
-            color: color,
-            size: 10,
-            weight: 'normal',
-            backgroundColor: 'rgba(30, 30, 30, 0.8)',
-            paddingLeft: 4,
-            paddingRight: 4,
-            paddingTop: 2,
-            paddingBottom: 2
-        },
-        ignoreEvent: true
-    });
-}
-/**
- * Kernel stats vocabulary: `+Δ  +N%  M bars  Dist: Xpx  Y°` joined inline.
- * Returns [] when stats shouldn't render.
- */
-function inlineStatsLines(input) {
-    var ext = input.ext, points = input.points, anchorA = input.anchorA, anchorB = input.anchorB, spanA = input.spanA, spanB = input.spanB, precision = input.precision, isActive = input.isActive;
-    var showStats = ext.alwaysShowStats === true || isActive;
-    var hasAny = ext.showPriceRange === true ||
-        ext.showPercentPriceRange === true ||
-        ext.showBarsRange === true ||
-        ext.showDistance === true ||
-        ext.showAngle === true;
-    if (!showStats || !hasAny || points.length < 2) {
-        return [];
-    }
-    var p1Value = points[0].value;
-    var p2Value = points[1].value;
-    var p1Index = points[0].dataIndex;
-    var p2Index = points[1].dataIndex;
-    var statLines = [];
-    if (ext.showPriceRange === true && isNumber(p1Value) && isNumber(p2Value)) {
-        var diff = p2Value - p1Value;
-        statLines.push("".concat(diff >= 0 ? '+' : '').concat(formatNum(diff, precision)));
-    }
-    if (ext.showPercentPriceRange === true && isNumber(p1Value) && isNumber(p2Value) && p1Value !== 0) {
-        var pct = ((p2Value - p1Value) / Math.abs(p1Value)) * 100;
-        statLines.push("".concat(pct >= 0 ? '+' : '').concat(formatNum(pct), "%"));
-    }
-    if (ext.showBarsRange === true && isNumber(p1Index) && isNumber(p2Index)) {
-        statLines.push("".concat(Math.abs(p2Index - p1Index), " bars"));
-    }
-    if (ext.showDistance === true) {
-        var dx = spanB.x - spanA.x;
-        var dy = spanB.y - spanA.y;
-        statLines.push("Dist: ".concat(formatNum(Math.sqrt(dx * dx + dy * dy), 1), "px"));
-    }
-    if (ext.showAngle === true) {
-        var dx = anchorB.x - anchorA.x;
-        var dy = anchorB.y - anchorA.y;
-        statLines.push("".concat(formatNum(Math.atan2(-dy, dx) * (180 / Math.PI), 1), "\u00B0"));
-    }
-    return statLines;
-}
-/**
- * Position + push the inline stats text. `a`/`b` bracket the reference
- * span (anchors or rendered tips). Kernel enum: 0 left, 1 top, 2 right
- * (default), 3 bottom.
- */
-function pushInlineStats(figures, key, statLines, statsPosition, a, b, color) {
-    if (statLines.length === 0) {
-        return;
-    }
-    var statsText = statLines.join('  ');
-    var statsPos = typeof statsPosition === 'string'
-        ? statsPosition === 'top' ? 1 : statsPosition === 'bottom' ? 3 : 2
-        : statsPosition !== null && statsPosition !== void 0 ? statsPosition : 2;
-    var midX = (a.x + b.x) / 2;
-    var midY = (a.y + b.y) / 2;
-    var sx = Math.max(a.x, b.x) + 8;
-    var sy = midY;
-    var sAlign = 'left';
-    var sBaseline = 'middle';
-    switch (statsPos) {
-        case 0:
-            sx = Math.min(a.x, b.x) - 8;
-            sy = midY;
-            sAlign = 'right';
-            break;
-        case 1:
-            sx = midX;
-            sy = Math.min(a.y, b.y) - 12;
-            sAlign = 'center';
-            sBaseline = 'bottom';
-            break;
-        case 3:
-            sx = midX;
-            sy = Math.max(a.y, b.y) + 12;
-            sAlign = 'center';
-            sBaseline = 'top';
-            break;
-    }
-    figures.push({
-        key: key,
-        type: 'text',
-        attrs: { x: sx, y: sy, text: statsText, align: sAlign, baseline: sBaseline },
-        styles: { color: color, size: 11, weight: 'normal', backgroundColor: 'transparent' },
-        ignoreEvent: true
-    });
-}
-/** Y-axis: faint strip between anchor prices + a pill per anchor. */
-function buildYAxisBandFigures(keyPrefix, params) {
-    var _a, _b;
-    var overlay = params.overlay, coordinates = params.coordinates, bounding = params.bounding, lineColor = params.lineColor, precision = params.precision, yAxis = params.yAxis;
-    var figures = [];
-    if (coordinates.length >= 2) {
-        var stripTop = Math.min(coordinates[0].y, coordinates[1].y);
-        var stripH = Math.abs(coordinates[1].y - coordinates[0].y);
-        if (stripH > 0) {
-            figures.push({
-                key: "".concat(keyPrefix, "_ystrip"),
-                type: 'rect',
-                attrs: { x: 0, y: stripTop, width: bounding.width, height: stripH },
-                styles: { style: 'fill', color: alphaColor('#2962ff', 0.1) },
-                ignoreEvent: true
-            });
-        }
-    }
-    var p1 = buildYAxisPill(coordinates[0].y, (_a = overlay.points[0]) === null || _a === void 0 ? void 0 : _a.value, lineColor, precision !== null && precision !== void 0 ? precision : 2, bounding, yAxis, "".concat(keyPrefix, "_y0"));
-    if (p1 != null) {
-        figures.push(p1);
-    }
-    if (coordinates.length >= 2) {
-        var p2 = buildYAxisPill(coordinates[1].y, (_b = overlay.points[1]) === null || _b === void 0 ? void 0 : _b.value, lineColor, precision !== null && precision !== void 0 ? precision : 2, bounding, yAxis, "".concat(keyPrefix, "_y1"));
-        if (p2 != null) {
-            figures.push(p2);
-        }
-    }
-    return figures;
-}
-/** X-axis: faint strip between anchor positions + a date pill per anchor. */
-function buildXAxisBandFigures(keyPrefix, params) {
-    var _a, _b;
-    var overlay = params.overlay, coordinates = params.coordinates, bounding = params.bounding, lineColor = params.lineColor;
-    var figures = [];
-    if (coordinates.length >= 2) {
-        var stripLeft = Math.min(coordinates[0].x, coordinates[1].x);
-        var stripW = Math.abs(coordinates[1].x - coordinates[0].x);
-        if (stripW > 0) {
-            figures.push({
-                key: "".concat(keyPrefix, "_xstrip"),
-                type: 'rect',
-                attrs: { x: stripLeft, y: 0, width: stripW, height: bounding.height },
-                styles: { style: 'fill', color: alphaColor('#2962ff', 0.1) },
-                ignoreEvent: true
-            });
-        }
-    }
-    var d0 = formatDate((_a = overlay.points[0]) === null || _a === void 0 ? void 0 : _a.timestamp);
-    if (d0 !== '') {
-        figures.push(buildXAxisPill(coordinates[0].x, d0, lineColor, "".concat(keyPrefix, "_x0")));
-    }
-    if (coordinates.length >= 2) {
-        var d1 = formatDate((_b = overlay.points[1]) === null || _b === void 0 ? void 0 : _b.timestamp);
-        if (d1 !== '') {
-            figures.push(buildXAxisPill(coordinates[1].x, d1, lineColor, "".concat(keyPrefix, "_x1")));
-        }
-    }
-    return figures;
-}
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -40944,8 +43023,7 @@ function labelFigure(key, x, y, text, color, align, baseline, size) {
             paddingRight: 0,
             paddingTop: 0,
             paddingBottom: 0
-        },
-        ignoreEvent: true
+        }
     };
 }
 /** The 1/8-division levels shared by the gann box family. */
@@ -41259,8 +43337,7 @@ function gannArcFigures(start, end, arcs, fillBack, transparency, lineSize, keyP
                 key: "".concat(keyPrefix, "_arcfill_").concat(index),
                 type: 'path',
                 attrs: { x: 0, y: 0, width: 0, height: 0, path: path },
-                styles: { style: 'fill', color: alphaColor(arc.color, alpha) },
-                ignoreEvent: true
+                styles: { style: 'fill', color: alphaColor(arc.color, alpha) }
             });
         }
         figures.push({
@@ -41273,8 +43350,7 @@ function gannArcFigures(start, end, arcs, fillBack, transparency, lineSize, keyP
                 height: 0,
                 path: "M".concat(pointAt(rx, ry, t0), " A").concat(round2(rx), " ").concat(round2(ry), " 0 0 ").concat(sweep, " ").concat(pointAt(rx, ry, t1))
             },
-            styles: { style: 'stroke', color: arc.color, lineWidth: lineSize },
-            ignoreEvent: true
+            styles: { style: 'stroke', color: arc.color, lineWidth: lineSize }
         });
         prevRx = rx;
         prevRy = ry;
@@ -41307,7 +43383,7 @@ function squareHandleFigure(key, coordinate, options) {
     };
 }
 /** Point → pane-local pixel; null when the conversion can't resolve. */
-function pointToCoordinate$2(chart, paneId, point) {
+function pointToCoordinate$1(chart, paneId, point) {
     var converted = chart.convertToPixel(point, { paneId: paneId });
     var c = isArray(converted) ? converted[0] : converted;
     if (isValid(c) && isNumber(c.x) && isNumber(c.y)) {
@@ -41316,7 +43392,7 @@ function pointToCoordinate$2(chart, paneId, point) {
     return null;
 }
 /** Pane-local pixel → Point; null when the conversion can't resolve. */
-function coordinateToPoint$2(chart, paneId, coordinate) {
+function coordinateToPoint$1(chart, paneId, coordinate) {
     var converted = chart.convertFromPixel([coordinate], { paneId: paneId });
     var point = isArray(converted) ? converted[0] : converted;
     return isValid(point) ? point : null;
@@ -41401,8 +43477,7 @@ var fibCircles = {
                                 height: 0,
                                 path: ellipseRingPath(cx_1, cy_1, ring.rx, ring.ry, inner.rx, inner.ry)
                             },
-                            styles: { style: 'fill', color: alphaColor(ring.level.color, alpha_1) },
-                            ignoreEvent: true
+                            styles: { style: 'fill', color: alphaColor(ring.level.color, alpha_1) }
                         });
                     });
                 }
@@ -41700,8 +43775,7 @@ var fibSpeedFan = {
                                 key: "srf_hfill_".concat(e),
                                 type: 'polygon',
                                 attrs: { coordinates: wedge },
-                                styles: { style: 'fill', color: alphaColor(hLevels[e].level.color, alpha) },
-                                ignoreEvent: true
+                                styles: { style: 'fill', color: alphaColor(hLevels[e].level.color, alpha) }
                             });
                         }
                     }
@@ -41712,8 +43786,7 @@ var fibSpeedFan = {
                                 key: "srf_vfill_".concat(e),
                                 type: 'polygon',
                                 attrs: { coordinates: wedge },
-                                styles: { style: 'fill', color: alphaColor(vLevels[e].level.color, alpha) },
-                                ignoreEvent: true
+                                styles: { style: 'fill', color: alphaColor(vLevels[e].level.color, alpha) }
                             });
                         }
                     }
@@ -42124,15 +44197,13 @@ var gannBox = {
                             key: "gb_hband_".concat(curr),
                             type: 'rect',
                             attrs: { x: minX_1, y: Math.min(ys_1[prev], ys_1[curr]), width: width, height: Math.abs(ys_1[curr] - ys_1[prev]) },
-                            styles: { style: 'fill', color: alphaColor(level.color, alpha) },
-                            ignoreEvent: true
+                            styles: { style: 'fill', color: alphaColor(level.color, alpha) }
                         });
                         figures.push({
                             key: "gb_vband_".concat(curr),
                             type: 'rect',
                             attrs: { x: Math.min(xs_1[prev], xs_1[curr]), y: minY_1, width: Math.abs(xs_1[curr] - xs_1[prev]), height: height },
-                            styles: { style: 'fill', color: alphaColor(level.color, alpha) },
-                            ignoreEvent: true
+                            styles: { style: 'fill', color: alphaColor(level.color, alpha) }
                         });
                     }
                 }
@@ -42236,7 +44307,10 @@ var gannBox = {
     }),
     createXAxisFigures: function (_a) {
         var _b, _c, _d;
-        var overlay = _a.overlay, coordinates = _a.coordinates;
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected;
+        if (isSelected !== true) {
+            return [];
+        }
         if (coordinates.length < 1) {
             return [];
         }
@@ -42258,7 +44332,10 @@ var gannBox = {
     },
     createYAxisFigures: function (_a) {
         var _b, _c, _d;
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected;
+        if (isSelected !== true) {
+            return [];
+        }
         if (coordinates.length < 1) {
             return [];
         }
@@ -42547,7 +44624,10 @@ var gannComplex = {
     }),
     createXAxisFigures: function (_a) {
         var _b, _c, _d;
-        var overlay = _a.overlay, coordinates = _a.coordinates;
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected;
+        if (isSelected !== true) {
+            return [];
+        }
         if (coordinates.length < 1) {
             return [];
         }
@@ -42569,7 +44649,10 @@ var gannComplex = {
     },
     createYAxisFigures: function (_a) {
         var _b, _c, _d;
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected;
+        if (isSelected !== true) {
+            return [];
+        }
         if (coordinates.length < 1) {
             return [];
         }
@@ -42698,8 +44781,7 @@ var gannFan = {
                                 key: "gann_fan_fill_".concat(e),
                                 type: 'polygon',
                                 attrs: { coordinates: [p1_1, division, divisions_1[neighbor]] },
-                                styles: { style: 'fill', color: alphaColor(level.color, alpha_1) },
-                                ignoreEvent: true
+                                styles: { style: 'fill', color: alphaColor(level.color, alpha_1) }
                             });
                         }
                     }
@@ -42812,7 +44894,10 @@ var gannFixed = {
     }),
     createXAxisFigures: function (_a) {
         var _b, _c, _d;
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected;
+        if (isSelected !== true) {
+            return [];
+        }
         if (coordinates.length < 1) {
             return [];
         }
@@ -42828,7 +44913,7 @@ var gannFixed = {
         // along the square's diagonal direction.
         var size = isNumber(ext.size) ? Math.max(4, ext.size) : DEFAULT_SIZE;
         var _e = directionSigns(ext.direction), dx = _e.dx, dy = _e.dy;
-        var near = coordinateToPoint$2(chart, overlay.paneId, {
+        var near = coordinateToPoint$1(chart, overlay.paneId, {
             x: coordinates[0].x + (dx * size) / (5 * Math.SQRT2),
             y: coordinates[0].y + (dy * size) / (5 * Math.SQRT2)
         });
@@ -42842,7 +44927,10 @@ var gannFixed = {
     },
     createYAxisFigures: function (_a) {
         var _b, _c, _d;
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected;
+        if (isSelected !== true) {
+            return [];
+        }
         if (coordinates.length < 1) {
             return [];
         }
@@ -42858,7 +44946,7 @@ var gannFixed = {
         var size = isNumber(ext.size) ? Math.max(4, ext.size) : DEFAULT_SIZE;
         var _e = directionSigns(ext.direction), dx = _e.dx, dy = _e.dy;
         var nearY = coordinates[0].y + (dy * size) / (5 * Math.SQRT2);
-        var near = coordinateToPoint$2(chart, overlay.paneId, {
+        var near = coordinateToPoint$1(chart, overlay.paneId, {
             x: coordinates[0].x + (dx * size) / (5 * Math.SQRT2),
             y: nearY
         });
@@ -42889,7 +44977,7 @@ var gannFixed = {
         if (event === undefined || chart === undefined || !isValid(prev) || !isNumber(event.x) || !isNumber(event.y)) {
             return;
         }
-        var vertex = pointToCoordinate$2(chart, this.paneId, prev);
+        var vertex = pointToCoordinate$1(chart, this.paneId, prev);
         if (vertex === null) {
             return;
         }
@@ -42984,7 +45072,10 @@ var gannSquare = {
     }),
     createXAxisFigures: function (_a) {
         var _b, _c, _d;
-        var overlay = _a.overlay, coordinates = _a.coordinates;
+        var overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected;
+        if (isSelected !== true) {
+            return [];
+        }
         if (coordinates.length < 1) {
             return [];
         }
@@ -43006,8 +45097,8 @@ var gannSquare = {
     },
     createYAxisFigures: function (_a) {
         var _b, _c, _d;
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis;
-        if (coordinates.length < 1) {
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected;
+        if (coordinates.length < 1 || isSelected !== true) {
             return [];
         }
         var lineColor = (_d = (_c = (_b = overlay.styles) === null || _b === void 0 ? void 0 : _b.line) === null || _c === void 0 ? void 0 : _c.color) !== null && _d !== void 0 ? _d : TRENDLINE_COLOR;
@@ -43236,8 +45327,7 @@ function pillFigures(key, centerX, topY, lines, opts) {
                 borderColor: opts.borderColor,
                 borderSize: (_g = opts.borderSize) !== null && _g !== void 0 ? _g : 1,
                 borderRadius: (_h = opts.borderRadius) !== null && _h !== void 0 ? _h : 4
-            },
-            ignoreEvent: true
+            }
         }];
     var lineY = topY + padV;
     lines.forEach(function (line, index) {
@@ -43259,8 +45349,7 @@ function pillFigures(key, centerX, topY, lines, opts) {
                 weight: line.weight,
                 family: family,
                 backgroundColor: 'transparent'
-            },
-            ignoreEvent: true
+            }
         });
         lineY += size + gap;
     });
@@ -43671,15 +45760,13 @@ var dateAndPriceRange = {
             key: 'dpr_cross_h',
             type: 'line',
             attrs: { coordinates: [{ x: start.x, y: end.y }, { x: end.x, y: end.y }] },
-            styles: lineFigureStyle,
-            ignoreEvent: true
+            styles: lineFigureStyle
         });
         figures.push({
             key: 'dpr_cross_v',
             type: 'line',
             attrs: { coordinates: [{ x: end.x, y: start.y }, { x: end.x, y: end.y }] },
-            styles: lineFigureStyle,
-            ignoreEvent: true
+            styles: lineFigureStyle
         });
         // Horizontal arrow at mid-height.
         var direction = end.x >= start.x ? 1 : -1;
@@ -43687,8 +45774,7 @@ var dateAndPriceRange = {
             key: 'dpr_arrow_h',
             type: 'line',
             attrs: { coordinates: [{ x: start.x, y: midY }, { x: end.x, y: midY }] },
-            styles: lineFigureStyle,
-            ignoreEvent: true
+            styles: lineFigureStyle
         });
         figures.push({
             key: 'dpr_arrow_h_head',
@@ -43700,8 +45786,7 @@ var dateAndPriceRange = {
                     { x: end.x - ARROW_SIZE$3 * direction, y: midY + ARROW_SIZE$3 / 2 }
                 ]
             },
-            styles: { style: 'solid', color: color, size: 1 },
-            ignoreEvent: true
+            styles: { style: 'solid', color: color, size: 1 }
         });
         // Vertical arrow at mid-width.
         var vDirection = end.y >= start.y ? 1 : -1;
@@ -43709,8 +45794,7 @@ var dateAndPriceRange = {
             key: 'dpr_arrow_v',
             type: 'line',
             attrs: { coordinates: [{ x: midX, y: start.y }, { x: midX, y: end.y }] },
-            styles: { style: 'solid', color: color, size: lineWidth },
-            ignoreEvent: true
+            styles: { style: 'solid', color: color, size: lineWidth }
         });
         figures.push({
             key: 'dpr_arrow_v_head',
@@ -43722,8 +45806,7 @@ var dateAndPriceRange = {
                     { x: midX + ARROW_SIZE$3 / 2, y: end.y - ARROW_SIZE$3 * vDirection }
                 ]
             },
-            styles: { style: 'solid', color: color, size: 1 },
-            ignoreEvent: true
+            styles: { style: 'solid', color: color, size: 1 }
         });
         // Dark tooltip below the rect (above when it would clip the pane):
         // "+Δ (+%) , pips" / "N thanh, 3n" / "Khối lượng 1.2M".
@@ -43812,15 +45895,13 @@ var dateRange = {
             key: 'dr_edge_l',
             type: 'line',
             attrs: { coordinates: [{ x: x, y: y }, { x: x, y: y + height }] },
-            styles: lineFigureStyle,
-            ignoreEvent: true
+            styles: lineFigureStyle
         });
         figures.push({
             key: 'dr_edge_r',
             type: 'line',
             attrs: { coordinates: [{ x: x + width, y: y }, { x: x + width, y: y + height }] },
-            styles: lineFigureStyle,
-            ignoreEvent: true
+            styles: lineFigureStyle
         });
         // Horizontal arrow at mid-height pointing toward the end anchor.
         var direction = end.x >= start.x ? 1 : -1;
@@ -43828,8 +45909,7 @@ var dateRange = {
             key: 'dr_arrow',
             type: 'line',
             attrs: { coordinates: [{ x: start.x, y: midY }, { x: end.x, y: midY }] },
-            styles: lineFigureStyle,
-            ignoreEvent: true
+            styles: lineFigureStyle
         });
         figures.push({
             key: 'dr_arrow_head',
@@ -43841,8 +45921,7 @@ var dateRange = {
                     { x: end.x - ARROW_SIZE$2 * direction, y: midY + ARROW_SIZE$2 / 2 }
                 ]
             },
-            styles: { style: 'solid', color: color, size: 1 },
-            ignoreEvent: true
+            styles: { style: 'solid', color: color, size: 1 }
         });
         // Label pill below the band: "N thanh, 3n 5h" (+ "Khối lượng 1.2M").
         var lines = [
@@ -44079,8 +46158,7 @@ var forecast = {
                 style: 'stroke',
                 color: lineColorAlpha,
                 lineWidth: ext.lineWidth
-            },
-            ignoreEvent: true
+            }
         });
         // ─── 2. Curve hitbox (transparent tube, body-drag surface) ───
         var hitboxPoly = buildCurveHitbox(c1, cp, c2, CURVE_HITBOX_HALF_WIDTH, CURVE_SAMPLES);
@@ -44127,8 +46205,7 @@ var forecast = {
                 color: alpha(ext.sourceTextColor, ext.sourceTextOpacity),
                 size: PILL_FONT_SIZE,
                 backgroundColor: 'transparent'
-            },
-            ignoreEvent: true
+            }
         });
         figures.push({
             key: 'fc_p1_text_date',
@@ -44144,8 +46221,7 @@ var forecast = {
                 color: alpha(ext.sourceTextColor, ext.sourceTextOpacity),
                 size: PILL_FONT_SIZE,
                 backgroundColor: 'transparent'
-            },
-            ignoreEvent: true
+            }
         });
         // ─── 4. P2 info pill ───
         var dataList = chart.getDataList();
@@ -44202,8 +46278,7 @@ var forecast = {
                 color: alpha(ext.targetTextColor, ext.targetTextOpacity),
                 size: PILL_FONT_SIZE,
                 backgroundColor: 'transparent'
-            },
-            ignoreEvent: true
+            }
         });
         figures.push({
             key: 'fc_p2_text_line2',
@@ -44219,8 +46294,7 @@ var forecast = {
                 color: alpha(ext.targetTextColor, ext.targetTextOpacity),
                 size: PILL_FONT_SIZE,
                 backgroundColor: 'transparent'
-            },
-            ignoreEvent: true
+            }
         });
         // ─── 5. Status badge (hidden while drawing) ───
         if (!isDrawing && p1.value != null && p2.value != null) {
@@ -44263,8 +46337,7 @@ var forecast = {
                     color: alpha(badgeTextHex, badgeTextOpacity),
                     size: BADGE_FONT_SIZE,
                     backgroundColor: 'transparent'
-                },
-                ignoreEvent: true
+                }
             });
         }
         // ─── 6. P2 arrow tip along the curve tangent ───
@@ -44274,8 +46347,7 @@ var forecast = {
             key: 'fc_arrow',
             type: 'polygon',
             attrs: { coordinates: arrowPoly },
-            styles: { style: 'fill', color: lineColorAlpha },
-            ignoreEvent: true
+            styles: { style: 'fill', color: lineColorAlpha }
         });
         // ─── 7. Endpoint dots + selection anchors ───
         // Always-visible dots keep the kernel/TV look; createAnchorFigures adds
@@ -44284,15 +46356,13 @@ var forecast = {
             key: 'fc_dot_p1',
             type: 'circle',
             attrs: { x: c1.x, y: c1.y, r: DOT_RADIUS },
-            styles: { style: 'fill', color: DOT_COLOR },
-            ignoreEvent: true
+            styles: { style: 'fill', color: DOT_COLOR }
         });
         figures.push({
             key: 'fc_dot_p2',
             type: 'circle',
             attrs: { x: c2.x, y: c2.y, r: DOT_RADIUS },
-            styles: { style: 'fill', color: DOT_COLOR },
-            ignoreEvent: true
+            styles: { style: 'fill', color: DOT_COLOR }
         });
         figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
             coordinates: coordinates,
@@ -44308,8 +46378,7 @@ var forecast = {
             key: 'fc_footer_bg_p1',
             type: 'circle',
             attrs: { x: c1.x, y: footerY, r: FOOTER_RADIUS },
-            styles: { style: 'stroke', borderColor: FOOTER_COLOR, borderSize: FOOTER_BORDER_SIZE },
-            ignoreEvent: true
+            styles: { style: 'stroke', borderColor: FOOTER_COLOR, borderSize: FOOTER_BORDER_SIZE }
         });
         figures.push({
             key: 'fc_footer_text_p1',
@@ -44321,15 +46390,13 @@ var forecast = {
                 align: 'center',
                 baseline: 'middle'
             },
-            styles: { color: FOOTER_COLOR, size: FOOTER_FONT_SIZE, backgroundColor: 'transparent' },
-            ignoreEvent: true
+            styles: { color: FOOTER_COLOR, size: FOOTER_FONT_SIZE, backgroundColor: 'transparent' }
         });
         figures.push({
             key: 'fc_footer_bg_p2',
             type: 'circle',
             attrs: { x: c2.x, y: footerY, r: FOOTER_RADIUS },
-            styles: { style: 'stroke', borderColor: FOOTER_COLOR, borderSize: FOOTER_BORDER_SIZE },
-            ignoreEvent: true
+            styles: { style: 'stroke', borderColor: FOOTER_COLOR, borderSize: FOOTER_BORDER_SIZE }
         });
         figures.push({
             key: 'fc_footer_text_p2',
@@ -44341,8 +46408,7 @@ var forecast = {
                 align: 'center',
                 baseline: 'middle'
             },
-            styles: { color: FOOTER_COLOR, size: FOOTER_FONT_SIZE, backgroundColor: 'transparent' },
-            ignoreEvent: true
+            styles: { color: FOOTER_COLOR, size: FOOTER_FONT_SIZE, backgroundColor: 'transparent' }
         });
         return figures;
     }, {
@@ -44379,8 +46445,7 @@ var forecast = {
                 key: 'fc_xstrip',
                 type: 'rect',
                 attrs: { x: stripLeftX, y: 0, width: stripWidthX, height: bounding.height },
-                styles: { style: 'fill', color: alpha(AXIS_STRIP_COLOR, AXIS_STRIP_OPACITY) },
-                ignoreEvent: true
+                styles: { style: 'fill', color: alpha(AXIS_STRIP_COLOR, AXIS_STRIP_OPACITY) }
             });
         }
         if (p1Date.length > 0) {
@@ -44403,8 +46468,7 @@ var forecast = {
                     paddingBottom: XAXIS_PILL_PADDING_V,
                     borderRadius: PILL_BORDER_RADIUS,
                     size: PILL_FONT_SIZE
-                },
-                ignoreEvent: true
+                }
             });
         }
         if (p2Date.length > 0) {
@@ -44427,8 +46491,7 @@ var forecast = {
                     paddingBottom: XAXIS_PILL_PADDING_V,
                     borderRadius: PILL_BORDER_RADIUS,
                     size: PILL_FONT_SIZE
-                },
-                ignoreEvent: true
+                }
             });
         }
         return figures;
@@ -44457,8 +46520,7 @@ var forecast = {
                 key: 'fc_ystrip',
                 type: 'rect',
                 attrs: { x: 0, y: stripTopY, width: bounding.width, height: stripHeightY },
-                styles: { style: 'fill', color: alpha(AXIS_STRIP_COLOR, AXIS_STRIP_OPACITY) },
-                ignoreEvent: true
+                styles: { style: 'fill', color: alpha(AXIS_STRIP_COLOR, AXIS_STRIP_OPACITY) }
             });
         }
         if (p1.value != null) {
@@ -44481,8 +46543,7 @@ var forecast = {
                     paddingBottom: XAXIS_PILL_PADDING_V,
                     borderRadius: PILL_BORDER_RADIUS,
                     size: PILL_FONT_SIZE
-                },
-                ignoreEvent: true
+                }
             });
         }
         if (p2.value != null) {
@@ -44505,8 +46566,7 @@ var forecast = {
                     paddingBottom: XAXIS_PILL_PADDING_V,
                     borderRadius: PILL_BORDER_RADIUS,
                     size: PILL_FONT_SIZE
-                },
-                ignoreEvent: true
+                }
             });
         }
         return figures;
@@ -44682,566 +46742,6 @@ var ghostFeed = {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var SHAPE_DASH_MAP = {
-    solid: [],
-    dashed: [8, 4],
-    dotted: [2, 2]
-};
-/**
- * Resolved border for fill-capable shapes. Priority: `overlay.styles`
- * channel for the figure type (kernel settings dialog), then the
- * extendData color channel, then the theme default.
- */
-function shapeStrokeOf(overlay, chart, ext, channel) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
-    var themePoly = chart.getStyles().overlay[channel];
-    var channelStyles = (_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a[channel]) !== null && _b !== void 0 ? _b : {};
-    var extStyle = (_c = ext.borderStyle) !== null && _c !== void 0 ? _c : ext.lineStyle;
-    var style = (_d = channelStyles.borderStyle) !== null && _d !== void 0 ? _d : (extStyle === 'solid' || extStyle === 'dotted' ? extStyle : extStyle !== undefined ? 'dashed' : themePoly.borderStyle);
-    var dashedValue = (_e = channelStyles.borderDashedValue) !== null && _e !== void 0 ? _e : (extStyle !== undefined ? SHAPE_DASH_MAP[extStyle] : themePoly.borderDashedValue);
-    return {
-        color: (_j = (_h = (_g = (_f = channelStyles.borderColor) !== null && _f !== void 0 ? _f : ext.borderColor) !== null && _g !== void 0 ? _g : ext.lineColor) !== null && _h !== void 0 ? _h : ext.color) !== null && _j !== void 0 ? _j : themePoly.borderColor,
-        size: (_m = (_l = (_k = channelStyles.borderSize) !== null && _k !== void 0 ? _k : ext.borderWidth) !== null && _l !== void 0 ? _l : ext.lineWidth) !== null && _m !== void 0 ? _m : themePoly.borderSize,
-        style: style,
-        dashedValue: dashedValue
-    };
-}
-/**
- * Whether the shape body is filled. The consumer `background.enabled`
- * wins over the kernel flat flags; default is filled.
- */
-function shapeFillEnabled(ext) {
-    var _a, _b, _c;
-    var bg = ext.background;
-    if (isValid(bg) && isBoolean(bg.enabled)) {
-        return bg.enabled;
-    }
-    return (_c = (_b = (_a = ext.fillEnabled) !== null && _a !== void 0 ? _a : ext.fillBackground) !== null && _b !== void 0 ? _b : ext.showBackground) !== null && _c !== void 0 ? _c : true;
-}
-function normalizeOpacity(opacity) {
-    // Percent (20 = 20%) vs fraction (0.2 = 20%) — both spellings exist in
-    // the wild, so treat <=1 as a fraction.
-    return Math.max(0, Math.min(1, opacity <= 1 ? opacity : opacity / 100));
-}
-/**
- * Resolved fill color honoring every field casing:
- * `background{color,opacity}` (consumer) → `fillColor`+`fillOpacity`
- * (kernel) → `backgroundColor`+`transparency` (TV) → stroke tint.
- */
-function shapeFillColor(overlay, ext, strokeColor, channel) {
-    var _a, _b;
-    var channelStyles = (_b = (_a = overlay.styles) === null || _a === void 0 ? void 0 : _a[channel]) !== null && _b !== void 0 ? _b : {};
-    if (isValid(channelStyles.color)) {
-        // The kernel settings channel wins outright — string or gradient.
-        return channelStyles.color;
-    }
-    var bg = ext.background;
-    if (isValid(bg) && (isString(bg.color) || isNumber(bg.opacity))) {
-        var color = isString(bg.color) ? bg.color : strokeColor;
-        var opacity = isNumber(bg.opacity) ? bg.opacity : 20;
-        return alphaRgba(color, normalizeOpacity(opacity));
-    }
-    if (isString(ext.backgroundColor)) {
-        if (!ext.backgroundColor.startsWith('#')) {
-            return ext.backgroundColor;
-        }
-        var t_1 = isNumber(ext.transparency) ? ext.transparency : 80;
-        var pct_1 = t_1 <= 1 ? t_1 * 100 : t_1;
-        return alphaRgba(ext.backgroundColor, Math.max(0, Math.min(1, (100 - pct_1) / 100)));
-    }
-    if (isString(ext.fillColor)) {
-        var opacity = isNumber(ext.fillOpacity) ? ext.fillOpacity : 20;
-        return alphaRgba(ext.fillColor, normalizeOpacity(opacity));
-    }
-    var t = isNumber(ext.transparency) ? ext.transparency : 80;
-    var pct = t <= 1 ? t * 100 : t;
-    return alphaRgba(strokeColor, Math.max(0, Math.min(1, (100 - pct) / 100)));
-}
-/**
- * Normalized text spec. Returns null when no text is configured, a master
- * gate (`textEnabled`/`showLabel`) is off, or an external editor owns the
- * text right now (`isEditing`).
- */
-function shapeLabelSpecOf(ext) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;
-    if (ext.isEditing === true) {
-        return null;
-    }
-    if (ext.textEnabled === false || ext.showLabel === false) {
-        return null;
-    }
-    var text = ext.text;
-    if (!isString(text) || text === '') {
-        return null;
-    }
-    var hRaw = (_c = (_b = (_a = ext.horzAlign) !== null && _a !== void 0 ? _a : ext.textHorizontalAlign) !== null && _b !== void 0 ? _b : ext.horzLabelsAlign) !== null && _c !== void 0 ? _c : 'center';
-    var vRaw = (_f = (_e = (_d = ext.vertAlign) !== null && _d !== void 0 ? _d : ext.textVerticalAlign) !== null && _e !== void 0 ? _e : ext.vertLabelsAlign) !== null && _f !== void 0 ? _f : 'middle';
-    return {
-        text: text,
-        color: (_g = ext.textColor) !== null && _g !== void 0 ? _g : ext.textcolor,
-        fontSize: (_j = (_h = ext.textSize) !== null && _h !== void 0 ? _h : ext.fontsize) !== null && _j !== void 0 ? _j : 14,
-        bold: (_m = (_l = (_k = ext.isBold) !== null && _k !== void 0 ? _k : ext.bold) !== null && _l !== void 0 ? _l : ext.textBold) !== null && _m !== void 0 ? _m : false,
-        italic: (_q = (_p = (_o = ext.isItalic) !== null && _o !== void 0 ? _o : ext.italic) !== null && _p !== void 0 ? _p : ext.textItalic) !== null && _q !== void 0 ? _q : false,
-        hAlign: hRaw === 'left' || hRaw === 'right' ? hRaw : 'center',
-        vAlign: vRaw === 'top' || vRaw === 'bottom' ? vRaw : 'middle'
-    };
-}
-var TEXT_PAD = 8;
-/**
- * In-box text figure (kernel rect pattern): alignment offsets the anchor
- * inside the box; `width`/`height` clip the text bounds. `rotation`
- * (radians around the text anchor) renders rotated labels — the TradingView
- * ellipse tilts its inscribed text by the edge angle.
- */
-function shapeTextFigure(key, spec, box, fallbackColor, rotation) {
-    var _a;
-    var tx = (box.left + box.right) / 2;
-    var ty = (box.top + box.bottom) / 2;
-    if (spec.hAlign === 'left') {
-        tx = box.left + TEXT_PAD;
-    }
-    else if (spec.hAlign === 'right') {
-        tx = box.right - TEXT_PAD;
-    }
-    if (spec.vAlign === 'top') {
-        ty = box.top + TEXT_PAD;
-    }
-    else if (spec.vAlign === 'bottom') {
-        ty = box.bottom - TEXT_PAD;
-    }
-    return {
-        key: key,
-        type: 'text',
-        attrs: {
-            x: tx,
-            y: ty,
-            text: spec.text,
-            align: spec.hAlign,
-            baseline: spec.vAlign === 'middle' ? 'middle' : spec.vAlign,
-            width: Math.max(0, box.right - box.left - TEXT_PAD * 2),
-            height: Math.max(0, box.bottom - box.top - TEXT_PAD * 2),
-            rotation: rotation
-        },
-        styles: {
-            color: (_a = spec.color) !== null && _a !== void 0 ? _a : fallbackColor,
-            size: spec.fontSize,
-            weight: spec.bold ? 'bold' : '600',
-            // `style` on a text figure is the fill/stroke draw mode — italic goes
-            // through fontStyle or the font string is never italicized.
-            fontStyle: spec.italic ? 'italic' : undefined,
-            backgroundColor: 'transparent'
-        },
-        ignoreEvent: true
-    };
-}
-/** "+ Add text" placeholder (kernel rect parity) for selected empty-text shapes. */
-function shapeTextPlaceholderFigure(key, box, color, rotation) {
-    return {
-        key: key,
-        type: 'text',
-        attrs: {
-            x: (box.left + box.right) / 2,
-            y: (box.top + box.bottom) / 2,
-            text: '+ Add text',
-            align: 'center',
-            baseline: 'middle',
-            rotation: rotation
-        },
-        styles: {
-            color: color,
-            size: 13,
-            weight: 'normal',
-            style: 'normal',
-            backgroundColor: 'transparent'
-        },
-        cursor: 'text'
-    };
-}
-/**
- * Square drag handle at an arbitrary pixel position (computed corners,
- * edge midpoints, generated controls — the channelCommon precedent). The
- * factory `createAnchorFigures` only anchors at stored coordinates, so
- * handles whose pixel position differs from `points[i]` are built here.
- */
-function shapeHandleFigure(key, coordinate, options) {
-    var _a, _b, _c;
-    var half = options.isTouch === true ? ANCHOR_HALF_TOUCH : ANCHOR_HALF_MOUSE;
-    var cx = Math.round(coordinate.x) - 0.5;
-    var cy = Math.round(coordinate.y) - 0.5;
-    var shape = (_a = options.shape) !== null && _a !== void 0 ? _a : 'square';
-    return {
-        key: key,
-        type: shape === 'circle' ? 'circle' : 'rect',
-        attrs: shape === 'circle'
-            ? { x: cx, y: cy, r: half }
-            : { x: cx - half, y: cy - half, width: half * 2, height: half * 2 },
-        styles: {
-            style: 'stroke_fill',
-            color: '#ffffff',
-            borderColor: '#1592E6',
-            borderSize: 1.5
-        },
-        pointIndex: options.pointIndex,
-        moveDirection: (_b = options.moveDirection) !== null && _b !== void 0 ? _b : 'both',
-        cursor: (_c = options.cursor) !== null && _c !== void 0 ? _c : 'pointer'
-    };
-}
-// ═══════════════════════════════════════
-// Point ↔ pixel helpers (union-narrowed)
-// ═══════════════════════════════════════
-function pointToCoordinate$1(chart, paneId, point) {
-    var converted = chart.convertToPixel(point, { paneId: paneId });
-    var c = isArray(converted) ? converted[0] : converted;
-    if (isValid(c) && isNumber(c.x) && isNumber(c.y)) {
-        return { x: c.x, y: c.y };
-    }
-    return null;
-}
-function coordinateToPoint$1(chart, paneId, coordinate) {
-    var converted = chart.convertFromPixel([coordinate], { paneId: paneId });
-    var point = isArray(converted) ? converted[0] : converted;
-    return isValid(point) ? point : null;
-}
-/**
- * Move `target` to the pixel position `prevPx + (dx, dy)` — exact
- * translation regardless of axis scale (log axes included).
- */
-function translatePointByPixelDelta(chart, paneId, target, prevPx, dx, dy) {
-    var point = coordinateToPoint$1(chart, paneId, { x: prevPx.x + dx, y: prevPx.y + dy });
-    if (point !== null) {
-        target.timestamp = point.timestamp;
-        target.dataIndex = point.dataIndex;
-        target.value = point.value;
-    }
-}
-// ═══════════════════════════════════════
-// Shift constraints
-// ═══════════════════════════════════════
-/** Square constraint: equal pixel extents on both axes, direction kept. */
-function squareCoordinate(to, from) {
-    var dx = to.x - from.x;
-    var dy = to.y - from.y;
-    var side = Math.max(Math.abs(dx), Math.abs(dy));
-    return {
-        x: from.x + (dx < 0 ? -side : side),
-        y: from.y + (dy < 0 ? -side : side)
-    };
-}
-/**
- * Shift (or the persistent align-45 toggle) → rewrite the moving point so
- * its pixel offset from `points[fixedIndex]` is square — TV's Shift-square
- * for rectangle/ellipse drawing. Same call shape as `applySnap45`.
- */
-function applySquareSnap(overlay, params, fixedIndex) {
-    var event = params.event;
-    var chart = lineChartOf(overlay);
-    if (event === undefined || chart === undefined) {
-        return;
-    }
-    if (!isSnap45Active(chart, event) || !isNumber(event.x) || !isNumber(event.y)) {
-        return;
-    }
-    var fixed = params.points[fixedIndex];
-    if (!isValid(fixed)) {
-        return;
-    }
-    var from = pointToCoordinate$1(chart, overlay.paneId, fixed);
-    if (from === null) {
-        return;
-    }
-    var point = coordinateToPoint$1(chart, overlay.paneId, squareCoordinate({ x: event.x, y: event.y }, from));
-    var target = params.points[params.performPointIndex];
-    if (point === null || !isValid(target)) {
-        return;
-    }
-    target.timestamp = point.timestamp;
-    target.dataIndex = point.dataIndex;
-    target.value = point.value;
-}
-// ═══════════════════════════════════════
-// Per-period visibility (kernel ellipse parity)
-// ═══════════════════════════════════════
-/**
- * Fails OPEN — no configured range → visible. `enabled === false` hides on
- * that band; otherwise the period span must sit inside [min, max].
- * Mirrors the kernel ellipse `isEllipseVisibleAtPeriod` gate.
- */
-function hiddenAtPeriod(ext, period) {
-    if (period === null) {
-        return false;
-    }
-    var key = PERIOD_VIS_KEY[period.type];
-    var range = ext[key];
-    if (!isValid(range)) {
-        return false;
-    }
-    if (range.enabled === false) {
-        return true;
-    }
-    if (!isNumber(period.span)) {
-        return false;
-    }
-    var min = isNumber(range.min) ? range.min : Number.MIN_SAFE_INTEGER;
-    var max = isNumber(range.max) ? range.max : Number.MAX_SAFE_INTEGER;
-    return period.span < min || period.span > max;
-}
-/** Sample a quadratic Bezier into `segments` line-ready coordinates. */
-function sampleQuadratic(p0, pc, p1, segments) {
-    var steps = Math.max(2, Math.floor(segments));
-    var pts = [];
-    for (var i = 0; i <= steps; i++) {
-        var t = i / steps;
-        var mt = 1 - t;
-        pts.push({
-            x: mt * mt * p0.x + 2 * mt * t * pc.x + t * t * p1.x,
-            y: mt * mt * p0.y + 2 * mt * t * pc.y + t * t * p1.y
-        });
-    }
-    return pts;
-}
-function catmullRom(t, p0, p1, p2, p3) {
-    var t2 = t * t;
-    var t3 = t2 * t;
-    return 0.5 * (2 * p1 +
-        (-p0 + p2) * t +
-        (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
-        (-p0 + 3 * p1 - 3 * p2 + p3) * t3);
-}
-/**
- * Catmull-Rom spline through all four control points (the curve passes
- * through every anchor — reference doubleCurve renderer). Phantom
- * endpoints mirror the boundary tangents.
- */
-function sampleCatmullRom4(p0, p1, p2, p3, segments) {
-    var per = Math.max(1, Math.floor(segments / 3));
-    var phantom0 = {
-        x: p0.x - (p1.x - p0.x),
-        y: p0.y - (p1.y - p0.y)
-    };
-    var phantom3 = {
-        x: p3.x + (p3.x - p2.x),
-        y: p3.y + (p3.y - p2.y)
-    };
-    var pts = [];
-    for (var i = 0; i <= per; i++) {
-        var t = i / per;
-        pts.push({
-            x: catmullRom(t, phantom0.x, p0.x, p1.x, p2.x),
-            y: catmullRom(t, phantom0.y, p0.y, p1.y, p2.y)
-        });
-    }
-    for (var i = 1; i <= per; i++) {
-        var t = i / per;
-        pts.push({
-            x: catmullRom(t, p0.x, p1.x, p2.x, p3.x),
-            y: catmullRom(t, p0.y, p1.y, p2.y, p3.y)
-        });
-    }
-    for (var i = 1; i <= per; i++) {
-        var t = i / per;
-        pts.push({
-            x: catmullRom(t, p1.x, p2.x, p3.x, phantom3.x),
-            y: catmullRom(t, p1.y, p2.y, p3.y, phantom3.y)
-        });
-    }
-    return pts;
-}
-/**
- * S-curve intermediates between the two endpoints (reference doubleCurve
- * generation): 1/3 and 2/3 along the segment, offset ±0.25·len along the
- * perpendicular. Position-invariant (unlike TV's raw `e.add(t).scaled`).
- */
-function sCurveIntermediates(p0, p3) {
-    var dx = p3.x - p0.x;
-    var dy = p3.y - p0.y;
-    var len = Math.sqrt(dx * dx + dy * dy);
-    var px = len > 0 ? -dy / len : 0;
-    var py = len > 0 ? dx / len : 0;
-    var offset = len * 0.25;
-    return [
-        { x: p0.x + dx / 3 + px * offset, y: p0.y + dy / 3 + py * offset },
-        { x: p0.x + (2 * dx) / 3 - px * offset, y: p0.y + (2 * dy) / 3 - py * offset }
-    ];
-}
-/**
- * Quadratic-Bezier control midpoint + perpendicular offset (TV
- * BezierQuadro generation): mid(p1,p2) + 0.15·len perpendicular.
- */
-function quadControlOffset(p1, p2) {
-    var dx = p2.x - p1.x;
-    var dy = p2.y - p1.y;
-    var len = Math.sqrt(dx * dx + dy * dy);
-    var px = len > 0 ? -dy / len : 0;
-    var py = len > 0 ? dx / len : 0;
-    var offset = len * 0.15;
-    return {
-        x: (p1.x + p2.x) / 2 + px * offset,
-        y: (p1.y + p2.y) / 2 + py * offset
-    };
-}
-// ═══════════════════════════════════════
-// Rotated rectangle / parallelogram corners
-// ═══════════════════════════════════════
-/**
- * The four corners of the rotated rectangle (TradingView
- * LineToolRotatedRectangle): `p1`→`p2` is the quad's CENTERLINE — the
- * rectangle expands symmetrically by the unsigned perpendicular
- * distance of `p3` to the p1p2 line on BOTH sides (full width =
- * 2·distance). `n` is TV's right normal Point(edge.y, -edge.x)·dist.
- * Order: [p1+n, p2+n, p2−n, p1−n].
- */
-function rotatedRectCorners(p1, p2, p3) {
-    var ex = p2.x - p1.x;
-    var ey = p2.y - p1.y;
-    var len = Math.sqrt(ex * ex + ey * ey);
-    if (len === 0) {
-        return [p1, p1, p1, p1];
-    }
-    var nx = ey / len;
-    var ny = -ex / len;
-    var half = Math.abs((p3.x - p1.x) * nx + (p3.y - p1.y) * ny);
-    var ox = nx * half;
-    var oy = ny * half;
-    return [
-        { x: p1.x + ox, y: p1.y + oy },
-        { x: p2.x + ox, y: p2.y + oy },
-        { x: p2.x - ox, y: p2.y - oy },
-        { x: p1.x - ox, y: p1.y - oy }
-    ];
-}
-/** Frame for segment `a`→`b`; null when the edge is degenerate (<1e-9 px). */
-function edgeFrameOf(a, b) {
-    var dx = b.x - a.x;
-    var dy = b.y - a.y;
-    var len = Math.sqrt(dx * dx + dy * dy);
-    if (len < 1e-9) {
-        return null;
-    }
-    return { ux: dx / len, uy: dy / len, nx: -dy / len, ny: dx / len, len: len };
-}
-/**
- * Signed perpendicular distance from `p` to the infinite line `a`→`b` in
- * left-normal units. `Math.abs()` reproduces TradingView's unsigned
- * `distanceToLine().distance`; the sign reports which side `p` sits on
- * (positive = the Point(-dy, dx) side). Degenerate edges → 0.
- */
-function signedLineDistance(a, b, p) {
-    var frame = edgeFrameOf(a, b);
-    if (frame === null) {
-        return 0;
-    }
-    return (p.x - a.x) * frame.nx + (p.y - a.y) * frame.ny;
-}
-/**
- * N-sample perimeter of a rotated ellipse: semi-axis `a` along `angle`
- * (radians), semi-axis `b` perpendicular — the TradingView
- * translate/rotate/scale ellipse, rendered as a polygon so it also
- * serves as the point-in-polygon hit target.
- */
-function sampleRotatedEllipsePolygon(cx, cy, a, b, angle, n) {
-    var cos = Math.cos(angle);
-    var sin = Math.sin(angle);
-    var steps = Math.max(3, Math.floor(n));
-    var pts = [];
-    for (var i = 0; i < steps; i++) {
-        var t = (2 * Math.PI * i) / steps;
-        var u = a * Math.cos(t);
-        var v = b * Math.sin(t);
-        pts.push({ x: cx + u * cos - v * sin, y: cy + u * sin + v * cos });
-    }
-    return pts;
-}
-/**
- * TradingView LineToolArc curve. TV draws a 60° circular arc — radius
- * `u` (the chord length) centered on the chord's perpendicular bisector
- * at ∓(√3/2)·u — then scales it perpendicular to the chord so the apex
- * lands at signed distance `d`, i.e. an affine-stretched (elliptical)
- * arc through p1, apex = mid + n̂·d, p2. `d` is `p3`'s signed
- * left-normal distance; |d| < 1 or a degenerate chord renders as the
- * bare chord (TV's `distance < 1 → line` fallback).
- */
-function sampleTVArc(p1, p2, p3, segments) {
-    var frame = edgeFrameOf(p1, p2);
-    if (frame === null) {
-        return [p1, p2];
-    }
-    var d = signedLineDistance(p1, p2, p3);
-    if (Math.abs(d) < 1) {
-        return [p1, p2];
-    }
-    var u = frame.len;
-    var k = d / (u * (1 - Math.sqrt(3) / 2));
-    var steps = Math.max(2, Math.floor(segments));
-    var pts = [];
-    for (var i = 0; i <= steps; i++) {
-        var theta = (2 * Math.PI) / 3 - (i / steps) * (Math.PI / 3);
-        var xl = u / 2 + u * Math.cos(theta);
-        var yl = (u * Math.sin(theta) - (u * Math.sqrt(3)) / 2) * k;
-        pts.push({
-            x: p1.x + xl * frame.ux + yl * frame.nx,
-            y: p1.y + xl * frame.uy + yl * frame.ny
-        });
-    }
-    return pts;
-}
-// ═══════════════════════════════════════
-// Unlimited-step restore settle
-// ═══════════════════════════════════════
-/**
- * Overlays armed through `onDrawStart` — i.e. created empty for a live
- * draw. Restored overlays never fire onDrawStart (`override` advances
- * `currentStep` past START before createOverlay reaches the hook), so the
- * set distinguishes "user is drawing right now" from "deserialized into a
- * drawing state" — a distinction persisted data alone cannot express.
- */
-var ARMED_DRAWS = new WeakSet();
-/** Mark an overlay as a live draw — call from the template's `onDrawStart`. */
-function markDrawArmed(overlay) {
-    ARMED_DRAWS.add(overlay);
-}
-/**
- * Kernel gap workaround for `totalStep: MAX_SAFE_INTEGER` tools: a
- * restored overlay lands in the drawing-progress slot (`override` can
- * never satisfy `points.length >= totalStep - 1`), eats the user's next
- * click, and is skipped by the serializer. When such an overlay owns the
- * slot and is NOT a live draw (never armed through onDrawStart), finish it
- * and hand it to the committed overlay list.
- *
- * Called from createPointFigures — the earliest hook that runs after
- * restore, with a live `chart`. Degenerate restores (< 2 points) are left
- * in place rather than removed mid-render.
- */
-function settleRestoredUnlimited(overlay, chart) {
-    var _a;
-    if (!overlay.isDrawing() || overlay.isStart() || ARMED_DRAWS.has(overlay)) {
-        return;
-    }
-    if (overlay.points.length < 2) {
-        return;
-    }
-    var store = chart.getChartStore();
-    if (((_a = store.getProgressOverlayInfo()) === null || _a === void 0 ? void 0 : _a.overlay) !== overlay) {
-        return;
-    }
-    overlay.forceComplete();
-    store.progressOverlayComplete();
-}
-/** Minimum rendered radius for the circle tool (kernel constant). */
-var MIN_RADIUS_PX = 5;
-
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 var POSITION_DEFAULTS = {
     profitHeight: 150,
     stopHeight: 150,
@@ -45381,16 +46881,14 @@ function buildPositionFigures(params, direction) {
         key: 'pos_entry_line',
         type: 'line',
         attrs: { coordinates: [{ x: geo.leftX, y: geo.entryY }, { x: geo.leftX + zoneWidth, y: geo.entryY }] },
-        styles: { style: 'dashed', color: ext.lineColor, size: 1, dashedValue: [6, 4] },
-        ignoreEvent: true
+        styles: { style: 'dashed', color: ext.lineColor, size: 1, dashedValue: [6, 4] }
     });
     // ── Dashed center line through the zones ──
     figures.push({
         key: 'pos_center_line',
         type: 'line',
         attrs: { coordinates: [{ x: centerX, y: geo.profitY }, { x: centerX, y: geo.stopY }] },
-        styles: { style: 'dashed', color: ext.lineColor, size: 1, dashedValue: [4, 4] },
-        ignoreEvent: true
+        styles: { style: 'dashed', color: ext.lineColor, size: 1, dashedValue: [4, 4] }
     });
     // ── Labels: hover/selection or alwaysShowStats ──
     var showLabels = ext.alwaysShowStats || isSelected === true || isHovered === true;
@@ -45490,8 +46988,7 @@ function buildPositionYAxisFigures(params, direction) {
                 paddingTop: 2,
                 paddingBottom: 2,
                 borderRadius: 2
-            },
-            ignoreEvent: true
+            }
         });
     };
     pill('entry', geo.entryY, (_c = (_b = overlay.points[0]) === null || _b === void 0 ? void 0 : _b.value) !== null && _c !== void 0 ? _c : null, ext.lineColor);
@@ -45828,23 +47325,20 @@ var measure = {
                     borderColor: borderColor,
                     borderSize: 1
                 },
-                bounds: { x: x - ARROW_SIZE$1, y: y - ARROW_SIZE$1, width: width + ARROW_SIZE$1 * 2, height: height + ARROW_SIZE$1 * 2 },
-                ignoreEvent: true
+                bounds: { x: x - ARROW_SIZE$1, y: y - ARROW_SIZE$1, width: width + ARROW_SIZE$1 * 2, height: height + ARROW_SIZE$1 * 2 }
             }];
         // Crosshair edges at the release corner (consumer parity).
         figures.push({
             key: 'ms_cross_h',
             type: 'line',
             attrs: { coordinates: [{ x: start.x, y: end.y }, { x: end.x, y: end.y }] },
-            styles: { style: 'solid', color: borderColor, size: 1 },
-            ignoreEvent: true
+            styles: { style: 'solid', color: borderColor, size: 1 }
         });
         figures.push({
             key: 'ms_cross_v',
             type: 'line',
             attrs: { coordinates: [{ x: end.x, y: start.y }, { x: end.x, y: end.y }] },
-            styles: { style: 'solid', color: borderColor, size: 1 },
-            ignoreEvent: true
+            styles: { style: 'solid', color: borderColor, size: 1 }
         });
         // Horizontal arrow at mid-height.
         var direction = end.x >= start.x ? 1 : -1;
@@ -45852,8 +47346,7 @@ var measure = {
             key: 'ms_arrow_h',
             type: 'line',
             attrs: { coordinates: [{ x: start.x, y: midY }, { x: end.x, y: midY }] },
-            styles: { style: 'solid', color: borderColor, size: 1 },
-            ignoreEvent: true
+            styles: { style: 'solid', color: borderColor, size: 1 }
         });
         figures.push({
             key: 'ms_arrow_h_head',
@@ -45865,8 +47358,7 @@ var measure = {
                     { x: end.x - ARROW_SIZE$1 * direction, y: midY + ARROW_SIZE$1 / 2 }
                 ]
             },
-            styles: { style: 'solid', color: borderColor, size: 1 },
-            ignoreEvent: true
+            styles: { style: 'solid', color: borderColor, size: 1 }
         });
         // Vertical arrow at mid-width.
         var vDirection = end.y >= start.y ? 1 : -1;
@@ -45874,8 +47366,7 @@ var measure = {
             key: 'ms_arrow_v',
             type: 'line',
             attrs: { coordinates: [{ x: midX, y: start.y }, { x: midX, y: end.y }] },
-            styles: { style: 'solid', color: borderColor, size: 1 },
-            ignoreEvent: true
+            styles: { style: 'solid', color: borderColor, size: 1 }
         });
         figures.push({
             key: 'ms_arrow_v_head',
@@ -45887,8 +47378,7 @@ var measure = {
                     { x: midX + ARROW_SIZE$1 / 2, y: end.y - ARROW_SIZE$1 * vDirection }
                 ]
             },
-            styles: { style: 'solid', color: borderColor, size: 1 },
-            ignoreEvent: true
+            styles: { style: 'solid', color: borderColor, size: 1 }
         });
         // Tooltip pinned below the rect — above it when it would clip the pane.
         var line1 = "".concat(fmtNum(priceDiff, precision), " (").concat(signedPct(pricePct), ") , ").concat(pips);
@@ -45994,15 +47484,13 @@ var priceRange = {
             key: 'pr_edge_t',
             type: 'line',
             attrs: { coordinates: [{ x: x, y: y }, { x: x + width, y: y }] },
-            styles: { style: lineStyle === 'solid' ? 'solid' : 'dashed', color: color, size: lineWidth, dashedValue: dashed },
-            ignoreEvent: true
+            styles: { style: lineStyle === 'solid' ? 'solid' : 'dashed', color: color, size: lineWidth, dashedValue: dashed }
         });
         figures.push({
             key: 'pr_edge_b',
             type: 'line',
             attrs: { coordinates: [{ x: x, y: y + height }, { x: x + width, y: y + height }] },
-            styles: { style: lineStyle === 'solid' ? 'solid' : 'dashed', color: color, size: lineWidth, dashedValue: dashed },
-            ignoreEvent: true
+            styles: { style: lineStyle === 'solid' ? 'solid' : 'dashed', color: color, size: lineWidth, dashedValue: dashed }
         });
         // Vertical arrow at mid-width + circle marker on the start level.
         var vDirection = end.y >= start.y ? 1 : -1;
@@ -46010,8 +47498,7 @@ var priceRange = {
             key: 'pr_arrow',
             type: 'line',
             attrs: { coordinates: [{ x: midX, y: start.y }, { x: midX, y: end.y }] },
-            styles: { style: 'solid', color: color, size: lineWidth },
-            ignoreEvent: true
+            styles: { style: 'solid', color: color, size: lineWidth }
         });
         figures.push({
             key: 'pr_arrow_head',
@@ -46023,15 +47510,13 @@ var priceRange = {
                     { x: midX + ARROW_SIZE / 2, y: end.y - ARROW_SIZE * vDirection }
                 ]
             },
-            styles: { style: 'solid', color: color, size: 1 },
-            ignoreEvent: true
+            styles: { style: 'solid', color: color, size: 1 }
         });
         figures.push({
             key: 'pr_start_dot',
             type: 'circle',
             attrs: { x: midX, y: start.y, r: 3 },
-            styles: { style: 'stroke', borderColor: color, borderSize: 1 },
-            ignoreEvent: true
+            styles: { style: 'stroke', borderColor: color, borderSize: 1 }
         });
         // Label on the end side: "Δ (±%) ticks" — center sits one gap past
         // the end level (mirrors the consumer tooltip placement).
@@ -46618,8 +48103,7 @@ function buildPointFigures(variant, params) {
                         key: "fill_".concat(index),
                         type: 'polygon',
                         attrs: bands.map(function (bandCoordinates) { return ({ coordinates: bandCoordinates }); }),
-                        styles: { style: 'fill', color: applyTransparency$1(stroke.color, transparency) },
-                        ignoreEvent: true
+                        styles: { style: 'fill', color: applyTransparency$1(stroke.color, transparency) }
                     });
                 }
             }
@@ -46733,6 +48217,196 @@ var pitchfork = createPitchforkTemplate('pitchfork', 'original');
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * 'pitchfan' — TradingView Pitchfan (3 anchors).
+ *
+ * Geometry mirrors TradingView's line-tool-pitchfan pane view:
+ *
+ *   M    = mid(P2, P3)            — median end + fan spread origin
+ *   d    = (P3 − P2) · 0.5        — half-spread vector
+ *
+ * The median is a P1→M ray (extendright). Every visible level draws TWO
+ * rays from P1 through M ± coeff·d — fanning symmetrically around the
+ * median instead of running parallel like a pitchfork's tines. Band fills
+ * are the wedges between successive level rays (TV ChannelRenderer quads
+ * {P1, curEnd, P1, prevEnd}), on both sides of the median.
+ */
+/**
+ * Level color fallbacks — TradingView's pitchfan defaults:
+ * level0 TanOrange300, level1 IguanaGreen300, level2 SkyBlue500,
+ * level3 MintyGreen500, level4 SkyBlue500, level5 TvBlue500,
+ * level6 GrapesPurple500, level7 BerryPink500, level8 RipeRed300.
+ */
+var PITCHFAN_FALLBACK_COLORS = [
+    '#FF9800', '#4CAF50', '#00BCD4', '#089981', '#00BCD4',
+    '#2962FF', '#9C27B0', '#E91E63', '#F7525F'
+];
+/**
+ * TradingView `pitchLevelDefaults` — nine coefficients; only 0.5 and 1.0
+ * ship visible.
+ */
+var PITCHFAN_DEFAULT_LEVELS = [
+    { coeff: 0.25, visible: false, color: PITCHFAN_FALLBACK_COLORS[0] },
+    { coeff: 0.382, visible: false, color: PITCHFAN_FALLBACK_COLORS[1] },
+    { coeff: 0.5, visible: true, color: PITCHFAN_FALLBACK_COLORS[2] },
+    { coeff: 0.618, visible: false, color: PITCHFAN_FALLBACK_COLORS[3] },
+    { coeff: 0.75, visible: false, color: PITCHFAN_FALLBACK_COLORS[4] },
+    { coeff: 1, visible: true, color: PITCHFAN_FALLBACK_COLORS[5] },
+    { coeff: 1.5, visible: false, color: PITCHFAN_FALLBACK_COLORS[6] },
+    { coeff: 1.75, visible: false, color: PITCHFAN_FALLBACK_COLORS[7] },
+    { coeff: 2, visible: false, color: PITCHFAN_FALLBACK_COLORS[8] }
+];
+/**
+ * Wedge between two fan rays sharing the apex P1 — the pane clipped by
+ * both ray lines, keeping the sector that contains the opposite ray's
+ * endpoint (TV's degenerate ChannelRenderer quad where p1 === p3).
+ */
+function fanWedge(origin, endA, endB, bounding) {
+    var poly = [
+        { x: 0, y: 0 },
+        { x: bounding.width, y: 0 },
+        { x: bounding.width, y: bounding.height },
+        { x: 0, y: bounding.height }
+    ];
+    poly = clipPolygonByEdge$1(poly, origin, endA, [endB]);
+    poly = clipPolygonByEdge$1(poly, origin, endB, [endA]);
+    return poly;
+}
+var pitchfan = {
+    name: 'pitchfan',
+    totalStep: 4,
+    cullable: false,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    extendData: {
+        levels: PITCHFAN_DEFAULT_LEVELS,
+        fillBackground: true,
+        transparency: 80
+    },
+    createPointFigures: withFigureCache(function (_a) {
+        var _b, _c;
+        var overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, _d = _a.isSelected, isSelected = _d === void 0 ? false : _d, _e = _a.isHovered, isHovered = _e === void 0 ? false : _e, _f = _a.isTouch, isTouch = _f === void 0 ? false : _f;
+        var figures = [];
+        var count = coordinates.length;
+        if (count === 0) {
+            return figures;
+        }
+        var extendData = isValid(overlay.extendData) ? overlay.extendData : {};
+        var levels = isArray(extendData.levels) ? extendData.levels : PITCHFAN_DEFAULT_LEVELS;
+        var fillBackground = extendData.fillBackground !== false;
+        var transparency = isNumber(extendData.transparency) ? extendData.transparency : 80;
+        var line = (_b = overlay.styles) === null || _b === void 0 ? void 0 : _b.line;
+        var medianStroke = resolveStroke(extendData.median, line, PITCHFORK_MEDIAN_DEFAULT_COLOR);
+        var p1 = coordinates[0];
+        // TradingView `_medianPoint`: mid(P2,P3) at 3 points, P2 at 2 points.
+        var medianEnd = count >= 3 ? mid(coordinates[1], coordinates[2]) : (count === 2 ? coordinates[1] : p1);
+        var medianDir = sub(medianEnd, p1);
+        var medianVisible = ((_c = extendData.median) === null || _c === void 0 ? void 0 : _c.visible) !== false;
+        if (medianVisible && count >= 2 && len(medianDir) > EPSILON$1) {
+            var seg = clipRayToPane(p1, medianDir, bounding, false);
+            if (seg !== null) {
+                pushLine(figures, 'median', [seg], medianStroke);
+            }
+        }
+        if (count < 3) {
+            figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+                coordinates: coordinates,
+                isSelected: isSelected,
+                isHovered: isHovered,
+                isTouch: isTouch,
+                isDrawing: overlay.isDrawing(),
+                lock: overlay.lock,
+                keyPrefix: 'anchor_'
+            })), false));
+            return figures;
+        }
+        var p2 = coordinates[1];
+        var p3 = coordinates[2];
+        // Side segment P2→P3 in the median's stroke (TV `_sideRenderer`).
+        pushLine(figures, 'side', [[p2, p3]], medianStroke);
+        var half = sub(p3, p2);
+        var d = { x: half.x * 0.5, y: half.y * 0.5 };
+        if (len(d) <= EPSILON$1 || len(medianDir) <= EPSILON$1) {
+            figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+                coordinates: coordinates,
+                isSelected: isSelected,
+                isHovered: isHovered,
+                isTouch: isTouch,
+                isDrawing: overlay.isDrawing(),
+                lock: overlay.lock,
+                keyPrefix: 'anchor_'
+            })), false));
+            return figures;
+        }
+        var prevCoeff = 0;
+        levels.forEach(function (level, index) {
+            var coeff = level.coeff;
+            if (level.visible === false || !isNumber(coeff)) {
+                return;
+            }
+            var stroke = resolveStroke(level, line, PITCHFAN_FALLBACK_COLORS[index % PITCHFAN_FALLBACK_COLORS.length]);
+            var upEnd = addScaled(medianEnd, d, coeff);
+            var dnEnd = addScaled(medianEnd, d, -coeff);
+            if (fillBackground && Math.abs(coeff - prevCoeff) > EPSILON$1) {
+                var upPrev = addScaled(medianEnd, d, prevCoeff);
+                var dnPrev = addScaled(medianEnd, d, -prevCoeff);
+                var bands = [];
+                var upBand = fanWedge(p1, upEnd, upPrev, bounding);
+                var dnBand = fanWedge(p1, dnEnd, dnPrev, bounding);
+                if (upBand.length >= 3) {
+                    bands.push(upBand);
+                }
+                if (dnBand.length >= 3) {
+                    bands.push(dnBand);
+                }
+                if (bands.length > 0) {
+                    figures.push({
+                        key: "pfan_fill_".concat(index),
+                        type: 'polygon',
+                        attrs: bands.map(function (bandCoordinates) { return ({ coordinates: bandCoordinates }); }),
+                        styles: { style: 'fill', color: applyTransparency$1(stroke.color, transparency) }
+                    });
+                }
+            }
+            var segs = [];
+            var upSeg = clipRayToPane(p1, sub(upEnd, p1), bounding, false);
+            var dnSeg = clipRayToPane(p1, sub(dnEnd, p1), bounding, false);
+            if (upSeg !== null) {
+                segs.push(upSeg);
+            }
+            if (dnSeg !== null) {
+                segs.push(dnSeg);
+            }
+            pushLine(figures, "pfan_ray_".concat(index), segs, stroke);
+            prevCoeff = coeff;
+        });
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isTouch: isTouch,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_'
+        })), false));
+        return figures;
+    })
+};
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
 
  * http://www.apache.org/licenses/LICENSE-2.0
 
@@ -46762,14 +48436,25 @@ var schiffPitchfork = createPitchforkTemplate('schiffPitchfork', 'schiff');
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var arrowLine = {
-    name: 'arrowLine',
-    totalStep: 3,
-    cullable: false,
-    needDefaultPointFigure: false,
-    needDefaultXAxisFigure: false,
-    needDefaultYAxisFigure: false,
-    createPointFigures: function (_a) {
+/** Editor anchor: same rendered span as createPointFigures (optional
+ *  edge extension), so the DOM box lands on the painted label. */
+var alLabelAnchor = lineLabelAnchorFn(function (coordinates, bounding, ext, style, lineWidth) {
+    if (coordinates.length < 2) {
+        return null;
+    }
+    var _a = __read(coordinates, 2), c1 = _a[0], c2 = _a[1];
+    var extendLeft = ext.extendLeft === true;
+    var extendRight = ext.extendRight === true;
+    var lineStart = c1;
+    var lineEnd = c2;
+    if (extendLeft || extendRight) {
+        var _b = __read(getExtendedCoordinates(c1, c2, bounding.width, bounding.height, extendLeft, extendRight), 2), s = _b[0], e = _b[1];
+        lineStart = s;
+        lineEnd = e;
+    }
+    return diagonalLabelAnchor(style, lineStart, lineEnd, lineWidth);
+});
+var arrowLine = __assign(__assign({ name: 'arrowLine', totalStep: 3, cullable: false, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, createPointFigures: function (_a) {
         var _b, _c, _d, _e, _f;
         var chart = _a.chart, coordinates = _a.coordinates, bounding = _a.bounding, overlay = _a.overlay, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         rememberLineChart(overlay, chart);
@@ -46794,7 +48479,7 @@ var arrowLine = {
             lineEnd = e;
         }
         // ─── Text label layout first — it can request a gap in the line ───
-        var spec = labelSpecOf(ext);
+        var spec = liveLabelSpecOf(overlay, ext);
         var labelLayout = spec !== null
             ? layoutDiagonalLabel('al_label', spec, lineStart, lineEnd, lineColor, lineWidth)
             : null;
@@ -46809,8 +48494,7 @@ var arrowLine = {
                     key: 'al_arrow_left',
                     type: 'polygon',
                     attrs: { coordinates: coords },
-                    styles: { style: 'fill', color: lineColor },
-                    ignoreEvent: true
+                    styles: { style: 'fill', color: lineColor }
                 });
             }
         }
@@ -46821,8 +48505,7 @@ var arrowLine = {
                     key: 'al_arrow_right',
                     type: 'polygon',
                     attrs: { coordinates: coords },
-                    styles: { style: 'fill', color: lineColor },
-                    ignoreEvent: true
+                    styles: { style: 'fill', color: lineColor }
                 });
             }
         }
@@ -46859,20 +48542,17 @@ var arrowLine = {
             cursors: [resizeCursor, resizeCursor]
         })), false));
         return figures;
-    },
-    performEventPressedMove: function (params) {
+    }, performEventPressedMove: function (params) {
         if (params.performPointIndex === 0 || params.performPointIndex === 1) {
             applySnap45(this, params, params.performPointIndex === 0 ? 1 : 0);
         }
-    },
-    performEventMoveForDrawing: function (params) {
+    }, performEventMoveForDrawing: function (params) {
         if (params.performPointIndex === 1) {
             applySnap45(this, params, 0);
         }
-    },
-    createXAxisFigures: function (_a) {
+    } }, lineLabelEditorHooks('al_label', alLabelAnchor)), { createXAxisFigures: function (_a) {
         var _b;
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected;
         if (coordinates.length < 1)
             return [];
         var ext = isValid(overlay.extendData) ? overlay.extendData : {};
@@ -46880,12 +48560,12 @@ var arrowLine = {
             overlay: overlay,
             coordinates: coordinates,
             bounding: bounding,
-            lineColor: lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color)
+            lineColor: lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color),
+            isSelected: isSelected
         });
-    },
-    createYAxisFigures: function (_a) {
+    }, createYAxisFigures: function (_a) {
         var _b;
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected;
         if (coordinates.length < 1)
             return [];
         var ext = isValid(overlay.extendData) ? overlay.extendData : {};
@@ -46895,10 +48575,10 @@ var arrowLine = {
             bounding: bounding,
             lineColor: lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color),
             precision: pricePrecisionOf(chart, overlay, yAxis, ext.pricePrecision),
-            yAxis: yAxis !== null && yAxis !== void 0 ? yAxis : undefined
+            yAxis: yAxis !== null && yAxis !== void 0 ? yAxis : undefined,
+            isSelected: isSelected
         });
-    }
-};
+    } });
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -46989,14 +48669,18 @@ var crossLine = {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var horizontalRayLine = {
-    name: 'horizontalRayLine',
-    totalStep: 2,
-    cullable: false,
-    needDefaultPointFigure: false,
-    needDefaultXAxisFigure: false,
-    needDefaultYAxisFigure: false,
-    createPointFigures: function (_a) {
+/** Editor anchor: same ray span (anchor → left/right pane edge) as
+ *  createPointFigures, so the DOM box lands on the painted label. */
+var hrlLabelAnchor = lineLabelAnchorFn(function (coordinates, bounding, _ext, style, lineWidth) {
+    if (coordinates.length < 1) {
+        return null;
+    }
+    var _a = __read(coordinates, 1), c1 = _a[0];
+    var c2 = coordinates[1];
+    var tipX = isValid(c2) && c2.x < c1.x ? 0 : bounding.width;
+    return flatLabelAnchor(style, c1.x, tipX, c1.y, lineWidth);
+});
+var horizontalRayLine = __assign({ name: 'horizontalRayLine', totalStep: 2, cullable: false, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, createPointFigures: function (_a) {
         var _b, _c, _d, _e, _f;
         var chart = _a.chart, coordinates = _a.coordinates, bounding = _a.bounding, overlay = _a.overlay, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         if (coordinates.length < 1)
@@ -47028,8 +48712,7 @@ var horizontalRayLine = {
                     key: 'hrl_arrow',
                     type: 'polygon',
                     attrs: { coordinates: coords },
-                    styles: { style: 'fill', color: lineColor },
-                    ignoreEvent: true
+                    styles: { style: 'fill', color: lineColor }
                 });
             }
         }
@@ -47046,12 +48729,11 @@ var horizontalRayLine = {
                     align: 'center',
                     baseline: 'bottom'
                 },
-                styles: { color: lineColor, size: 11, weight: 'normal', backgroundColor: 'transparent' },
-                ignoreEvent: true
+                styles: { color: lineColor, size: 11, weight: 'normal', backgroundColor: 'transparent' }
             });
         }
         // ─── Text label over the rendered ray span ───
-        var spec = labelSpecOf(ext);
+        var spec = liveLabelSpecOf(overlay, ext);
         if (spec !== null) {
             pushFlatLabel(figures, 'hrl_label', spec, c1.x, rayTip.x, c1.y, lineColor, lineWidth);
         }
@@ -47093,8 +48775,7 @@ var horizontalRayLine = {
                     key: 'hrl_stats',
                     type: 'text',
                     attrs: { x: sx, y: sy, text: statLines.join('  '), align: sAlign, baseline: sBaseline },
-                    styles: { color: lineColor, size: 11, weight: 'normal', backgroundColor: 'transparent' },
-                    ignoreEvent: true
+                    styles: { color: lineColor, size: 11, weight: 'normal', backgroundColor: 'transparent' }
                 });
             }
         }
@@ -47109,8 +48790,7 @@ var horizontalRayLine = {
             isTouch: isTouch
         })), false));
         return figures;
-    },
-    createYAxisFigures: function (_a) {
+    }, createYAxisFigures: function (_a) {
         var _b, _c;
         var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis;
         if (coordinates.length < 1)
@@ -47120,11 +48800,10 @@ var horizontalRayLine = {
         var precision = pricePrecisionOf(chart, overlay, yAxis, ext.pricePrecision);
         var pill = buildYAxisPill(coordinates[0].y, (_c = overlay.points[0]) === null || _c === void 0 ? void 0 : _c.value, lineColor, precision, bounding, yAxis !== null && yAxis !== void 0 ? yAxis : undefined, 'hrl_y0');
         return pill != null ? [pill] : [];
-    },
-    createXAxisFigures: function (_a) {
+    }, createXAxisFigures: function (_a) {
         var _b, _c;
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates;
-        if (coordinates.length < 1)
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected;
+        if (coordinates.length < 1 || isSelected !== true)
             return [];
         var ext = isValid(overlay.extendData) ? overlay.extendData : {};
         var lineColor = lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color);
@@ -47132,15 +48811,13 @@ var horizontalRayLine = {
         if (d0 === '')
             return [];
         return [buildXAxisPill(coordinates[0].x, d0, lineColor, 'hrl_x0')];
-    },
-    performEventPressedMove: function (_a) {
+    }, performEventPressedMove: function (_a) {
         var points = _a.points, performPoint = _a.performPoint;
         // Keep any legacy second point level with the anchor.
         if (points.length > 1) {
             points[1].value = performPoint.value;
         }
-    }
-};
+    } }, lineLabelEditorHooks('hrl_label', hrlLabelAnchor));
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -47155,14 +48832,15 @@ var horizontalRayLine = {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var horizontalSegment = {
-    name: 'horizontalSegment',
-    totalStep: 3,
-    cullable: false,
-    needDefaultPointFigure: false,
-    needDefaultXAxisFigure: false,
-    needDefaultYAxisFigure: false,
-    createPointFigures: function (_a) {
+/** Editor anchor: the rendered span is c1.x→c2.x at c1.y (P1's value is
+ *  authoritative) — mirrors createPointFigures. */
+var hsLabelAnchor = lineLabelAnchorFn(function (coordinates, _bounding, _ext, style, lineWidth) {
+    if (coordinates.length < 2) {
+        return null;
+    }
+    return flatLabelAnchor(style, coordinates[0].x, coordinates[1].x, coordinates[0].y, lineWidth);
+});
+var horizontalSegment = __assign({ name: 'horizontalSegment', totalStep: 3, cullable: false, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, createPointFigures: function (_a) {
         var e_1, _b, e_2, _c;
         var _d, _e, _f, _g, _h, _j;
         var chart = _a.chart, coordinates = _a.coordinates, overlay = _a.overlay, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
@@ -47192,13 +48870,13 @@ var horizontalSegment = {
         if (leftEnd === 1) {
             var coords = getArrowCoordinates(rightPt, leftPt);
             if (coords.length === 3) {
-                figures.push({ key: 'hs_arrow_left', type: 'polygon', attrs: { coordinates: coords }, styles: { style: 'fill', color: lineColor }, ignoreEvent: true });
+                figures.push({ key: 'hs_arrow_left', type: 'polygon', attrs: { coordinates: coords }, styles: { style: 'fill', color: lineColor } });
             }
         }
         if (rightEnd === 1) {
             var coords = getArrowCoordinates(leftPt, rightPt);
             if (coords.length === 3) {
-                figures.push({ key: 'hs_arrow_right', type: 'polygon', attrs: { coordinates: coords }, styles: { style: 'fill', color: lineColor }, ignoreEvent: true });
+                figures.push({ key: 'hs_arrow_right', type: 'polygon', attrs: { coordinates: coords }, styles: { style: 'fill', color: lineColor } });
             }
         }
         // ─── Price labels at both ends ───
@@ -47217,8 +48895,7 @@ var horizontalSegment = {
                             align: 'center',
                             baseline: 'bottom'
                         },
-                        styles: { color: lineColor, size: 11, weight: 'normal', backgroundColor: 'transparent' },
-                        ignoreEvent: true
+                        styles: { color: lineColor, size: 11, weight: 'normal', backgroundColor: 'transparent' }
                     });
                 }
             }
@@ -47231,7 +48908,7 @@ var horizontalSegment = {
             }
         }
         // ─── Text label over the span ───
-        var spec = labelSpecOf(ext);
+        var spec = liveLabelSpecOf(overlay, ext);
         if (spec !== null) {
             pushFlatLabel(figures, 'hs_label', spec, lineStart.x, lineEnd.x, c1.y, lineColor, lineWidth);
         }
@@ -47273,8 +48950,7 @@ var horizontalSegment = {
                     key: 'hs_stats',
                     type: 'text',
                     attrs: { x: sx, y: sy, text: statLines.join('  '), align: sAlign, baseline: sBaseline },
-                    styles: { color: lineColor, size: 11, weight: 'normal', backgroundColor: 'transparent' },
-                    ignoreEvent: true
+                    styles: { color: lineColor, size: 11, weight: 'normal', backgroundColor: 'transparent' }
                 });
             }
         }
@@ -47307,21 +48983,19 @@ var horizontalSegment = {
         }
         figures.push.apply(figures, __spreadArray([], __read(anchors), false));
         return figures;
-    },
-    createYAxisFigures: function (_a) {
+    }, createYAxisFigures: function (_a) {
         var _b, _c;
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis;
-        if (coordinates.length < 1)
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected;
+        if (coordinates.length < 1 || isSelected !== true)
             return [];
         var ext = isValid(overlay.extendData) ? overlay.extendData : {};
         var lineColor = lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color);
         var precision = pricePrecisionOf(chart, overlay, yAxis, ext.pricePrecision);
         var pill = buildYAxisPill(coordinates[0].y, (_c = overlay.points[0]) === null || _c === void 0 ? void 0 : _c.value, lineColor, precision, bounding, yAxis !== null && yAxis !== void 0 ? yAxis : undefined, 'hs_y0');
         return pill != null ? [pill] : [];
-    },
-    createXAxisFigures: function (_a) {
+    }, createXAxisFigures: function (_a) {
         var _b;
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected;
         if (coordinates.length < 1)
             return [];
         var ext = isValid(overlay.extendData) ? overlay.extendData : {};
@@ -47329,10 +49003,10 @@ var horizontalSegment = {
             overlay: overlay,
             coordinates: coordinates,
             bounding: bounding,
-            lineColor: lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color)
+            lineColor: lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color),
+            isSelected: isSelected
         });
-    },
-    performEventPressedMove: function (params) {
+    }, performEventPressedMove: function (params) {
         // A truncated point-array write (sync/API) must not crash the hook.
         if (params.points.length < 2) {
             return;
@@ -47340,14 +49014,12 @@ var horizontalSegment = {
         // Anchor drags re-level the whole segment (both endpoints share y).
         params.points[0].value = params.performPoint.value;
         params.points[1].value = params.performPoint.value;
-    },
-    performEventMoveForDrawing: function (params) {
+    }, performEventMoveForDrawing: function (params) {
         // While placing the second anchor the level follows the cursor.
         if (params.currentStep === 2) {
             params.points[0].value = params.performPoint.value;
         }
-    }
-};
+    } }, lineLabelEditorHooks('hs_label', hsLabelAnchor));
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -47362,14 +49034,15 @@ var horizontalSegment = {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var horizontalStraightLine = {
-    name: 'horizontalStraightLine',
-    totalStep: 2,
-    cullable: false,
-    needDefaultPointFigure: false,
-    needDefaultXAxisFigure: false,
-    needDefaultYAxisFigure: false,
-    createPointFigures: function (_a) {
+/** Editor anchor: the label spans the full pane width at c1.y —
+ *  mirrors createPointFigures. */
+var hslLabelAnchor = lineLabelAnchorFn(function (coordinates, bounding, _ext, style, lineWidth) {
+    if (coordinates.length < 1) {
+        return null;
+    }
+    return flatLabelAnchor(style, 0, bounding.width, coordinates[0].y, lineWidth);
+});
+var horizontalStraightLine = __assign(__assign({ name: 'horizontalStraightLine', totalStep: 2, cullable: false, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, createPointFigures: function (_a) {
         var _b, _c;
         var chart = _a.chart, coordinates = _a.coordinates, bounding = _a.bounding, overlay = _a.overlay, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         if (coordinates.length < 1)
@@ -47401,12 +49074,11 @@ var horizontalStraightLine = {
                     align: 'left',
                     baseline: 'bottom'
                 },
-                styles: { color: lineColor, size: 11, weight: 'normal', backgroundColor: 'transparent' },
-                ignoreEvent: true
+                styles: { color: lineColor, size: 11, weight: 'normal', backgroundColor: 'transparent' }
             });
         }
         // ─── Text label (flat over the full pane width) ───
-        var spec = labelSpecOf(ext);
+        var spec = liveLabelSpecOf(overlay, ext);
         if (spec !== null) {
             pushFlatLabel(figures, 'hsl_label', spec, 0, bounding.width, c1.y, lineColor, lineWidth);
         }
@@ -47430,8 +49102,7 @@ var horizontalStraightLine = {
                 key: 'hsl_stats',
                 type: 'text',
                 attrs: { x: sx, y: sy, text: "Dist: ".concat(formatNum(bounding.width, 1), "px"), align: sAlign, baseline: sBaseline },
-                styles: { color: lineColor, size: 11, weight: 'normal', backgroundColor: 'transparent' },
-                ignoreEvent: true
+                styles: { color: lineColor, size: 11, weight: 'normal', backgroundColor: 'transparent' }
             });
         }
         // ─── Anchor (x is decorative for a full-width line → vertical drag) ───
@@ -47445,8 +49116,7 @@ var horizontalStraightLine = {
             moveDirections: ['vert']
         })), false));
         return figures;
-    },
-    createYAxisFigures: function (_a) {
+    } }, lineLabelEditorHooks('hsl_label', hslLabelAnchor)), { createYAxisFigures: function (_a) {
         var _b, _c;
         var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis;
         if (coordinates.length < 1)
@@ -47456,8 +49126,7 @@ var horizontalStraightLine = {
         var precision = pricePrecisionOf(chart, overlay, yAxis, ext.pricePrecision);
         var pill = buildYAxisPill(coordinates[0].y, (_c = overlay.points[0]) === null || _c === void 0 ? void 0 : _c.value, lineColor, precision, bounding, yAxis !== null && yAxis !== void 0 ? yAxis : undefined, 'hsl_y0');
         return pill != null ? [pill] : [];
-    }
-};
+    } });
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -47498,14 +49167,49 @@ function getPeriodMinutes(periodType, periodSpan) {
         default: return periodSpan;
     }
 }
-var infoLine = {
-    name: 'infoLine',
-    totalStep: 3,
-    cullable: false,
-    needDefaultPointFigure: false,
-    needDefaultXAxisFigure: false,
-    needDefaultYAxisFigure: false,
-    createPointFigures: function (_a) {
+/**
+ * infoLine's flat (unrotated) label anchor: x centered between the
+ * anchors or edge-pinned per hAlign, y mid-anchor or ±20px off the
+ * anchor band per vAlign. Shared by the text figure and the in-place
+ * editor so both sit on the same pixel.
+ */
+function infoLineLabelAnchor(spec, c1, c2) {
+    var _a;
+    var hAlign = (_a = spec.hAlign) !== null && _a !== void 0 ? _a : 'center';
+    var textX = 0;
+    if (hAlign === 'left') {
+        textX = Math.min(c1.x, c2.x);
+    }
+    else if (hAlign === 'right') {
+        textX = Math.max(c1.x, c2.x);
+    }
+    else {
+        textX = (c1.x + c2.x) / 2;
+    }
+    var minY = Math.min(c1.y, c2.y);
+    var maxY = Math.max(c1.y, c2.y);
+    var textY = (c1.y + c2.y) / 2;
+    if (spec.vAlign === 'top') {
+        textY = minY - 20;
+    }
+    else if (spec.vAlign === 'bottom') {
+        textY = maxY + 20;
+    }
+    return {
+        x: textX,
+        y: textY,
+        angle: 0,
+        baseline: 'middle',
+        horzAlign: hAlign === 'left' || hAlign === 'right' ? hAlign : 'center'
+    };
+}
+var ilLabelAnchor = lineLabelAnchorFn(function (coordinates, _bounding, _ext, style) {
+    if (coordinates.length < 2) {
+        return null;
+    }
+    return infoLineLabelAnchor(style, coordinates[0], coordinates[1]);
+});
+var infoLine = __assign({ name: 'infoLine', totalStep: 3, cullable: false, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, createPointFigures: function (_a) {
         var e_1, _b;
         var _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u;
         var chart = _a.chart, coordinates = _a.coordinates, bounding = _a.bounding, overlay = _a.overlay, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
@@ -47543,13 +49247,13 @@ var infoLine = {
         if (leftEnd === 1) {
             var coords = getArrowCoordinates(c2, extendLeft ? lineStart : c1);
             if (coords.length === 3) {
-                figures.push({ key: 'il_arrow_left', type: 'polygon', attrs: { coordinates: coords }, styles: { style: 'fill', color: lineColor }, ignoreEvent: true });
+                figures.push({ key: 'il_arrow_left', type: 'polygon', attrs: { coordinates: coords }, styles: { style: 'fill', color: lineColor } });
             }
         }
         if (rightEnd === 1) {
             var coords = getArrowCoordinates(c1, extendRight ? lineEnd : c2);
             if (coords.length === 3) {
-                figures.push({ key: 'il_arrow_right', type: 'polygon', attrs: { coordinates: coords }, styles: { style: 'fill', color: lineColor }, ignoreEvent: true });
+                figures.push({ key: 'il_arrow_right', type: 'polygon', attrs: { coordinates: coords }, styles: { style: 'fill', color: lineColor } });
             }
         }
         // ─── Stats flags: consumer `stats` object wins; flat kernel flags
@@ -47687,8 +49391,7 @@ var infoLine = {
                         borderColor: 'rgba(255, 255, 255, 0.1)',
                         borderSize: 1,
                         borderRadius: 4
-                    },
-                    ignoreEvent: true
+                    }
                 });
                 lines.forEach(function (line, index) {
                     figures.push({
@@ -47701,8 +49404,7 @@ var infoLine = {
                             align: 'left',
                             baseline: 'middle'
                         },
-                        styles: { color: '#D1D4DC', size: fontSize_1, weight: 'normal', backgroundColor: 'transparent' },
-                        ignoreEvent: true
+                        styles: { color: '#D1D4DC', size: fontSize_1, weight: 'normal', backgroundColor: 'transparent' }
                     });
                 });
             }
@@ -47713,37 +49415,18 @@ var infoLine = {
             pushSidePriceLabel(figures, 'il_price1', c2, (_r = points[1]) === null || _r === void 0 ? void 0 : _r.value, 'right', lineColor, precision);
         }
         // ─── Custom text label (reference flat placement) ───
-        var spec = labelSpecOf(ext);
-        if (isValid(spec) && spec.text !== undefined && spec.text !== '') {
-            var hAlign = (_s = spec.hAlign) !== null && _s !== void 0 ? _s : 'center';
-            var textX = 0;
-            if (hAlign === 'left') {
-                textX = Math.min(c1.x, c2.x);
-            }
-            else if (hAlign === 'right') {
-                textX = Math.max(c1.x, c2.x);
-            }
-            else {
-                textX = (c1.x + c2.x) / 2;
-            }
-            var minY = Math.min(c1.y, c2.y);
-            var maxY = Math.max(c1.y, c2.y);
-            var textY = (c1.y + c2.y) / 2;
-            if (spec.vAlign === 'top') {
-                textY = minY - 20;
-            }
-            else if (spec.vAlign === 'bottom') {
-                textY = maxY + 20;
-            }
+        var spec = liveLabelSpecOf(overlay, ext);
+        if (spec !== null) {
+            var anchor = infoLineLabelAnchor(spec, c1, c2);
             figures.push({
                 key: 'il_label',
                 type: 'text',
                 attrs: {
-                    x: textX,
-                    y: textY,
+                    x: anchor.x,
+                    y: anchor.y,
                     text: spec.text,
-                    align: (hAlign === 'left' || hAlign === 'right' ? hAlign : 'center'),
-                    baseline: 'middle'
+                    align: ((_s = anchor.horzAlign) !== null && _s !== void 0 ? _s : 'center'),
+                    baseline: anchor.baseline
                 },
                 styles: {
                     color: (_t = spec.textColor) !== null && _t !== void 0 ? _t : lineColor,
@@ -47751,8 +49434,7 @@ var infoLine = {
                     weight: spec.bold === true ? 'bold' : 'normal',
                     style: spec.italic === true ? 'italic' : 'normal',
                     backgroundColor: 'transparent'
-                },
-                ignoreEvent: true
+                }
             });
         }
         // ─── Anchors + optional midpoint handle ───
@@ -47768,10 +49450,9 @@ var infoLine = {
             cursors: [resizeCursor, resizeCursor]
         })), false));
         return figures;
-    },
-    createYAxisFigures: function (_a) {
+    }, createYAxisFigures: function (_a) {
         var _b;
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected;
         if (coordinates.length < 1)
             return [];
         var ext = isValid(overlay.extendData) ? overlay.extendData : {};
@@ -47781,12 +49462,12 @@ var infoLine = {
             bounding: bounding,
             lineColor: lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color),
             precision: pricePrecisionOf(chart, overlay, yAxis, ext.pricePrecision),
-            yAxis: yAxis !== null && yAxis !== void 0 ? yAxis : undefined
+            yAxis: yAxis !== null && yAxis !== void 0 ? yAxis : undefined,
+            isSelected: isSelected
         });
-    },
-    createXAxisFigures: function (_a) {
+    }, createXAxisFigures: function (_a) {
         var _b;
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected;
         if (coordinates.length < 1)
             return [];
         var ext = isValid(overlay.extendData) ? overlay.extendData : {};
@@ -47794,20 +49475,18 @@ var infoLine = {
             overlay: overlay,
             coordinates: coordinates,
             bounding: bounding,
-            lineColor: lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color)
+            lineColor: lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color),
+            isSelected: isSelected
         });
-    },
-    performEventPressedMove: function (params) {
+    }, performEventPressedMove: function (params) {
         if (params.performPointIndex === 0 || params.performPointIndex === 1) {
             applySnap45(this, params, params.performPointIndex === 0 ? 1 : 0);
         }
-    },
-    performEventMoveForDrawing: function (params) {
+    }, performEventMoveForDrawing: function (params) {
         if (params.performPointIndex === 1) {
             applySnap45(this, params, 0);
         }
-    }
-};
+    } }, lineLabelEditorHooks('il_label', ilLabelAnchor));
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -47822,14 +49501,15 @@ var infoLine = {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var priceLine = {
-    name: 'priceLine',
-    totalStep: 2,
-    cullable: false,
-    needDefaultPointFigure: false,
-    needDefaultXAxisFigure: false,
-    needDefaultYAxisFigure: false,
-    createPointFigures: function (_a) {
+/** Editor anchor: the label spans c1.x → right edge at c1.y —
+ *  mirrors createPointFigures. */
+var plLabelAnchor = lineLabelAnchorFn(function (coordinates, bounding, _ext, style, lineWidth) {
+    if (coordinates.length < 1) {
+        return null;
+    }
+    return flatLabelAnchor(style, coordinates[0].x, bounding.width, coordinates[0].y, lineWidth);
+});
+var priceLine = __assign(__assign({ name: 'priceLine', totalStep: 2, cullable: false, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, createPointFigures: function (_a) {
         var _b, _c;
         var chart = _a.chart, coordinates = _a.coordinates, bounding = _a.bounding, overlay = _a.overlay, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         if (coordinates.length < 1)
@@ -47870,12 +49550,11 @@ var priceLine = {
                     paddingTop: 2,
                     paddingBottom: 2,
                     borderRadius: 3
-                },
-                ignoreEvent: true
+                }
             });
         }
         // ─── Optional text label across the span ───
-        var spec = labelSpecOf(ext);
+        var spec = liveLabelSpecOf(overlay, ext);
         if (spec !== null) {
             pushFlatLabel(figures, 'pl_label', spec, c1.x, bounding.width, c1.y, lineColor, lineWidth);
         }
@@ -47890,8 +49569,7 @@ var priceLine = {
             moveDirections: ['vert']
         })), false));
         return figures;
-    },
-    createYAxisFigures: function (_a) {
+    } }, lineLabelEditorHooks('pl_label', plLabelAnchor)), { createYAxisFigures: function (_a) {
         var _b, _c;
         var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis;
         if (coordinates.length < 1)
@@ -47901,8 +49579,7 @@ var priceLine = {
         var precision = pricePrecisionOf(chart, overlay, yAxis, ext.pricePrecision);
         var pill = buildYAxisPill(coordinates[0].y, (_c = overlay.points[0]) === null || _c === void 0 ? void 0 : _c.value, lineColor, precision, bounding, yAxis !== null && yAxis !== void 0 ? yAxis : undefined, 'pl_y0');
         return pill != null ? [pill] : [];
-    }
-};
+    } });
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -47917,14 +49594,28 @@ var priceLine = {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var rayLine = {
-    name: 'rayLine',
-    totalStep: 3,
-    cullable: false,
-    needDefaultPointFigure: false,
-    needDefaultXAxisFigure: false,
-    needDefaultYAxisFigure: false,
-    createPointFigures: function (_a) {
+/** Editor anchor: same ray span (origin → edge tip, optional extendLeft)
+ *  as createPointFigures, so the DOM box lands on the painted label. */
+var rayLabelAnchor = lineLabelAnchorFn(function (coordinates, bounding, ext, style, lineWidth) {
+    if (coordinates.length < 2) {
+        return null;
+    }
+    var _a = __read(coordinates, 2), c1 = _a[0], c2 = _a[1];
+    var rayTip = c1.x === c2.x && c1.y !== c2.y
+        ? { x: c1.x, y: c1.y < c2.y ? bounding.height : 0 }
+        : c1.x > c2.x
+            ? { x: 0, y: getLinearYFromCoordinates(c1, c2, { x: 0, y: c1.y }) }
+            : { x: bounding.width, y: getLinearYFromCoordinates(c1, c2, { x: bounding.width, y: c1.y }) };
+    var lineStart = ext.extendLeft === true
+        ? c1.x === c2.x && c1.y !== c2.y
+            ? { x: c1.x, y: c1.y < c2.y ? 0 : bounding.height }
+            : c1.x > c2.x
+                ? { x: bounding.width, y: getLinearYFromCoordinates(c1, c2, { x: bounding.width, y: c1.y }) }
+                : { x: 0, y: getLinearYFromCoordinates(c1, c2, { x: 0, y: c1.y }) }
+        : c1;
+    return diagonalLabelAnchor(style, lineStart, rayTip, lineWidth);
+});
+var rayLine = __assign({ name: 'rayLine', totalStep: 3, cullable: false, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, createPointFigures: function (_a) {
         var _b, _c, _d, _e;
         var chart = _a.chart, coordinates = _a.coordinates, bounding = _a.bounding, overlay = _a.overlay, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         rememberLineChart(overlay, chart);
@@ -47954,7 +49645,7 @@ var rayLine = {
                     : { x: 0, y: getLinearYFromCoordinates(c1, c2, { x: 0, y: c1.y }) }
             : c1;
         // ─── Label layout first (may request a gap in the line) ───
-        var spec = labelSpecOf(ext);
+        var spec = liveLabelSpecOf(overlay, ext);
         var labelLayout = spec !== null
             ? layoutDiagonalLabel('ray_label', spec, lineStart, rayTip, lineColor, lineWidth)
             : null;
@@ -47968,8 +49659,7 @@ var rayLine = {
                     key: 'ray_arrow',
                     type: 'polygon',
                     attrs: { coordinates: coords },
-                    styles: { style: 'fill', color: lineColor },
-                    ignoreEvent: true
+                    styles: { style: 'fill', color: lineColor }
                 });
             }
         }
@@ -47981,8 +49671,7 @@ var rayLine = {
                     key: 'ray_arrow_left',
                     type: 'polygon',
                     attrs: { coordinates: coords },
-                    styles: { style: 'fill', color: lineColor },
-                    ignoreEvent: true
+                    styles: { style: 'fill', color: lineColor }
                 });
             }
         }
@@ -48016,10 +49705,9 @@ var rayLine = {
             midPoint: ext.showMiddlePoint === true || ext.showMidpoint === true
         })), false));
         return figures;
-    },
-    createYAxisFigures: function (_a) {
+    }, createYAxisFigures: function (_a) {
         var _b;
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected;
         if (coordinates.length < 1)
             return [];
         var ext = isValid(overlay.extendData) ? overlay.extendData : {};
@@ -48029,12 +49717,12 @@ var rayLine = {
             bounding: bounding,
             lineColor: lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color),
             precision: pricePrecisionOf(chart, overlay, yAxis, ext.pricePrecision),
-            yAxis: yAxis !== null && yAxis !== void 0 ? yAxis : undefined
+            yAxis: yAxis !== null && yAxis !== void 0 ? yAxis : undefined,
+            isSelected: isSelected
         });
-    },
-    createXAxisFigures: function (_a) {
+    }, createXAxisFigures: function (_a) {
         var _b;
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected;
         if (coordinates.length < 1)
             return [];
         var ext = isValid(overlay.extendData) ? overlay.extendData : {};
@@ -48042,20 +49730,18 @@ var rayLine = {
             overlay: overlay,
             coordinates: coordinates,
             bounding: bounding,
-            lineColor: lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color)
+            lineColor: lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color),
+            isSelected: isSelected
         });
-    },
-    performEventPressedMove: function (params) {
+    }, performEventPressedMove: function (params) {
         if (params.performPointIndex === 0 || params.performPointIndex === 1) {
             applySnap45(this, params, params.performPointIndex === 0 ? 1 : 0);
         }
-    },
-    performEventMoveForDrawing: function (params) {
+    }, performEventMoveForDrawing: function (params) {
         if (params.performPointIndex === 1) {
             applySnap45(this, params, 0);
         }
-    }
-};
+    } }, lineLabelEditorHooks('ray_label', rayLabelAnchor));
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -48070,14 +49756,28 @@ var rayLine = {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var segment = {
-    name: 'segment',
-    totalStep: 3,
-    cullable: false,
-    needDefaultPointFigure: false,
-    needDefaultXAxisFigure: false,
-    needDefaultYAxisFigure: false,
-    createPointFigures: function (_a) {
+/**
+ * Re-derives the rendered span (anchors extended to pane edges per
+ * extendLeft/extendRight) exactly as createPointFigures does, so the
+ * in-place editor lands on the painted label.
+ */
+var segLabelAnchor = lineLabelAnchorFn(function (coordinates, bounding, ext, style, lineWidth) {
+    if (coordinates.length < 2) {
+        return null;
+    }
+    var _a = __read(coordinates, 2), c1 = _a[0], c2 = _a[1];
+    var extendLeft = ext.extendLeft === true;
+    var extendRight = ext.extendRight === true;
+    var lineStart = { x: c1.x, y: c1.y };
+    var lineEnd = { x: c2.x, y: c2.y };
+    if (extendLeft || extendRight) {
+        var _b = __read(getExtendedCoordinates(c1, c2, bounding.width, bounding.height, extendLeft, extendRight), 2), s = _b[0], e = _b[1];
+        lineStart = s;
+        lineEnd = e;
+    }
+    return diagonalLabelAnchor(style, lineStart, lineEnd, lineWidth);
+});
+var segment = __assign({ name: 'segment', totalStep: 3, cullable: false, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, createPointFigures: function (_a) {
         var _b, _c, _d, _e, _f;
         var chart = _a.chart, coordinates = _a.coordinates, bounding = _a.bounding, overlay = _a.overlay, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         rememberLineChart(overlay, chart);
@@ -48102,7 +49802,7 @@ var segment = {
             lineEnd = e;
         }
         // ─── Text label layout first — it can request a gap in the line ───
-        var spec = labelSpecOf(ext);
+        var spec = liveLabelSpecOf(overlay, ext);
         var labelLayout = spec !== null
             ? layoutDiagonalLabel('seg_label', spec, lineStart, lineEnd, lineColor, lineWidth)
             : null;
@@ -48117,8 +49817,7 @@ var segment = {
                     key: 'seg_arrow_left',
                     type: 'polygon',
                     attrs: { coordinates: coords },
-                    styles: { style: 'fill', color: lineColor },
-                    ignoreEvent: true
+                    styles: { style: 'fill', color: lineColor }
                 });
             }
         }
@@ -48129,8 +49828,7 @@ var segment = {
                     key: 'seg_arrow_right',
                     type: 'polygon',
                     attrs: { coordinates: coords },
-                    styles: { style: 'fill', color: lineColor },
-                    ignoreEvent: true
+                    styles: { style: 'fill', color: lineColor }
                 });
             }
         }
@@ -48168,10 +49866,9 @@ var segment = {
             cursors: [resizeCursor, resizeCursor]
         })), false));
         return figures;
-    },
-    createYAxisFigures: function (_a) {
+    }, createYAxisFigures: function (_a) {
         var _b;
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected;
         if (coordinates.length < 1)
             return [];
         var ext = isValid(overlay.extendData) ? overlay.extendData : {};
@@ -48181,12 +49878,12 @@ var segment = {
             bounding: bounding,
             lineColor: lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color),
             precision: pricePrecisionOf(chart, overlay, yAxis, ext.pricePrecision),
-            yAxis: yAxis !== null && yAxis !== void 0 ? yAxis : undefined
+            yAxis: yAxis !== null && yAxis !== void 0 ? yAxis : undefined,
+            isSelected: isSelected
         });
-    },
-    createXAxisFigures: function (_a) {
+    }, createXAxisFigures: function (_a) {
         var _b;
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected;
         if (coordinates.length < 1)
             return [];
         var ext = isValid(overlay.extendData) ? overlay.extendData : {};
@@ -48194,24 +49891,22 @@ var segment = {
             overlay: overlay,
             coordinates: coordinates,
             bounding: bounding,
-            lineColor: lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color)
+            lineColor: lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color),
+            isSelected: isSelected
         });
-    },
-    performEventPressedMove: function (params) {
+    }, performEventPressedMove: function (params) {
         // Endpoint drags: Shift/align-45 snaps the moved anchor to 45° rays.
         if (params.performPointIndex === 0 || params.performPointIndex === 1) {
             applySnap45(this, params, params.performPointIndex === 0 ? 1 : 0);
         }
         // The midpoint handle routes through body move (kernel performs the
         // both-points translate itself).
-    },
-    performEventMoveForDrawing: function (params) {
+    }, performEventMoveForDrawing: function (params) {
         // While placing the second anchor, Shift/align-45 snaps to 45°.
         if (params.performPointIndex === 1) {
             applySnap45(this, params, 0);
         }
-    }
-};
+    } }, lineLabelEditorHooks('seg_label', segLabelAnchor));
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -48226,14 +49921,16 @@ var segment = {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var straightLine = {
-    name: 'straightLine',
-    totalStep: 3,
-    cullable: false,
-    needDefaultPointFigure: false,
-    needDefaultXAxisFigure: false,
-    needDefaultYAxisFigure: false,
-    createPointFigures: function (_a) {
+/** Editor anchor: same always-extended span as createPointFigures. */
+var slLabelAnchor = lineLabelAnchorFn(function (coordinates, bounding, ext, style, lineWidth) {
+    if (coordinates.length < 2) {
+        return null;
+    }
+    var _a = __read(coordinates, 2), c1 = _a[0], c2 = _a[1];
+    var _b = __read(getExtendedCoordinates(c1, c2, bounding.width, bounding.height, ext.extendLeft !== false, ext.extendRight !== false), 2), lineStart = _b[0], lineEnd = _b[1];
+    return diagonalLabelAnchor(style, lineStart, lineEnd, lineWidth);
+});
+var straightLine = __assign({ name: 'straightLine', totalStep: 3, cullable: false, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, createPointFigures: function (_a) {
         var _b, _c, _d, _e, _f;
         var chart = _a.chart, coordinates = _a.coordinates, bounding = _a.bounding, overlay = _a.overlay, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         rememberLineChart(overlay, chart);
@@ -48250,7 +49947,7 @@ var straightLine = {
         // ─── Extended to pane edges — both default true, each toggleable (TV) ───
         var _h = __read(getExtendedCoordinates(c1, c2, bounding.width, bounding.height, ext.extendLeft !== false, ext.extendRight !== false), 2), lineStart = _h[0], lineEnd = _h[1];
         // ─── Label layout first (may request a gap in the line) ───
-        var spec = labelSpecOf(ext);
+        var spec = liveLabelSpecOf(overlay, ext);
         var labelLayout = spec !== null
             ? layoutDiagonalLabel('sl_label', spec, lineStart, lineEnd, lineColor, lineWidth)
             : null;
@@ -48265,8 +49962,7 @@ var straightLine = {
                     key: 'sl_arrow_left',
                     type: 'polygon',
                     attrs: { coordinates: coords },
-                    styles: { style: 'fill', color: lineColor },
-                    ignoreEvent: true
+                    styles: { style: 'fill', color: lineColor }
                 });
             }
         }
@@ -48277,8 +49973,7 @@ var straightLine = {
                     key: 'sl_arrow_right',
                     type: 'polygon',
                     attrs: { coordinates: coords },
-                    styles: { style: 'fill', color: lineColor },
-                    ignoreEvent: true
+                    styles: { style: 'fill', color: lineColor }
                 });
             }
         }
@@ -48315,10 +50010,9 @@ var straightLine = {
             cursors: [resizeCursor, resizeCursor]
         })), false));
         return figures;
-    },
-    createYAxisFigures: function (_a) {
+    }, createYAxisFigures: function (_a) {
         var _b;
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected;
         if (coordinates.length < 1)
             return [];
         var ext = isValid(overlay.extendData) ? overlay.extendData : {};
@@ -48328,12 +50022,12 @@ var straightLine = {
             bounding: bounding,
             lineColor: lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color),
             precision: pricePrecisionOf(chart, overlay, yAxis, ext.pricePrecision),
-            yAxis: yAxis !== null && yAxis !== void 0 ? yAxis : undefined
+            yAxis: yAxis !== null && yAxis !== void 0 ? yAxis : undefined,
+            isSelected: isSelected
         });
-    },
-    createXAxisFigures: function (_a) {
+    }, createXAxisFigures: function (_a) {
         var _b;
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected;
         if (coordinates.length < 1)
             return [];
         var ext = isValid(overlay.extendData) ? overlay.extendData : {};
@@ -48341,20 +50035,18 @@ var straightLine = {
             overlay: overlay,
             coordinates: coordinates,
             bounding: bounding,
-            lineColor: lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color)
+            lineColor: lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color),
+            isSelected: isSelected
         });
-    },
-    performEventPressedMove: function (params) {
+    }, performEventPressedMove: function (params) {
         if (params.performPointIndex === 0 || params.performPointIndex === 1) {
             applySnap45(this, params, params.performPointIndex === 0 ? 1 : 0);
         }
-    },
-    performEventMoveForDrawing: function (params) {
+    }, performEventMoveForDrawing: function (params) {
         if (params.performPointIndex === 1) {
             applySnap45(this, params, 0);
         }
-    }
-};
+    } }, lineLabelEditorHooks('sl_label', slLabelAnchor));
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -48369,6 +50061,37 @@ var straightLine = {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+/**
+ * Editor anchor: re-derives the rendered span (P1 → angle/distance-based
+ * rendered endpoint, optional edge extension) exactly as
+ * createPointFigures does.
+ */
+var taLabelAnchor = lineLabelAnchorFn(function (coordinates, bounding, ext, style, lineWidth) {
+    if (coordinates.length < 2) {
+        return null;
+    }
+    var _a = __read(coordinates, 2), c1 = _a[0], c2 = _a[1];
+    var hasStored = isNumber(ext.angle) && isNumber(ext.distance) && ext.distance > 0;
+    var angleRad = hasStored && isNumber(ext.angle)
+        ? ext.angle
+        : Math.atan2(c1.y - c2.y, c2.x - c1.x);
+    var distance = hasStored && isNumber(ext.distance)
+        ? ext.distance
+        : Math.sqrt((c2.x - c1.x) * (c2.x - c1.x) + (c2.y - c1.y) * (c2.y - c1.y));
+    var c2r = hasStored
+        ? { x: c1.x + Math.cos(angleRad) * distance, y: c1.y - Math.sin(angleRad) * distance }
+        : c2;
+    var extendLeft = ext.extendLeft === true;
+    var extendRight = ext.extendRight === true;
+    var lineStart = { x: c1.x, y: c1.y };
+    var lineEnd = { x: c2r.x, y: c2r.y };
+    if (extendLeft || extendRight) {
+        var _b = __read(getExtendedCoordinates(c1, c2r, bounding.width, bounding.height, extendLeft, extendRight), 2), s = _b[0], e = _b[1];
+        lineStart = s;
+        lineEnd = e;
+    }
+    return diagonalLabelAnchor(style, lineStart, lineEnd, lineWidth);
+});
 var BASELINE_COLOR = '#787B86';
 var ARC_RADIUS = 30;
 var LABEL_OFFSET = 45;
@@ -48396,14 +50119,7 @@ function measureAngle(overlay, params) {
     overlay.extendData = __assign(__assign({}, ext), { angle: angle, distance: distance });
     overlay.invalidateFigures();
 }
-var trendAngle = {
-    name: 'trendAngle',
-    totalStep: 3,
-    cullable: false,
-    needDefaultPointFigure: false,
-    needDefaultXAxisFigure: false,
-    needDefaultYAxisFigure: false,
-    createPointFigures: function (_a) {
+var trendAngle = __assign({ name: 'trendAngle', totalStep: 3, cullable: false, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, createPointFigures: function (_a) {
         var _b, _c, _d;
         var chart = _a.chart, coordinates = _a.coordinates, bounding = _a.bounding, overlay = _a.overlay, yAxis = _a.yAxis, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         rememberLineChart(overlay, chart);
@@ -48436,15 +50152,13 @@ var trendAngle = {
                 key: 'ta_baseline0',
                 type: 'line',
                 attrs: { coordinates: [c1, { x: bounding.width, y: c1.y }] },
-                styles: baselineStyle,
-                ignoreEvent: true
+                styles: baselineStyle
             });
             figures.push({
                 key: 'ta_baseline1',
                 type: 'line',
                 attrs: { coordinates: [{ x: 0, y: c2r.y }, { x: bounding.width, y: c2r.y }] },
-                styles: baselineStyle,
-                ignoreEvent: true
+                styles: baselineStyle
             });
         }
         // ─── Main line (optional extension), gap when label sits on it ───
@@ -48457,7 +50171,7 @@ var trendAngle = {
             lineStart = s;
             lineEnd = e;
         }
-        var spec = labelSpecOf(ext);
+        var spec = liveLabelSpecOf(overlay, ext);
         var labelLayout = spec !== null
             ? layoutDiagonalLabel('ta_label', spec, lineStart, lineEnd, lineColor, lineStyles.size)
             : null;
@@ -48484,8 +50198,7 @@ var trendAngle = {
                 size: 1,
                 style: 'dashed',
                 dashedValue: [2, 2]
-            },
-            ignoreEvent: true
+            }
         });
         // ─── Angle label on the arc bisector ───
         var half = angleRad / 2;
@@ -48499,8 +50212,7 @@ var trendAngle = {
                 align: 'center',
                 baseline: 'middle'
             },
-            styles: { color: lineColor, size: 12, weight: 'normal', backgroundColor: 'transparent' },
-            ignoreEvent: true
+            styles: { color: lineColor, size: 12, weight: 'normal', backgroundColor: 'transparent' }
         });
         // ─── Price labels beside the anchors (reference style) ───
         if (ext.showPriceLabel === true || ext.showPriceLabels === true) {
@@ -48521,10 +50233,9 @@ var trendAngle = {
             cursors: [resizeCursor, resizeCursor]
         })), false));
         return figures;
-    },
-    createYAxisFigures: function (_a) {
+    }, createYAxisFigures: function (_a) {
         var _b;
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected;
         if (coordinates.length < 1)
             return [];
         var ext = isValid(overlay.extendData) ? overlay.extendData : {};
@@ -48534,12 +50245,12 @@ var trendAngle = {
             bounding: bounding,
             lineColor: lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color),
             precision: pricePrecisionOf(chart, overlay, yAxis, ext.pricePrecision),
-            yAxis: yAxis !== null && yAxis !== void 0 ? yAxis : undefined
+            yAxis: yAxis !== null && yAxis !== void 0 ? yAxis : undefined,
+            isSelected: isSelected
         });
-    },
-    createXAxisFigures: function (_a) {
+    }, createXAxisFigures: function (_a) {
         var _b;
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, isSelected = _a.isSelected;
         if (coordinates.length < 1)
             return [];
         var ext = isValid(overlay.extendData) ? overlay.extendData : {};
@@ -48547,10 +50258,10 @@ var trendAngle = {
             overlay: overlay,
             coordinates: coordinates,
             bounding: bounding,
-            lineColor: lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color)
+            lineColor: lineColorOf(overlay, chart, (_b = ext.lineColor) !== null && _b !== void 0 ? _b : ext.color),
+            isSelected: isSelected
         });
-    },
-    performEventPressedMove: function (params) {
+    }, performEventPressedMove: function (params) {
         // Dragging the second anchor re-measures angle + distance (TV parity);
         // dragging P1 keeps the stored angle — the line translates rigidly.
         if (params.performPointIndex === 0) {
@@ -48585,15 +50296,13 @@ var trendAngle = {
         }
         applySnap45(this, params, 0);
         measureAngle(this, params);
-    },
-    performEventMoveForDrawing: function (params) {
+    }, performEventMoveForDrawing: function (params) {
         if (params.performPointIndex !== 1) {
             return;
         }
         applySnap45(this, params, 0);
         measureAngle(this, params);
-    }
-};
+    } }, lineLabelEditorHooks('ta_label', taLabelAnchor));
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -48608,14 +50317,17 @@ var trendAngle = {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var verticalRayLine = {
-    name: 'verticalRayLine',
-    totalStep: 3,
-    cullable: false,
-    needDefaultPointFigure: false,
-    needDefaultXAxisFigure: false,
-    needDefaultYAxisFigure: false,
-    createPointFigures: function (_a) {
+/** Editor anchor: the ray spans c1.y → pane edge in c2's direction at
+ *  c1.x — mirrors createPointFigures. */
+var vrLabelAnchor = lineLabelAnchorFn(function (coordinates, bounding, _ext, style, lineWidth) {
+    if (coordinates.length < 2) {
+        return null;
+    }
+    var _a = __read(coordinates, 2), c1 = _a[0], c2 = _a[1];
+    var endY = c2.y > c1.y ? bounding.height : 0;
+    return vertLabelAnchor(style, c1.x, Math.min(c1.y, endY), Math.max(c1.y, endY), lineWidth);
+});
+var verticalRayLine = __assign({ name: 'verticalRayLine', totalStep: 3, cullable: false, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, createPointFigures: function (_a) {
         var _b;
         var chart = _a.chart, coordinates = _a.coordinates, bounding = _a.bounding, overlay = _a.overlay, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         if (coordinates.length < 2)
@@ -48634,7 +50346,7 @@ var verticalRayLine = {
             attrs: { coordinates: [{ x: c1.x, y: c1.y }, { x: c1.x, y: endY }] },
             styles: { style: 'solid', color: lineColor, size: lineWidth }
         });
-        var spec = labelSpecOf(ext);
+        var spec = liveLabelSpecOf(overlay, ext);
         if (spec !== null) {
             pushVertLabel(figures, 'vr_label', spec, c1.x, Math.min(c1.y, endY), Math.max(c1.y, endY), lineColor, lineWidth);
         }
@@ -48649,7 +50361,7 @@ var verticalRayLine = {
             moveDirections: ['both', 'vert']
         })), false));
         return figures;
-    },
+    }, 
     /**
      * Same shared-x contract as verticalSegment.
      */
@@ -48660,8 +50372,7 @@ var verticalRayLine = {
             other.timestamp = performPoint.timestamp;
             other.dataIndex = performPoint.dataIndex;
         }
-    },
-    performEventMoveForDrawing: function (_a) {
+    }, performEventMoveForDrawing: function (_a) {
         var points = _a.points, currentStep = _a.currentStep, performPoint = _a.performPoint;
         if (currentStep === 2) {
             var p0 = points[0];
@@ -48670,8 +50381,7 @@ var verticalRayLine = {
                 performPoint.dataIndex = p0.dataIndex;
             }
         }
-    },
-    createXAxisFigures: function (_a) {
+    }, createXAxisFigures: function (_a) {
         var _b, _c;
         var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates;
         if (coordinates.length < 1)
@@ -48682,8 +50392,7 @@ var verticalRayLine = {
         if (d0 === '')
             return [];
         return [buildXAxisPill(coordinates[0].x, d0, lineColor, 'vr_x0')];
-    }
-};
+    } }, lineLabelEditorHooks('vr_label', vrLabelAnchor));
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -48698,15 +50407,18 @@ var verticalRayLine = {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var verticalSegment = {
-    name: 'verticalSegment',
-    totalStep: 3,
+/** Editor anchor: the segment spans top→bottom at the shared c1.x —
+ *  mirrors createPointFigures. */
+var vsLabelAnchor = lineLabelAnchorFn(function (coordinates, _bounding, _ext, style, lineWidth) {
+    if (coordinates.length < 2) {
+        return null;
+    }
+    var _a = __read(coordinates, 2), c1 = _a[0], c2 = _a[1];
+    return vertLabelAnchor(style, c1.x, Math.min(c1.y, c2.y), Math.max(c1.y, c2.y), lineWidth);
+});
+var verticalSegment = __assign({ name: 'verticalSegment', totalStep: 3, 
     // Arrowhead wings extend beyond the anchor hull.
-    cullable: false,
-    needDefaultPointFigure: false,
-    needDefaultXAxisFigure: false,
-    needDefaultYAxisFigure: false,
-    createPointFigures: function (_a) {
+    cullable: false, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, createPointFigures: function (_a) {
         var _b;
         var chart = _a.chart, coordinates = _a.coordinates, overlay = _a.overlay, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         if (coordinates.length < 2)
@@ -48732,8 +50444,7 @@ var verticalSegment = {
                     key: 'vs_arrow_top',
                     type: 'polygon',
                     attrs: { coordinates: tip },
-                    styles: { style: 'fill', color: lineColor },
-                    ignoreEvent: true
+                    styles: { style: 'fill', color: lineColor }
                 });
             }
         }
@@ -48744,13 +50455,12 @@ var verticalSegment = {
                     key: 'vs_arrow_bottom',
                     type: 'polygon',
                     attrs: { coordinates: tip },
-                    styles: { style: 'fill', color: lineColor },
-                    ignoreEvent: true
+                    styles: { style: 'fill', color: lineColor }
                 });
             }
         }
         // Rotated text label along the segment.
-        var spec = labelSpecOf(ext);
+        var spec = liveLabelSpecOf(overlay, ext);
         if (spec !== null) {
             pushVertLabel(figures, 'vs_label', spec, c1.x, top, bottom, lineColor, lineWidth);
         }
@@ -48765,7 +50475,7 @@ var verticalSegment = {
             midPoint: ext.showMiddlePoint === true || ext.showMidpoint === true
         })), false));
         return figures;
-    },
+    }, 
     /**
      * Anchor 0 owns the shared x — dragging either anchor's x must keep
      * both timestamps identical so the segment stays vertical.
@@ -48777,8 +50487,7 @@ var verticalSegment = {
             other.timestamp = performPoint.timestamp;
             other.dataIndex = performPoint.dataIndex;
         }
-    },
-    performEventMoveForDrawing: function (_a) {
+    }, performEventMoveForDrawing: function (_a) {
         var points = _a.points, currentStep = _a.currentStep, performPoint = _a.performPoint;
         if (currentStep === 2) {
             var p0 = points[0];
@@ -48787,8 +50496,7 @@ var verticalSegment = {
                 performPoint.dataIndex = p0.dataIndex;
             }
         }
-    },
-    createXAxisFigures: function (_a) {
+    }, createXAxisFigures: function (_a) {
         var _b, _c;
         var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates;
         if (coordinates.length < 1)
@@ -48799,8 +50507,7 @@ var verticalSegment = {
         if (d0 === '')
             return [];
         return [buildXAxisPill(coordinates[0].x, d0, lineColor, 'vs_x0')];
-    }
-};
+    } }, lineLabelEditorHooks('vs_label', vsLabelAnchor));
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -48815,14 +50522,15 @@ var verticalSegment = {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var verticalStraightLine = {
-    name: 'verticalStraightLine',
-    totalStep: 2,
-    cullable: false,
-    needDefaultPointFigure: false,
-    needDefaultXAxisFigure: false,
-    needDefaultYAxisFigure: false,
-    createPointFigures: function (_a) {
+/** Editor anchor: the label spans the full pane height at c1.x —
+ *  mirrors createPointFigures. */
+var vslLabelAnchor = lineLabelAnchorFn(function (coordinates, bounding, _ext, style, lineWidth) {
+    if (coordinates.length < 1) {
+        return null;
+    }
+    return vertLabelAnchor(style, coordinates[0].x, 0, bounding.height, lineWidth);
+});
+var verticalStraightLine = __assign({ name: 'verticalStraightLine', totalStep: 2, cullable: false, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false, createPointFigures: function (_a) {
         var _b;
         var chart = _a.chart, coordinates = _a.coordinates, bounding = _a.bounding, overlay = _a.overlay, isSelected = _a.isSelected, isHovered = _a.isHovered, isTouch = _a.isTouch;
         if (coordinates.length < 1)
@@ -48840,7 +50548,7 @@ var verticalStraightLine = {
             attrs: { coordinates: [{ x: c1.x, y: 0 }, { x: c1.x, y: bounding.height }] }
         });
         // ─── Text label (rotated along the line) ───
-        var spec = labelSpecOf(ext);
+        var spec = liveLabelSpecOf(overlay, ext);
         if (spec !== null) {
             pushVertLabel(figures, 'vsl_label', spec, c1.x, 0, bounding.height, lineColor, lineWidth);
         }
@@ -48857,8 +50565,7 @@ var verticalStraightLine = {
                     align: 'left',
                     baseline: 'top'
                 },
-                styles: { color: lineColor, size: 10, weight: 'normal', backgroundColor: 'transparent' },
-                ignoreEvent: true
+                styles: { color: lineColor, size: 10, weight: 'normal', backgroundColor: 'transparent' }
             });
         }
         // ─── Anchor (y is decorative for a full-height line → horizontal drag) ───
@@ -48872,8 +50579,7 @@ var verticalStraightLine = {
             moveDirections: ['horz']
         })), false));
         return figures;
-    },
-    createXAxisFigures: function (_a) {
+    }, createXAxisFigures: function (_a) {
         var _b, _c;
         var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates;
         if (coordinates.length < 1)
@@ -48884,8 +50590,7 @@ var verticalStraightLine = {
         if (d0 === '')
             return [];
         return [buildXAxisPill(coordinates[0].x, d0, lineColor, 'vsl_x0')];
-    }
-};
+    } }, lineLabelEditorHooks('vsl_label', vslLabelAnchor));
 
 /**
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -49311,8 +51016,7 @@ var disjointChannel = {
                     key: "dc_fill_".concat(index),
                     type: 'polygon',
                     attrs: { coordinates: poly },
-                    styles: { style: 'fill', color: fill_1 },
-                    ignoreEvent: true
+                    styles: { style: 'fill', color: fill_1 }
                 });
             });
         }
@@ -49340,8 +51044,7 @@ var disjointChannel = {
                     key: 'dc_arrow_l1',
                     type: 'polygon',
                     attrs: { coordinates: c1 },
-                    styles: { style: 'fill', color: stroke.color },
-                    ignoreEvent: true
+                    styles: { style: 'fill', color: stroke.color }
                 });
             }
             if (hasMirror) {
@@ -49351,8 +51054,7 @@ var disjointChannel = {
                         key: 'dc_arrow_l2',
                         type: 'polygon',
                         attrs: { coordinates: c2 },
-                        styles: { style: 'fill', color: stroke.color },
-                        ignoreEvent: true
+                        styles: { style: 'fill', color: stroke.color }
                     });
                 }
             }
@@ -49364,8 +51066,7 @@ var disjointChannel = {
                     key: 'dc_arrow_r1',
                     type: 'polygon',
                     attrs: { coordinates: c1 },
-                    styles: { style: 'fill', color: stroke.color },
-                    ignoreEvent: true
+                    styles: { style: 'fill', color: stroke.color }
                 });
             }
             if (hasMirror) {
@@ -49375,8 +51076,7 @@ var disjointChannel = {
                         key: 'dc_arrow_r2',
                         type: 'polygon',
                         attrs: { coordinates: c2 },
-                        styles: { style: 'fill', color: stroke.color },
-                        ignoreEvent: true
+                        styles: { style: 'fill', color: stroke.color }
                     });
                 }
             }
@@ -49428,7 +51128,10 @@ var disjointChannel = {
         return figures;
     },
     createXAxisFigures: function (_a) {
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected;
+        if (isSelected !== true) {
+            return [];
+        }
         if (coordinates.length < 1) {
             return [];
         }
@@ -49438,7 +51141,10 @@ var disjointChannel = {
         return figures;
     },
     createYAxisFigures: function (_a) {
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected;
+        if (isSelected !== true) {
+            return [];
+        }
         if (coordinates.length < 1) {
             return [];
         }
@@ -49550,8 +51256,7 @@ var flatTopBottom = {
                     key: "ft_fill_".concat(index),
                     type: 'polygon',
                     attrs: { coordinates: poly },
-                    styles: { style: 'fill', color: fill_1 },
-                    ignoreEvent: true
+                    styles: { style: 'fill', color: fill_1 }
                 });
             });
         }
@@ -49579,8 +51284,7 @@ var flatTopBottom = {
                     key: 'ft_arrow_l1',
                     type: 'polygon',
                     attrs: { coordinates: c1 },
-                    styles: { style: 'fill', color: stroke.color },
-                    ignoreEvent: true
+                    styles: { style: 'fill', color: stroke.color }
                 });
             }
             if (hasLevel) {
@@ -49590,8 +51294,7 @@ var flatTopBottom = {
                         key: 'ft_arrow_l2',
                         type: 'polygon',
                         attrs: { coordinates: c2 },
-                        styles: { style: 'fill', color: stroke.color },
-                        ignoreEvent: true
+                        styles: { style: 'fill', color: stroke.color }
                     });
                 }
             }
@@ -49603,8 +51306,7 @@ var flatTopBottom = {
                     key: 'ft_arrow_r1',
                     type: 'polygon',
                     attrs: { coordinates: c1 },
-                    styles: { style: 'fill', color: stroke.color },
-                    ignoreEvent: true
+                    styles: { style: 'fill', color: stroke.color }
                 });
             }
             if (hasLevel) {
@@ -49614,8 +51316,7 @@ var flatTopBottom = {
                         key: 'ft_arrow_r2',
                         type: 'polygon',
                         attrs: { coordinates: c2 },
-                        styles: { style: 'fill', color: stroke.color },
-                        ignoreEvent: true
+                        styles: { style: 'fill', color: stroke.color }
                     });
                 }
             }
@@ -49660,7 +51361,10 @@ var flatTopBottom = {
         return figures;
     },
     createXAxisFigures: function (_a) {
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected;
+        if (isSelected !== true) {
+            return [];
+        }
         if (coordinates.length < 1) {
             return [];
         }
@@ -49670,7 +51374,10 @@ var flatTopBottom = {
         return figures;
     },
     createYAxisFigures: function (_a) {
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected;
+        if (isSelected !== true) {
+            return [];
+        }
         if (coordinates.length < 1) {
             return [];
         }
@@ -49783,8 +51490,7 @@ var parallelStraightLine = {
                     key: 'pc_fill',
                     type: 'polygon',
                     attrs: { coordinates: band },
-                    styles: { style: 'fill', color: channelFillColor(ext, stroke.color) },
-                    ignoreEvent: true
+                    styles: { style: 'fill', color: channelFillColor(ext, stroke.color) }
                 });
             }
         }
@@ -49821,8 +51527,7 @@ var parallelStraightLine = {
                     size: (_d = ext.medianLineWidth) !== null && _d !== void 0 ? _d : Math.max(1, stroke.size - 1),
                     style: medianStyle === 'solid' ? 'solid' : 'dashed',
                     dashedValue: medianStyle === 'dotted' ? [2, 4] : [6, 4]
-                },
-                ignoreEvent: true
+                }
             });
         }
         // Corner positions of the second edge — the pinned third anchor renders
@@ -49891,7 +51596,10 @@ var parallelStraightLine = {
         return figures;
     },
     createXAxisFigures: function (_a) {
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected;
+        if (isSelected !== true) {
+            return [];
+        }
         if (coordinates.length < 1) {
             return [];
         }
@@ -49901,7 +51609,10 @@ var parallelStraightLine = {
         return figures;
     },
     createYAxisFigures: function (_a) {
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected;
+        if (isSelected !== true) {
+            return [];
+        }
         if (coordinates.length < 1) {
             return [];
         }
@@ -50135,8 +51846,7 @@ var priceChannelLine = {
                     key: 'pcl_fill',
                     type: 'polygon',
                     attrs: { coordinates: band },
-                    styles: { style: 'fill', color: channelFillColor(ext, stroke.color) },
-                    ignoreEvent: true
+                    styles: { style: 'fill', color: channelFillColor(ext, stroke.color) }
                 });
             }
         }
@@ -50196,7 +51906,10 @@ var priceChannelLine = {
         return figures;
     },
     createXAxisFigures: function (_a) {
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected;
+        if (isSelected !== true) {
+            return [];
+        }
         if (coordinates.length < 1) {
             return [];
         }
@@ -50206,7 +51919,10 @@ var priceChannelLine = {
         return figures;
     },
     createYAxisFigures: function (_a) {
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, bounding = _a.bounding, yAxis = _a.yAxis, isSelected = _a.isSelected;
+        if (isSelected !== true) {
+            return [];
+        }
         if (coordinates.length < 1) {
             return [];
         }
@@ -50471,8 +52187,7 @@ var regressionTrend = {
                 styles: {
                     style: 'fill',
                     color: (_a = cfg.upperFillColor) !== null && _a !== void 0 ? _a : alphaRgba$1(cfg.upperColor, RT_FILL_ALPHA)
-                },
-                ignoreEvent: true
+                }
             });
         }
         if (cfg.useLowerDeviation) {
@@ -50483,8 +52198,7 @@ var regressionTrend = {
                 styles: {
                     style: 'fill',
                     color: (_b = cfg.lowerFillColor) !== null && _b !== void 0 ? _b : alphaRgba$1(cfg.lowerColor, RT_FILL_ALPHA)
-                },
-                ignoreEvent: true
+                }
             });
         }
         // ─── Lines. ───
@@ -50546,8 +52260,7 @@ var regressionTrend = {
                     weight: 'normal',
                     family: 'Arial, sans-serif',
                     backgroundColor: 'transparent'
-                },
-                ignoreEvent: true
+                }
             });
         }
         // ─── Anchors sit ON the fitted line (TradingView _updateAnchorsPrice
@@ -50567,7 +52280,10 @@ var regressionTrend = {
         return figures;
     }, { slot: 'point' }),
     createXAxisFigures: function (_a) {
-        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates;
+        var chart = _a.chart, overlay = _a.overlay, coordinates = _a.coordinates, isSelected = _a.isSelected;
+        if (isSelected !== true) {
+            return [];
+        }
         rememberLineChart(overlay, chart);
         if (coordinates.length < 1) {
             return [];
@@ -50798,9 +52514,9 @@ var arc = {
             // Apex drag: snap the stored point onto the mid-perpendicular on
             // the cursor's side — P3 := mid + n̂·signedDistance(cursor), the
             // TradingView setPoint case-2 write (tangential drift is dropped).
-            var c0 = pointToCoordinate$1(chart, paneId, (_a = params.points[0]) !== null && _a !== void 0 ? _a : {});
-            var c1 = pointToCoordinate$1(chart, paneId, (_b = params.points[1]) !== null && _b !== void 0 ? _b : {});
-            var c2 = pointToCoordinate$1(chart, paneId, (_c = params.points[2]) !== null && _c !== void 0 ? _c : {});
+            var c0 = pointToCoordinate$2(chart, paneId, (_a = params.points[0]) !== null && _a !== void 0 ? _a : {});
+            var c1 = pointToCoordinate$2(chart, paneId, (_b = params.points[1]) !== null && _b !== void 0 ? _b : {});
+            var c2 = pointToCoordinate$2(chart, paneId, (_c = params.points[2]) !== null && _c !== void 0 ? _c : {});
             if (c0 === null || c1 === null || c2 === null) {
                 return;
             }
@@ -50810,7 +52526,7 @@ var arc = {
                 return;
             }
             var d = (c2.x - c0.x) * frame.nx + (c2.y - c0.y) * frame.ny;
-            var point = coordinateToPoint$1(chart, paneId, {
+            var point = coordinateToPoint$2(chart, paneId, {
                 x: (c0.x + c1.x) / 2 + frame.nx * d,
                 y: (c0.y + c1.y) / 2 + frame.ny * d
             });
@@ -50831,11 +52547,11 @@ var arc = {
             if (prev.length < 3) {
                 return;
             }
-            var p0 = pointToCoordinate$1(chart, paneId, isValid(prev[0]) ? prev[0] : {});
-            var p1 = pointToCoordinate$1(chart, paneId, isValid(prev[1]) ? prev[1] : {});
-            var p2 = pointToCoordinate$1(chart, paneId, isValid(prev[2]) ? prev[2] : {});
-            var c0 = pointToCoordinate$1(chart, paneId, (_d = params.points[0]) !== null && _d !== void 0 ? _d : {});
-            var c1 = pointToCoordinate$1(chart, paneId, (_e = params.points[1]) !== null && _e !== void 0 ? _e : {});
+            var p0 = pointToCoordinate$2(chart, paneId, isValid(prev[0]) ? prev[0] : {});
+            var p1 = pointToCoordinate$2(chart, paneId, isValid(prev[1]) ? prev[1] : {});
+            var p2 = pointToCoordinate$2(chart, paneId, isValid(prev[2]) ? prev[2] : {});
+            var c0 = pointToCoordinate$2(chart, paneId, (_d = params.points[0]) !== null && _d !== void 0 ? _d : {});
+            var c1 = pointToCoordinate$2(chart, paneId, (_e = params.points[1]) !== null && _e !== void 0 ? _e : {});
             if (p0 === null || p1 === null || p2 === null || c0 === null || c1 === null) {
                 return;
             }
@@ -50845,7 +52561,7 @@ var arc = {
             if (frame === null || !isValid(target)) {
                 return;
             }
-            var point = coordinateToPoint$1(chart, paneId, {
+            var point = coordinateToPoint$2(chart, paneId, {
                 x: (c0.x + c1.x) / 2 + frame.nx * d0,
                 y: (c0.y + c1.y) / 2 + frame.ny * d0
             });
@@ -50894,9 +52610,9 @@ function snapEdgeToCenterPixelDelta(overlay, prevPoints, nowPoints) {
     if (chart === undefined) {
         return;
     }
-    var prevCenter = pointToCoordinate$1(chart, overlay.paneId, isValid(prevPoints[0]) ? prevPoints[0] : {});
-    var prevEdge = pointToCoordinate$1(chart, overlay.paneId, isValid(prevPoints[1]) ? prevPoints[1] : {});
-    var nowCenter = pointToCoordinate$1(chart, overlay.paneId, isValid(nowPoints[0]) ? nowPoints[0] : {});
+    var prevCenter = pointToCoordinate$2(chart, overlay.paneId, isValid(prevPoints[0]) ? prevPoints[0] : {});
+    var prevEdge = pointToCoordinate$2(chart, overlay.paneId, isValid(prevPoints[1]) ? prevPoints[1] : {});
+    var nowCenter = pointToCoordinate$2(chart, overlay.paneId, isValid(nowPoints[0]) ? nowPoints[0] : {});
     var target = nowPoints[1];
     if (prevCenter === null || prevEdge === null || nowCenter === null || !isValid(target)) {
         return;
@@ -50999,8 +52715,8 @@ var circle = {
         var leftX = center.x - radius;
         var rightX = center.x + radius;
         var stripWidth = rightX - leftX;
-        var leftPoint = coordinateToPoint$1(chart, overlay.paneId, { x: leftX, y: 0 });
-        var rightPoint = coordinateToPoint$1(chart, overlay.paneId, { x: rightX, y: 0 });
+        var leftPoint = coordinateToPoint$2(chart, overlay.paneId, { x: leftX, y: 0 });
+        var rightPoint = coordinateToPoint$2(chart, overlay.paneId, { x: rightX, y: 0 });
         var leftTs = leftPoint === null || leftPoint === void 0 ? void 0 : leftPoint.timestamp;
         var rightTs = rightPoint === null || rightPoint === void 0 ? void 0 : rightPoint.timestamp;
         var figs = [];
@@ -51009,8 +52725,7 @@ var circle = {
                 key: 'circle_xstrip',
                 type: 'rect',
                 attrs: { x: leftX, y: 0, width: stripWidth, height: bounding.height },
-                styles: { style: 'fill', color: alphaColor(AXIS_PILL_COLOR$1, 0.2) },
-                ignoreEvent: true
+                styles: { style: 'fill', color: alphaColor(AXIS_PILL_COLOR$1, 0.2) }
             });
         }
         var dLeft = formatDate(leftTs);
@@ -51039,8 +52754,8 @@ var circle = {
         var topY = center.y - radius;
         var bottomY = center.y + radius;
         var stripHeight = bottomY - topY;
-        var topPoint = coordinateToPoint$1(chart, overlay.paneId, { x: 0, y: topY });
-        var botPoint = coordinateToPoint$1(chart, overlay.paneId, { x: 0, y: bottomY });
+        var topPoint = coordinateToPoint$2(chart, overlay.paneId, { x: 0, y: topY });
+        var botPoint = coordinateToPoint$2(chart, overlay.paneId, { x: 0, y: bottomY });
         var topVal = topPoint === null || topPoint === void 0 ? void 0 : topPoint.value;
         var bottomVal = botPoint === null || botPoint === void 0 ? void 0 : botPoint.value;
         var figs = [];
@@ -51049,8 +52764,7 @@ var circle = {
                 key: 'circle_ystrip',
                 type: 'rect',
                 attrs: { x: 0, y: topY, width: bounding.width, height: stripHeight },
-                styles: { style: 'fill', color: alphaColor(AXIS_PILL_COLOR$1, 0.2) },
-                ignoreEvent: true
+                styles: { style: 'fill', color: alphaColor(AXIS_PILL_COLOR$1, 0.2) }
             });
         }
         var pillTop = buildYAxisPill(topY, topVal, AXIS_PILL_COLOR$1, precision, bounding, yAxis !== null && yAxis !== void 0 ? yAxis : undefined, 'circle_y0');
@@ -51168,12 +52882,12 @@ var curve = {
         if (overlay.currentStep !== 2 || overlay.points.length < 2) {
             return;
         }
-        var c1 = pointToCoordinate$1(chart, overlay.paneId, overlay.points[0]);
-        var c2 = pointToCoordinate$1(chart, overlay.paneId, overlay.points[1]);
+        var c1 = pointToCoordinate$2(chart, overlay.paneId, overlay.points[0]);
+        var c2 = pointToCoordinate$2(chart, overlay.paneId, overlay.points[1]);
         if (c1 === null || c2 === null) {
             return;
         }
-        var gc = coordinateToPoint$1(chart, overlay.paneId, quadControlOffset(c1, c2));
+        var gc = coordinateToPoint$2(chart, overlay.paneId, quadControlOffset(c1, c2));
         if (gc !== null) {
             overlay.points[2] = gc;
         }
@@ -51296,14 +53010,14 @@ var doubleCurve = {
         if (overlay.currentStep !== 2 || overlay.points.length < 2) {
             return;
         }
-        var c0 = pointToCoordinate$1(chart, overlay.paneId, overlay.points[0]);
-        var c1 = pointToCoordinate$1(chart, overlay.paneId, overlay.points[1]);
+        var c0 = pointToCoordinate$2(chart, overlay.paneId, overlay.points[0]);
+        var c1 = pointToCoordinate$2(chart, overlay.paneId, overlay.points[1]);
         if (c0 === null || c1 === null) {
             return;
         }
         var _b = __read(sCurveIntermediates(c0, c1), 2), g1 = _b[0], g2 = _b[1];
-        var gp1 = coordinateToPoint$1(chart, overlay.paneId, g1);
-        var gp2 = coordinateToPoint$1(chart, overlay.paneId, g2);
+        var gp1 = coordinateToPoint$2(chart, overlay.paneId, g1);
+        var gp2 = coordinateToPoint$2(chart, overlay.paneId, g2);
         if (gp1 === null || gp2 === null) {
             return;
         }
@@ -51498,8 +53212,8 @@ var ellipse = {
             return;
         }
         var paneId = this.paneId;
-        var c0 = pointToCoordinate$1(chart, paneId, (_a = params.points[0]) !== null && _a !== void 0 ? _a : {});
-        var c1 = pointToCoordinate$1(chart, paneId, (_b = params.points[1]) !== null && _b !== void 0 ? _b : {});
+        var c0 = pointToCoordinate$2(chart, paneId, (_a = params.points[0]) !== null && _a !== void 0 ? _a : {});
+        var c1 = pointToCoordinate$2(chart, paneId, (_b = params.points[1]) !== null && _b !== void 0 ? _b : {});
         if (c0 === null || c1 === null) {
             return;
         }
@@ -51508,7 +53222,7 @@ var ellipse = {
         if (frame === null || !isValid(target)) {
             return;
         }
-        var point = coordinateToPoint$1(chart, paneId, {
+        var point = coordinateToPoint$2(chart, paneId, {
             x: (c0.x + c1.x) / 2 + frame.nx * (frame.len / 2),
             y: (c0.y + c1.y) / 2 + frame.ny * (frame.len / 2)
         });
@@ -51537,8 +53251,8 @@ var ellipse = {
             // (TradingView `_radius2`), or half the new diameter when snapped
             // (TV `_calcPoint2` default → circle).
             applySnap45(this, params, 1 - mpi);
-            var c0 = pointToCoordinate$1(chart, paneId, (_a = params.points[0]) !== null && _a !== void 0 ? _a : {});
-            var c1 = pointToCoordinate$1(chart, paneId, (_b = params.points[1]) !== null && _b !== void 0 ? _b : {});
+            var c0 = pointToCoordinate$2(chart, paneId, (_a = params.points[0]) !== null && _a !== void 0 ? _a : {});
+            var c1 = pointToCoordinate$2(chart, paneId, (_b = params.points[1]) !== null && _b !== void 0 ? _b : {});
             if (c0 === null || c1 === null) {
                 return;
             }
@@ -51552,9 +53266,9 @@ var ellipse = {
                 if (prev.length < 3) {
                     return;
                 }
-                var p0 = pointToCoordinate$1(chart, paneId, isValid(prev[0]) ? prev[0] : {});
-                var p1 = pointToCoordinate$1(chart, paneId, isValid(prev[1]) ? prev[1] : {});
-                var p2 = pointToCoordinate$1(chart, paneId, isValid(prev[2]) ? prev[2] : {});
+                var p0 = pointToCoordinate$2(chart, paneId, isValid(prev[0]) ? prev[0] : {});
+                var p1 = pointToCoordinate$2(chart, paneId, isValid(prev[1]) ? prev[1] : {});
+                var p2 = pointToCoordinate$2(chart, paneId, isValid(prev[2]) ? prev[2] : {});
                 if (p0 === null || p1 === null || p2 === null) {
                     return;
                 }
@@ -51568,9 +53282,9 @@ var ellipse = {
             // radius; the point is written back onto the mid-perpendicular on
             // the +left-normal side (TradingView setPoint case 2/3 — both
             // handles write mid + n̂·unsignedDistance).
-            var c0 = pointToCoordinate$1(chart, paneId, (_c = params.points[0]) !== null && _c !== void 0 ? _c : {});
-            var c1 = pointToCoordinate$1(chart, paneId, (_d = params.points[1]) !== null && _d !== void 0 ? _d : {});
-            var c2 = pointToCoordinate$1(chart, paneId, (_e = params.points[2]) !== null && _e !== void 0 ? _e : {});
+            var c0 = pointToCoordinate$2(chart, paneId, (_c = params.points[0]) !== null && _c !== void 0 ? _c : {});
+            var c1 = pointToCoordinate$2(chart, paneId, (_d = params.points[1]) !== null && _d !== void 0 ? _d : {});
+            var c2 = pointToCoordinate$2(chart, paneId, (_e = params.points[2]) !== null && _e !== void 0 ? _e : {});
             if (c0 === null || c1 === null || c2 === null) {
                 return;
             }
@@ -51613,14 +53327,13 @@ var ellipse = {
                 key: 'ellipse_xstrip',
                 type: 'rect',
                 attrs: { x: leftX, y: 0, width: stripWidth, height: bounding.height },
-                styles: { style: 'fill', color: alphaColor(AXIS_PILL_COLOR, 0.2) },
-                ignoreEvent: true
+                styles: { style: 'fill', color: alphaColor(AXIS_PILL_COLOR, 0.2) }
             });
         }
         // Pill labels come from the AABB edge positions — converted back to
         // bar time since the rotated extremes aren't stored points.
-        var leftPoint = coordinateToPoint$1(chart, overlay.paneId, { x: leftX, y: 0 });
-        var rightPoint = coordinateToPoint$1(chart, overlay.paneId, { x: rightX, y: 0 });
+        var leftPoint = coordinateToPoint$2(chart, overlay.paneId, { x: leftX, y: 0 });
+        var rightPoint = coordinateToPoint$2(chart, overlay.paneId, { x: rightX, y: 0 });
         var dLeft = formatDate(leftPoint === null || leftPoint === void 0 ? void 0 : leftPoint.timestamp);
         var dRight = formatDate(rightPoint === null || rightPoint === void 0 ? void 0 : rightPoint.timestamp);
         if (dLeft !== '') {
@@ -51663,12 +53376,11 @@ var ellipse = {
                 key: 'ellipse_ystrip',
                 type: 'rect',
                 attrs: { x: 0, y: topY, width: bounding.width, height: stripHeight },
-                styles: { style: 'fill', color: alphaColor(AXIS_PILL_COLOR, 0.2) },
-                ignoreEvent: true
+                styles: { style: 'fill', color: alphaColor(AXIS_PILL_COLOR, 0.2) }
             });
         }
-        var topPoint = coordinateToPoint$1(chart, overlay.paneId, { x: 0, y: topY });
-        var bottomPoint = coordinateToPoint$1(chart, overlay.paneId, { x: 0, y: bottomY });
+        var topPoint = coordinateToPoint$2(chart, overlay.paneId, { x: 0, y: topY });
+        var bottomPoint = coordinateToPoint$2(chart, overlay.paneId, { x: 0, y: bottomY });
         var pillTop = buildYAxisPill(topY, topPoint === null || topPoint === void 0 ? void 0 : topPoint.value, AXIS_PILL_COLOR, precision, bounding, yAxis !== null && yAxis !== void 0 ? yAxis : undefined, 'ellipse_y0');
         if (pillTop != null) {
             figs.push(pillTop);
@@ -51690,7 +53402,7 @@ function writeRadiusPoint(chart, paneId, target, c0, c1, frame, radius) {
     if (!isValid(target)) {
         return;
     }
-    var point = coordinateToPoint$1(chart, paneId, {
+    var point = coordinateToPoint$2(chart, paneId, {
         x: (c0.x + c1.x) / 2 + frame.nx * radius,
         y: (c0.y + c1.y) / 2 + frame.ny * radius
     });
@@ -51915,8 +53627,7 @@ var path = {
                     key: 'path_arrow',
                     type: 'polygon',
                     attrs: { coordinates: arrow },
-                    styles: { style: 'fill', color: stroke.color },
-                    ignoreEvent: true
+                    styles: { style: 'fill', color: stroke.color }
                 });
             }
         }
@@ -52157,8 +53868,7 @@ var rect = {
                     color: (_c = ext.middleLineColor) !== null && _c !== void 0 ? _c : stroke.color,
                     size: (_d = ext.middleLineWidth) !== null && _d !== void 0 ? _d : 1,
                     dashedValue: MID_DASH[mlStyle]
-                },
-                ignoreEvent: true
+                }
             });
         }
         // In-box text, or the "+ Add text" hint while interactive (kernel parity).
@@ -52235,8 +53945,8 @@ var rect = {
         // the emitted handles used (the kernel wrote the raw cursor into the
         // x-owner slot; the y-owner may be the sibling).
         var chart = lineChartOf(this);
-        var px0 = chart === undefined ? null : pointToCoordinate$1(chart, this.paneId, isValid(prev[0]) ? prev[0] : {});
-        var px1 = chart === undefined ? null : pointToCoordinate$1(chart, this.paneId, isValid(prev[1]) ? prev[1] : {});
+        var px0 = chart === undefined ? null : pointToCoordinate$2(chart, this.paneId, isValid(prev[0]) ? prev[0] : {});
+        var px1 = chart === undefined ? null : pointToCoordinate$2(chart, this.paneId, isValid(prev[1]) ? prev[1] : {});
         // Shift during a corner drag → square, measured from the
         // diagonally-opposite corner at gesture start (pixel space).
         var event = params.event;
@@ -52251,7 +53961,7 @@ var rect = {
                 x: cornerSpec.x === 'right' ? right : left,
                 y: cornerSpec.y === 'bottom' ? bottom : top_1
             };
-            var point = coordinateToPoint$1(chart, this.paneId, squareCoordinate({ x: event.x, y: event.y }, opposite));
+            var point = coordinateToPoint$2(chart, this.paneId, squareCoordinate({ x: event.x, y: event.y }, opposite));
             if (point !== null) {
                 ts = point.timestamp;
                 di = point.dataIndex;
@@ -52432,11 +54142,11 @@ var rotatedRect = {
             return;
         }
         var paneId = this.paneId;
-        var prevP1 = pointToCoordinate$1(chart, paneId, isValid(prev[0]) ? prev[0] : {});
-        var prevP2 = pointToCoordinate$1(chart, paneId, isValid(prev[1]) ? prev[1] : {});
-        var prevP3 = pointToCoordinate$1(chart, paneId, isValid(prev[2]) ? prev[2] : {});
-        var curP1 = pointToCoordinate$1(chart, paneId, (_a = params.points[0]) !== null && _a !== void 0 ? _a : {});
-        var curP2 = pointToCoordinate$1(chart, paneId, (_b = params.points[1]) !== null && _b !== void 0 ? _b : {});
+        var prevP1 = pointToCoordinate$2(chart, paneId, isValid(prev[0]) ? prev[0] : {});
+        var prevP2 = pointToCoordinate$2(chart, paneId, isValid(prev[1]) ? prev[1] : {});
+        var prevP3 = pointToCoordinate$2(chart, paneId, isValid(prev[2]) ? prev[2] : {});
+        var curP1 = pointToCoordinate$2(chart, paneId, (_a = params.points[0]) !== null && _a !== void 0 ? _a : {});
+        var curP2 = pointToCoordinate$2(chart, paneId, (_b = params.points[1]) !== null && _b !== void 0 ? _b : {});
         if (prevP1 === null || prevP2 === null || prevP3 === null ||
             curP1 === null || curP2 === null) {
             return;
@@ -52450,7 +54160,7 @@ var rotatedRect = {
         // TV writes the width point onto the right-normal side of the new
         // edge (Point(dy, -dx)·distance) — the symmetric polygon renders
         // identically either way; the sign just keeps the stored point tidy.
-        var point = coordinateToPoint$1(chart, paneId, {
+        var point = coordinateToPoint$2(chart, paneId, {
             x: curP1.x - frame.nx * half,
             y: curP1.y - frame.ny * half
         });
@@ -52685,8 +54395,7 @@ function vertexPillFigure(key, coordinate, text, above, colors, font) {
             paddingTop: 2,
             paddingBottom: 2,
             borderRadius: 4
-        },
-        ignoreEvent: true
+        }
     };
 }
 /**
@@ -52714,8 +54423,7 @@ function ratioPillFigure(key, coordinate, text, colors, font) {
             paddingTop: 2,
             paddingBottom: 2,
             borderRadius: 4
-        },
-        ignoreEvent: true
+        }
     };
 }
 /**
@@ -52734,8 +54442,7 @@ function ratioTrendFigure(key, a, b, color, size) {
             size: size,
             // TV LINESTYLE_DOTTED — a tight 2px dash.
             dashedValue: [2, 2]
-        },
-        ignoreEvent: true
+        }
     };
 }
 /** Midpoint of two pane-space coordinates. */
@@ -52837,16 +54544,14 @@ function fivePointPatternFigures(params, ratiosOf, fallbackColor) {
             key: 'ptn_tri_xab',
             type: 'polygon',
             attrs: { coordinates: [x, a, b] },
-            styles: { style: 'fill', color: fill },
-            ignoreEvent: true
+            styles: { style: 'fill', color: fill }
         });
         if (coordinates.length >= 5) {
             figures.push({
                 key: 'ptn_tri_bcd',
                 type: 'polygon',
                 attrs: { coordinates: [b, c, d] },
-                styles: { style: 'fill', color: fill },
-                ignoreEvent: true
+                styles: { style: 'fill', color: fill }
             });
         }
     }
@@ -53267,8 +54972,7 @@ function elliottWaveFigures(labelsGroup, params, fallbackColor) {
                 color: stroke.color,
                 size: stroke.size,
                 dashedValue: stroke.dashedValue
-            },
-            ignoreEvent: true
+            }
         });
     }
     var showLabels = (_b = ext.showLabels) !== null && _b !== void 0 ? _b : true;
@@ -53597,16 +55301,14 @@ var headAndShoulders = {
                     key: 'hs_tri_head',
                     type: 'polygon',
                     attrs: { coordinates: [coordinates[2], coordinates[3], coordinates[4]] },
-                    styles: { style: 'fill', color: fill },
-                    ignoreEvent: true
+                    styles: { style: 'fill', color: fill }
                 });
                 if (isValid(neckLeft)) {
                     figures.push({
                         key: 'hs_tri_left',
                         type: 'polygon',
                         attrs: { coordinates: [neckLeft, coordinates[1], coordinates[2]] },
-                        styles: { style: 'fill', color: fill },
-                        ignoreEvent: true
+                        styles: { style: 'fill', color: fill }
                     });
                 }
                 if (isValid(neckRight)) {
@@ -53614,8 +55316,7 @@ var headAndShoulders = {
                         key: 'hs_tri_right',
                         type: 'polygon',
                         attrs: { coordinates: [coordinates[4], coordinates[5], neckRight] },
-                        styles: { style: 'fill', color: fill },
-                        ignoreEvent: true
+                        styles: { style: 'fill', color: fill }
                     });
                 }
             }
@@ -53890,8 +55591,7 @@ var timeCycles = {
                         key: 'tc_dome_fill',
                         type: 'polygon',
                         attrs: domeRings.map(function (coordinates) { return ({ coordinates: coordinates }); }),
-                        styles: { style: 'fill', color: patternFillColorOf(ext, stroke.color) },
-                        ignoreEvent: true
+                        styles: { style: 'fill', color: patternFillColorOf(ext, stroke.color) }
                     });
                 }
             }
@@ -54227,8 +55927,7 @@ function arrowMarkLabelFigure(key, point, direction, extendData, defaultColor) {
             size: fontSize,
             weight: ext.bold === true ? 'bold' : 'normal',
             fontStyle: ext.italic === true ? 'italic' : 'normal'
-        },
-        ignoreEvent: true
+        }
     };
 }
 // TV raw/line-tool-arrow-marker: head length is G(len) — 18 for short arrows,
@@ -54487,8 +56186,7 @@ var arrowMarker = {
                 styles: {
                     color: (_c = ext.textColor) !== null && _c !== void 0 ? _c : color,
                     size: size
-                },
-                ignoreEvent: true
+                }
             });
         }
         figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
@@ -54848,6 +56546,7 @@ var drawingTools = [
     insidePitchfork,
     modifiedSchiffPitchfork,
     pitchfork,
+    pitchfan,
     schiffPitchfork,
     arrowLine,
     crossLine,
