@@ -478,6 +478,55 @@ typeof SuppressedError === "function" ? SuppressedError : function (error, suppr
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+var EVENT_CALLBACK_KEYS = [
+    'onDrawStart', 'onDrawing', 'onDrawEnd', 'onRemoved',
+    'onClick', 'onDoubleClick', 'onRightClick',
+    'onPressedMoveStart', 'onPressedMoving', 'onPressedMoveEnd',
+    'onMouseMove', 'onMouseEnter', 'onMouseLeave',
+    'onSelected', 'onDeselected'
+];
+function chainEventCallbacks(target, patch) {
+    var e_1, _a;
+    var _loop_1 = function (key) {
+        var incoming = patch[key];
+        if (!isFunction(incoming))
+            return "continue";
+        var existing = target[key];
+        if (isFunction(existing) && existing !== incoming) {
+            if (existing._scIncoming === incoming) {
+                // Same patch re-applied — keep the composed hook already in place.
+                patch[key] = existing;
+                return "continue";
+            }
+            var inner_1 = existing;
+            var outer_1 = incoming;
+            var composed = function () {
+                var args = [];
+                for (var _i = 0; _i < arguments.length; _i++) {
+                    args[_i] = arguments[_i];
+                }
+                if (inner_1.apply(void 0, __spreadArray([], __read(args), false)) === false)
+                    return false;
+                return outer_1.apply(void 0, __spreadArray([], __read(args), false));
+            };
+            composed._scIncoming = outer_1;
+            patch[key] = composed;
+        }
+    };
+    try {
+        for (var EVENT_CALLBACK_KEYS_1 = __values(EVENT_CALLBACK_KEYS), EVENT_CALLBACK_KEYS_1_1 = EVENT_CALLBACK_KEYS_1.next(); !EVENT_CALLBACK_KEYS_1_1.done; EVENT_CALLBACK_KEYS_1_1 = EVENT_CALLBACK_KEYS_1.next()) {
+            var key = EVENT_CALLBACK_KEYS_1_1.value;
+            _loop_1(key);
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (EVENT_CALLBACK_KEYS_1_1 && !EVENT_CALLBACK_KEYS_1_1.done && (_a = EVENT_CALLBACK_KEYS_1.return)) _a.call(EVENT_CALLBACK_KEYS_1);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+}
 function checkOverlayFigureEvent(targetEventType, figure) {
     var _a;
     var ignoreEvent = (_a = figure === null || figure === void 0 ? void 0 : figure.ignoreEvent) !== null && _a !== void 0 ? _a : false;
@@ -601,6 +650,7 @@ var OverlayImp = /** @class */ (function () {
         var // zLevel is handled below — while a hover bump is active it must fold
         // into _prevZLevel (the restore target) instead of overwriting it.
         zLevel = _b.zLevel, others = __rest(_b, ["id", "name", "currentStep", "points", "styles", "extendData", "skipDrawReplay", "completed", "figuresRev", "invalidateFigures", "isDrawing", "isStart", "forceComplete", "_prevOverlay", "_prevPressedPoint", "_prevPressedPoints", "_prevZLevel", "totalStep", "freehand", "freehandMinDistance", "groupId", "cullable", "zLevel"]);
+        chainEventCallbacks(this, others);
         merge(this, others);
         if (isValid(zLevel)) {
             if (this._prevZLevel !== null) {
