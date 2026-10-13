@@ -64,6 +64,50 @@ export interface OverlayEventCollection<E> {
   onDeselected: Nullable<OverlayEventCallback<E>>
 }
 
+/**
+ * Event callbacks chain rather than replace: a registered template's hooks
+ * are the tool's behavior (the text editor on draw-end, menu cleanup on
+ * remove, drag-start snapshots). A host that injects its own callbacks via
+ * createOverlay params — a persistence/selection observer — must observe
+ * alongside, not shadow. The existing hook (usually the template's) runs
+ * first; a `false` vetoes the event and skips the incoming callback,
+ * matching single-hook semantics.
+ */
+type OverlayEventKey = keyof OverlayEventCollection<unknown>
+const EVENT_CALLBACK_KEYS: OverlayEventKey[] = [
+  'onDrawStart', 'onDrawing', 'onDrawEnd', 'onRemoved',
+  'onClick', 'onDoubleClick', 'onRightClick',
+  'onPressedMoveStart', 'onPressedMoving', 'onPressedMoveEnd',
+  'onMouseMove', 'onMouseEnter', 'onMouseLeave',
+  'onSelected', 'onDeselected'
+]
+
+type EventFn = (...args: unknown[]) => unknown
+interface ComposedEventFn extends EventFn { _scIncoming?: EventFn }
+
+function chainEventCallbacks (target: Record<string, unknown>, patch: Record<string, unknown>): void {
+  for (const key of EVENT_CALLBACK_KEYS) {
+    const incoming = patch[key]
+    if (!isFunction(incoming)) continue
+    const existing = target[key] as ComposedEventFn | undefined
+    if (isFunction(existing) && existing !== incoming) {
+      if (existing._scIncoming === incoming) {
+        // Same patch re-applied — keep the composed hook already in place.
+        patch[key] = existing
+        continue
+      }
+      const inner = existing as EventFn
+      const outer = incoming as EventFn
+      const composed: ComposedEventFn = (...args: unknown[]) => {
+        if (inner(...args) === false) return false
+        return outer(...args)
+      }
+      composed._scIncoming = outer
+      patch[key] = composed
+    }
+  }
+}
+
 export function checkOverlayFigureEvent (
   targetEventType: keyof Omit<OverlayEventCollection<unknown>, 'onDrawStart' | 'onDrawing' | 'onDrawEnd' | 'onRemoved'>,
   figure: Nullable<OverlayFigure>
@@ -615,6 +659,8 @@ export default class OverlayImp<E = unknown> implements Overlay<E> {
       _prevPressedPoints?: unknown
       _prevZLevel?: unknown
     }
+
+    chainEventCallbacks(this as unknown as Record<string, unknown>, others as Record<string, unknown>)
 
     merge(this, others)
 
