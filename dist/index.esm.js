@@ -637,10 +637,14 @@ var OverlayImp = /** @class */ (function () {
             this.id = id;
         }
         if (isValid(styles)) {
-            if (this.styles == null || Object.isFrozen(this.styles)) {
+            if (this.styles == null) {
                 this.styles = clone(styles);
             }
             else {
+                // Frozen payloads (Immer/store hydration) can't be merged into —
+                // clone the EXISTING styles first so sibling groups survive a
+                // partial patch, same as the extendData path above.
+                this.styles = clone(this.styles);
                 merge(this.styles, styles);
             }
             this.figuresRev++;
@@ -11009,7 +11013,7 @@ function buildCatalog() {
                     items: [
                         item('callout', 'callout', 'Callout', 'callout', caps({ anchorCount: 2, hasText: true, multiline: true, snap45: false }), TEXT_RECIPE),
                         item('priceLabel', 'priceLabel', 'Price Label', 'priceLabel', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE),
-                        item('priceNote', 'simpleAnnotation', 'Price Note', 'priceLabel', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE),
+                        item('priceNote', 'simpleAnnotation', 'Price Note', 'priceLabel', caps({ anchorCount: 2, hasText: true, snap45: true }), TEXT_RECIPE),
                         // flagMark styles live under styles.flagMark (flagColor/poleColor)
                         // — the generic text recipe wrote dead styles.text.* paths.
                         item('flag', 'flagMark', 'Flag Mark', 'flag', caps({ anchorCount: 1, snap45: false }), ZONE_COLORS_RECIPE, { stylePaths: { fillColor: ['styles', 'flagMark', 'flagColor'], backgroundColor: ['styles', 'flagMark', 'poleColor'] } }),
@@ -13538,10 +13542,18 @@ function openOverlayTextEditor(options) {
     // after subscription.
     var sessionBox = { current: null };
     var onChartChange = function (event) {
-        var _a, _b;
+        var _a, _b, _c;
         var change = event;
-        if ((change === null || change === void 0 ? void 0 : change.type) === 'remove' && ((_a = change.overlay) === null || _a === void 0 ? void 0 : _a.id) === overlay.id) {
+        if (((_a = change === null || change === void 0 ? void 0 : change.overlay) === null || _a === void 0 ? void 0 : _a.id) !== overlay.id) {
+            return;
+        }
+        if (change.type === 'remove') {
             (_b = sessionBox.current) === null || _b === void 0 ? void 0 : _b.close('external');
+        }
+        else if (change.type === 'update' || change.type === 'progress') {
+            // Points moved mid-session (body drag, synced/programmatic write) —
+            // re-anchor or the DOM box drifts off the glyphs.
+            (_c = sessionBox.current) === null || _c === void 0 ? void 0 : _c.relayout();
         }
     };
     // Scroll/zoom/resize move the rendered text while the session is open —
@@ -13831,9 +13843,50 @@ var AUTO_NUMBER_BOUNDS = {
     level: { min: 0, step: 0.001 },
     coefficient: { min: 0, step: 0.001 }
 };
+/** Suffix rules for keys not in AUTO_NUMBER_BOUNDS (checked in order). */
+var AUTO_NUMBER_SUFFIX_BOUNDS = [
+    [/opacity$/i, { min: 0, max: 1, step: 0.05 }],
+    [/precision$/i, { min: 0, max: 12, step: 1 }]
+];
+function numberBoundsFor(key) {
+    var e_3, _a;
+    if (key in AUTO_NUMBER_BOUNDS) {
+        return AUTO_NUMBER_BOUNDS[key];
+    }
+    try {
+        for (var AUTO_NUMBER_SUFFIX_BOUNDS_1 = __values(AUTO_NUMBER_SUFFIX_BOUNDS), AUTO_NUMBER_SUFFIX_BOUNDS_1_1 = AUTO_NUMBER_SUFFIX_BOUNDS_1.next(); !AUTO_NUMBER_SUFFIX_BOUNDS_1_1.done; AUTO_NUMBER_SUFFIX_BOUNDS_1_1 = AUTO_NUMBER_SUFFIX_BOUNDS_1.next()) {
+            var _b = __read(AUTO_NUMBER_SUFFIX_BOUNDS_1_1.value, 2), re = _b[0], bounds = _b[1];
+            if (re.test(key)) {
+                return bounds;
+            }
+        }
+    }
+    catch (e_3_1) { e_3 = { error: e_3_1 }; }
+    finally {
+        try {
+            if (AUTO_NUMBER_SUFFIX_BOUNDS_1_1 && !AUTO_NUMBER_SUFFIX_BOUNDS_1_1.done && (_a = AUTO_NUMBER_SUFFIX_BOUNDS_1.return)) _a.call(AUTO_NUMBER_SUFFIX_BOUNDS_1);
+        }
+        finally { if (e_3) throw e_3.error; }
+    }
+    return {};
+}
+/**
+ * Structural/runtime extendData keys the auto-scan must NOT surface as
+ * user-editable fields — either nested payloads, internal drag state, or
+ * numbers whose meaning isn't a raw input (table grid state desyncs
+ * cells/rowHeights/colWidths; trendAngle stores radians).
+ */
+var AUTO_FIELD_EXCLUDED_KEYS = new Set([
+    'common', 'data', 'levels', 'vlevels', 'hlevels', 'fanLevels', 'arcs',
+    'isEditing',
+    // table tool grid state
+    'rows', 'cols', 'cells', 'rowHeights', 'colWidths', 'tableWidth', 'tableHeight',
+    // trendAngle internal geometry (radians/px, not user-facing inputs)
+    'angle', 'distance'
+]);
 function optionFields(overlay, item, draft) {
-    var e_3, _a, e_4, _b;
-    var _c, _d, _e;
+    var e_4, _a, e_5, _b;
+    var _c, _d;
     var ed = overlay.extendData;
     if (ed === null || typeof ed !== 'object') {
         return [];
@@ -13844,29 +13897,26 @@ function optionFields(overlay, item, draft) {
     var claimed = new Set();
     var paths = (_c = item === null || item === void 0 ? void 0 : item.stylePaths) !== null && _c !== void 0 ? _c : {};
     try {
-        for (var _f = __values(Object.values(paths)), _g = _f.next(); !_g.done; _g = _f.next()) {
-            var sp = _g.value;
+        for (var _e = __values(Object.values(paths)), _f = _e.next(); !_f.done; _f = _e.next()) {
+            var sp = _f.value;
             if (sp !== undefined && sp[0] === 'extendData' && sp.length === 2 && isString(sp[1])) {
                 claimed.add(sp[1]);
             }
         }
     }
-    catch (e_3_1) { e_3 = { error: e_3_1 }; }
+    catch (e_4_1) { e_4 = { error: e_4_1 }; }
     finally {
         try {
-            if (_g && !_g.done && (_a = _f.return)) _a.call(_f);
+            if (_f && !_f.done && (_a = _e.return)) _a.call(_e);
         }
-        finally { if (e_3) throw e_3.error; }
+        finally { if (e_4) throw e_4.error; }
     }
     var record = ed;
     var fields = [];
     var _loop_1 = function (key) {
         // `_`-prefixed runtime keys, `isEditing`, nested objects and claimed
         // style paths are excluded; primitives become auto-labeled controls.
-        if (key === 'common' || key === 'data' || key === 'levels' ||
-            key === 'vlevels' || key === 'hlevels' || key === 'fanLevels' ||
-            key === 'arcs' ||
-            key.startsWith('_') || key === 'isEditing' || claimed.has(key)) {
+        if (key.startsWith('_') || AUTO_FIELD_EXCLUDED_KEYS.has(key) || claimed.has(key)) {
             return "continue";
         }
         var label = key.replace(/([A-Z])/g, ' $1').replace(/^./, function (c) { return c.toUpperCase(); });
@@ -13881,14 +13931,14 @@ function optionFields(overlay, item, draft) {
             });
         }
         else if (isNumber(value)) {
-            var bounds = (_d = AUTO_NUMBER_BOUNDS[key]) !== null && _d !== void 0 ? _d : {};
+            var bounds = numberBoundsFor(key);
             fields.push({
                 id: "num_".concat(key),
                 kind: 'number',
                 label: label,
                 min: bounds.min,
                 max: bounds.max,
-                step: (_e = bounds.step) !== null && _e !== void 0 ? _e : 0,
+                step: (_d = bounds.step) !== null && _d !== void 0 ? _d : 0,
                 get: function () { return overlay.extendData[key]; },
                 set: function (v) { draft.extendData([key], v); }
             });
@@ -13904,17 +13954,17 @@ function optionFields(overlay, item, draft) {
         }
     };
     try {
-        for (var _h = __values(Object.keys(record)), _j = _h.next(); !_j.done; _j = _h.next()) {
-            var key = _j.value;
+        for (var _g = __values(Object.keys(record)), _h = _g.next(); !_h.done; _h = _g.next()) {
+            var key = _h.value;
             _loop_1(key);
         }
     }
-    catch (e_4_1) { e_4 = { error: e_4_1 }; }
+    catch (e_5_1) { e_5 = { error: e_5_1 }; }
     finally {
         try {
-            if (_j && !_j.done && (_b = _h.return)) _b.call(_h);
+            if (_h && !_h.done && (_b = _g.return)) _b.call(_g);
         }
-        finally { if (e_4) throw e_4.error; }
+        finally { if (e_5) throw e_5.error; }
     }
     return fields;
 }
@@ -26956,10 +27006,23 @@ function checkCoordinateOnText(coordinate, attrs, styles) {
             else {
                 hitRect = getTextRect(text_1, styles);
             }
-            if (coordinate.x >= hitRect.x &&
-                coordinate.x <= hitRect.x + hitRect.width &&
-                coordinate.y >= hitRect.y &&
-                coordinate.y <= hitRect.y + hitRect.height) {
+            // Rotation is applied around (text.x, text.y) when drawing — un-rotate the
+            // candidate point around the same pivot so the rect test matches glyphs.
+            var cx = coordinate.x;
+            var cy = coordinate.y;
+            var rotation = text_1.rotation;
+            if (rotation != null && rotation !== 0) {
+                var dx = cx - text_1.x;
+                var dy = cy - text_1.y;
+                var cos = Math.cos(-rotation);
+                var sin = Math.sin(-rotation);
+                cx = text_1.x + dx * cos - dy * sin;
+                cy = text_1.y + dx * sin + dy * cos;
+            }
+            if (cx >= hitRect.x &&
+                cx <= hitRect.x + hitRect.width &&
+                cy >= hitRect.y &&
+                cy <= hitRect.y + hitRect.height) {
                 return true;
             }
         }
@@ -37824,8 +37887,21 @@ function notePxPoint(overlay, bounding, dataPx, defaultAnchored) {
  * override() mid-drag would replay performEventPressedMove re-entrantly.
  */
 function writeAnchoredFractions(overlay, px, bounding) {
+    if (bounding.width <= 0 || bounding.height <= 0) {
+        // x/0 → Infinity, and `typeof NaN === 'number'` would then satisfy the
+        // "fractions already captured" checks — the note could never anchor.
+        return;
+    }
     var current = overlay.extendData;
+    // Legacy payloads: a string/function extendData IS the label — carrying
+    // it into `text` preserves the note instead of silently deleting it.
     var next = __assign({}, (isObject(current) ? current : {}));
+    if (isString(current)) {
+        next.text = current;
+    }
+    else if (isFunction(current)) {
+        next.text = String(current(overlay));
+    }
     next.fx = px.x / bounding.width;
     next.fy = px.y / bounding.height;
     overlay.extendData = next;
@@ -37841,14 +37917,10 @@ function revertAnchoredPointWrite(overlay, params, px, bounding) {
     var prev = params.prevPoints;
     for (var i = 0; i < params.points.length; i++) {
         var prevPoint = prev[i];
-        var point = params.points[i];
         if (isValid(prevPoint)) {
-            if (isNumber(prevPoint.timestamp))
-                point.timestamp = prevPoint.timestamp;
-            if (isNumber(prevPoint.dataIndex))
-                point.dataIndex = prevPoint.dataIndex;
-            if (isNumber(prevPoint.value))
-                point.value = prevPoint.value;
+            // Restore unconditionally — a field the kernel ADDED (e.g. timestamp
+            // onto a dataIndex-only point) must not survive the revert.
+            params.points[i] = __assign({}, prevPoint);
         }
     }
     if (bounding !== undefined) {
@@ -37856,32 +37928,44 @@ function revertAnchoredPointWrite(overlay, params, px, bounding) {
     }
 }
 /**
+ * fx/fy captured at press start — body-move deltas are TOTAL deltas from
+ * press (the kernel re-derives points from _prevPressedPoints each tick),
+ * so they must apply against the press-start fractions, not the live
+ * extendData each previous tick already advanced.
+ */
+var pressStartFractions = new WeakMap();
+/** Call from `onPressedMoveStart` on anchored-note tools. */
+function captureAnchoredPressStart(overlay) {
+    var ed = overlay.extendData;
+    if (isNumber(ed === null || ed === void 0 ? void 0 : ed.fx) && isNumber(ed.fy)) {
+        pressStartFractions.set(overlay, { fx: ed.fx, fy: ed.fy });
+    }
+}
+/**
  * Same for whole-body drags (`performEventBodyMove`): the kernel shifted
  * every stored point — undo and move the fixed point by the pixel delta.
  */
 function revertAnchoredBodyMove(overlay, chart, params) {
-    var _a, _b;
+    var _a, _b, _c, _d;
     var bounding = annotationBoundingOf(overlay);
+    var press = pressStartFractions.get(overlay);
     var ed = overlay.extendData;
-    if (bounding === undefined || !isNumber(ed === null || ed === void 0 ? void 0 : ed.fx) || !isNumber(ed.fy)) {
+    var startFx = (_a = press === null || press === void 0 ? void 0 : press.fx) !== null && _a !== void 0 ? _a : ed === null || ed === void 0 ? void 0 : ed.fx;
+    var startFy = (_b = press === null || press === void 0 ? void 0 : press.fy) !== null && _b !== void 0 ? _b : ed === null || ed === void 0 ? void 0 : ed.fy;
+    if (bounding === undefined || !isNumber(startFx) || !isNumber(startFy)) {
         return;
     }
-    var before = pointToCoordinate$3(chart, overlay.paneId, (_a = params.prevPoints[0]) !== null && _a !== void 0 ? _a : {});
-    var after = pointToCoordinate$3(chart, overlay.paneId, (_b = params.points[0]) !== null && _b !== void 0 ? _b : {});
+    var before = pointToCoordinate$3(chart, overlay.paneId, (_c = params.prevPoints[0]) !== null && _c !== void 0 ? _c : {});
+    var after = pointToCoordinate$3(chart, overlay.paneId, (_d = params.points[0]) !== null && _d !== void 0 ? _d : {});
     var dx = after.x - before.x;
     var dy = after.y - before.y;
-    params.points.forEach(function (point, i) {
+    params.points.forEach(function (_point, i) {
         var prevPoint = params.prevPoints[i];
         if (isValid(prevPoint)) {
-            if (isNumber(prevPoint.timestamp))
-                point.timestamp = prevPoint.timestamp;
-            if (isNumber(prevPoint.dataIndex))
-                point.dataIndex = prevPoint.dataIndex;
-            if (isNumber(prevPoint.value))
-                point.value = prevPoint.value;
+            params.points[i] = __assign({}, prevPoint);
         }
     });
-    writeAnchoredFractions(overlay, { x: ed.fx * bounding.width + dx, y: ed.fy * bounding.height + dy }, bounding);
+    writeAnchoredFractions(overlay, { x: startFx * bounding.width + dx, y: startFy * bounding.height + dy }, bounding);
 }
 // ═══════════════════════════════════════════════════════════════════
 // Note pin + hover tooltip (TradingView line-tool-note module 259461)
@@ -37919,7 +38003,9 @@ var NOTE_PIN_OUTLINE = [
     { x: 8.2, y: 26.5 }, { x: 11.1, y: 29.2 }
 ];
 function noteTooltipLayout(data, point, bounding) {
-    var width = Math.min(NOTE_TOOLTIP_WIDTH, bounding.width);
+    // Cap width so BOTH clamps can hold — a pane narrower than the tooltip +
+    // margins would otherwise push `left` negative.
+    var width = Math.min(NOTE_TOOLTIP_WIDTH, Math.max(0, bounding.width - 2 * NOTE_CORRECT_DISTANCE));
     var textWidth = width - 2 * NOTE_TOOLTIP_HORZ_PADDING;
     // Line count through the shared box layout — identical wrap/spacing math
     // as the figure and editor (never measured twice).
@@ -37931,6 +38017,8 @@ function noteTooltipLayout(data, point, bounding) {
     var caretSide = noCaret ? null : 'top';
     if (top < NOTE_CORRECT_DISTANCE) {
         top = Math.round(point.y + NOTE_TOOLTIP_VERT_MARGIN);
+        // Flipped below the pin — still clamp the bottom edge inside the pane.
+        top = Math.min(top, Math.max(NOTE_CORRECT_DISTANCE, bounding.height - height - NOTE_CORRECT_DISTANCE));
     }
     else if (!noCaret) {
         caretSide = 'bottom';
@@ -37939,7 +38027,7 @@ function noteTooltipLayout(data, point, bounding) {
         left = NOTE_CORRECT_DISTANCE;
     }
     else if (left + width + NOTE_CORRECT_DISTANCE > bounding.width) {
-        left = bounding.width - width - NOTE_CORRECT_DISTANCE;
+        left = Math.max(0, bounding.width - width - NOTE_CORRECT_DISTANCE);
     }
     var caretBaseY = caretSide === 'top' ? top : top + height;
     var caretApex = caretSide === 'top'
@@ -38223,7 +38311,9 @@ function labelSpecOf(ext) {
  */
 function liveLabelSpecOf(overlay, ext) {
     var live = liveTextOf(overlay);
-    return labelSpecOf(live !== undefined ? __assign(__assign({}, ext), { text: live }) : ext);
+    // While editing, showLabel:false must not hide the in-flight buffer —
+    // the user needs to see what they're typing.
+    return labelSpecOf(live !== undefined ? __assign(__assign({}, ext), { text: live, showLabel: true }) : ext);
 }
 /**
  * Diagonal-label anchor math factored out of layoutDiagonalLabel: rotated
@@ -38741,6 +38831,11 @@ function labelBaselineVertAlign(baseline) {
  * removed (onEmpty suppresses the editor's default overlay removal).
  */
 function openLineLabelEditor(chart, overlay, anchorFn) {
+    // A session is already live for this overlay (e.g. click→dblclick) —
+    // don't tear it down + reopen (junk commit, focus flicker).
+    if (liveTextOf(overlay) !== undefined) {
+        return;
+    }
     var readExt = function () { return (isObject(overlay.extendData) ? overlay.extendData : {}); };
     openAnnotationEditor({
         chart: chart,
@@ -38755,6 +38850,7 @@ function openLineLabelEditor(chart, overlay, anchorFn) {
             return {
                 text: (_c = (_b = liveTextOf(overlay)) !== null && _b !== void 0 ? _b : ext.text) !== null && _c !== void 0 ? _c : '',
                 fontSize: (_d = style.fontSize) !== null && _d !== void 0 ? _d : 14,
+                fontFamily: chart.getStyles().overlay.text.family,
                 bold: style.bold,
                 italic: style.italic,
                 horzAlign: horzAlign,
@@ -39535,11 +39631,14 @@ var textNote = {
         return figures;
     },
     // Wrap-handle drags claim pointIndex 0 with 'horz' constraint: the kernel
-    // writes the cursor's dataIndex into points[0]. Restore the anchor and
-    // store the pointer's px distance from the box's left edge instead —
-    // the positionCommon `pos_width_handle` pattern.
+    // writes the cursor's dataIndex into points[0]. Restore the anchor FIRST
+    // (before any early return — the kernel has already overwritten it), then
+    // solve the new wrap width against the DRAG-START frame (prevPoints is
+    // snapshotted at startPressedMove): recomputing boxLeft from the live
+    // wordWrapWidth each tick creates positive feedback for right-aligned
+    // boxes and padding overshoot elsewhere.
     performEventPressedMove: function (params) {
-        var _a;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
         if (params.figureKey !== TEXT_WRAP_HANDLE_KEY) {
             return;
         }
@@ -39547,24 +39646,39 @@ var textNote = {
         var ext = (_a = this.extendData) !== null && _a !== void 0 ? _a : {};
         var moved = params.points[0];
         var prev = params.prevPoints[0];
-        if (chart === undefined || ext.wordWrapWidth === undefined) {
-            return;
-        }
         var cursorIndex = isValid(moved) ? moved.dataIndex : undefined;
         if (isValid(moved) && isValid(prev)) {
             moved.timestamp = prev.timestamp;
             moved.dataIndex = prev.dataIndex;
             moved.value = prev.value;
         }
-        var prevPx = isValid(prev) ? pointToCoordinate$2(chart, this.paneId, prev) : null;
-        var cursorX = isNumber(cursorIndex) ? indexToPaneX$1(chart, this.paneId, cursorIndex) : null;
-        if (prevPx === null || cursorX === null) {
+        if (chart === undefined || ext.wordWrapWidth === undefined) {
             return;
         }
-        var box = computeTextBoxLayout(getBoxData$5(this), prevPx);
-        writeTextExt(this, {
-            wordWrapWidth: Math.max(cursorX - box.boxLeft, MIN_WRAP_WIDTH_PX)
-        });
+        var anchorX = isValid(prev) ? (_b = pointToCoordinate$2(chart, this.paneId, prev)) === null || _b === void 0 ? void 0 : _b.x : null;
+        var cursorX = isNumber(cursorIndex) ? indexToPaneX$1(chart, this.paneId, cursorIndex) : null;
+        if (anchorX == null || cursorX === null) {
+            return;
+        }
+        var data = getBoxData$5(this);
+        var pad = ((_e = (_d = (_c = data.boxPaddingLeft) !== null && _c !== void 0 ? _c : data.boxPaddingHorz) !== null && _d !== void 0 ? _d : data.boxPadding) !== null && _e !== void 0 ? _e : ((_f = data.fontSize) !== null && _f !== void 0 ? _f : 12) / 3) +
+            ((_j = (_h = (_g = data.boxPaddingRight) !== null && _g !== void 0 ? _g : data.boxPaddingHorz) !== null && _h !== void 0 ? _h : data.boxPadding) !== null && _j !== void 0 ? _j : ((_k = data.fontSize) !== null && _k !== void 0 ? _k : 12) / 3);
+        var offsetX = (_l = data.offsetX) !== null && _l !== void 0 ? _l : 0;
+        // Right edge of the painted box = boxLeft + boxWidth where
+        // boxWidth = wordWrapWidth + padding (unless boxWidth is pinned).
+        var innerWidth = (function () {
+            var _a;
+            switch ((_a = data.horzAlign) !== null && _a !== void 0 ? _a : 'left') {
+                case 'center':
+                    return 2 * (cursorX - anchorX) - pad;
+                case 'right':
+                    // Right edge pinned at the anchor — the handle moves the left edge.
+                    return anchorX - offsetX - pad - cursorX;
+                default:
+                    return cursorX - anchorX - offsetX - pad;
+            }
+        })();
+        writeTextExt(this, { wordWrapWidth: Math.max(innerWidth, MIN_WRAP_WIDTH_PX) });
     },
     onDrawEnd: function (_a) {
         var overlay = _a.overlay, chart = _a.chart;
@@ -39603,6 +39717,9 @@ function getText$5(overlay) {
     var extendData = overlay.extendData;
     if (isString(extendData)) {
         return extendData;
+    }
+    if (isFunction(extendData)) {
+        return String(extendData(overlay));
     }
     return (_b = (_a = liveTextOf(overlay)) !== null && _a !== void 0 ? _a : extendData === null || extendData === void 0 ? void 0 : extendData.text) !== null && _b !== void 0 ? _b : '';
 }
@@ -39732,6 +39849,12 @@ var anchoredNote = {
         if (params.event !== undefined && chart !== undefined && isAnchoredNote(this, DEFAULT_ANCHORED$1)) {
             revertAnchoredBodyMove(this, chart, params);
         }
+    },
+    // fx/fy are snapshotted at press start — body-move deltas are totals
+    // from press, so each tick applies them against this fixed baseline.
+    onPressedMoveStart: function (_a) {
+        var overlay = _a.overlay;
+        captureAnchoredPressStart(overlay);
     },
     onDrawEnd: function (_a) {
         var overlay = _a.overlay, chart = _a.chart;
@@ -40315,10 +40438,14 @@ function getNoteStyles$1(overlay) {
 }
 function getText$2(overlay) {
     var _a, _b;
-    // Kernel simpleTag stored the label as the raw extendData string.
+    // Kernel simpleTag stored the label as the raw extendData string, or a
+    // function evaluated against the overlay (simpleTag.ts parity).
     var extendData = overlay.extendData;
     if (isString(extendData)) {
         return extendData;
+    }
+    if (isFunction(extendData)) {
+        return String(extendData(overlay));
     }
     return (_b = (_a = liveTextOf(overlay)) !== null && _a !== void 0 ? _a : extendData === null || extendData === void 0 ? void 0 : extendData.text) !== null && _b !== void 0 ? _b : '';
 }
@@ -40451,6 +40578,12 @@ var simpleTag = {
         if (params.event !== undefined && chart !== undefined && isAnchoredNote(this, DEFAULT_ANCHORED)) {
             revertAnchoredBodyMove(this, chart, params);
         }
+    },
+    // fx/fy are snapshotted at press start — body-move deltas are totals
+    // from press, so each tick applies them against this fixed baseline.
+    onPressedMoveStart: function (_a) {
+        var overlay = _a.overlay;
+        captureAnchoredPressStart(overlay);
     },
     onDrawEnd: function (_a) {
         var overlay = _a.overlay, chart = _a.chart;
@@ -40585,18 +40718,20 @@ function customTextData(overlay) {
     return __assign(__assign({}, baseTextBoxData(getText$1(overlay), styles)), { horzAlign: 'center', vertAlign: 'bottom', horzTextAlign: 'center' });
 }
 function openEditor$2(chart, overlay) {
+    var anchorAndAngle = function () {
+        var _a, _b, _c;
+        var p1 = pointToCoordinate$3(chart, overlay.paneId, (_a = overlay.points[0]) !== null && _a !== void 0 ? _a : {});
+        var p2 = pointToCoordinate$3(chart, overlay.paneId, (_b = overlay.points[1]) !== null && _b !== void 0 ? _b : {});
+        return customTextAnchor(p1, p2, (_c = getNoteStyles(overlay).fontSize) !== null && _c !== void 0 ? _c : 12);
+    };
     openAnnotationEditor({
         chart: chart,
         overlay: overlay,
-        data: function () { return customTextData(overlay); },
-        // Editor anchors at the (unrotated) label anchor — the canvas figure
-        // rotates around it; the DOM textarea stays axis-aligned.
-        anchor: function () {
-            var _a, _b, _c;
-            var p1 = pointToCoordinate$3(chart, overlay.paneId, (_a = overlay.points[0]) !== null && _a !== void 0 ? _a : {});
-            var p2 = pointToCoordinate$3(chart, overlay.paneId, (_b = overlay.points[1]) !== null && _b !== void 0 ? _b : {});
-            return customTextAnchor(p1, p2, (_c = getNoteStyles(overlay).fontSize) !== null && _c !== void 0 ? _c : 12).anchor;
-        },
+        // Rotate the editor to the canvas label's angle — with center/bottom
+        // alignment the layout's rotationPoint IS the anchor pixel, the same
+        // pivot the figure's `angle` spins around.
+        data: function () { return (__assign(__assign({}, customTextData(overlay)), { angle: anchorAndAngle().rad })); },
+        anchor: function () { return anchorAndAngle().anchor; },
         onCommit: function (value) {
             commitText(chart, overlay, value);
         }
@@ -40659,7 +40794,7 @@ var simpleAnnotation = {
             key: 'p1Ring',
             type: 'circle',
             attrs: { x: p1.x, y: p1.y, r: P1_RING_RADIUS },
-            styles: { style: 'stroke', color: lineColor, borderSize: 1.5 },
+            styles: { style: 'stroke', borderColor: lineColor, borderSize: 1.5 },
             ignoreEvent: true
         });
         if (coordinates.length >= 2) {
@@ -41382,12 +41517,19 @@ var MENU_STYLE = {
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, Ubuntu, sans-serif",
     userSelect: 'none'
 };
+var openTableMenus = new WeakMap();
+function closeTableMenu(overlay) {
+    var _a;
+    (_a = openTableMenus.get(overlay)) === null || _a === void 0 ? void 0 : _a();
+    openTableMenus.delete(overlay);
+}
 function openTableMenu(chart, overlay, px, cellIndex) {
     var e_2, _a;
     var layer = getPaneDomLayer(chart, overlay.paneId);
     if (layer === null) {
         return;
     }
+    closeTableMenu(overlay);
     var grid = getGrid(overlay);
     var row = Math.floor(cellIndex / grid.cols);
     var col = cellIndex % grid.cols;
@@ -41428,7 +41570,11 @@ function openTableMenu(chart, overlay, px, cellIndex) {
     var close = function () {
         unmounts.forEach(function (u) { u(); });
         unmounts.length = 0;
+        if (openTableMenus.get(overlay) === close) {
+            openTableMenus.delete(overlay);
+        }
     };
+    openTableMenus.set(overlay, close);
     var _loop_1 = function (item) {
         var entry = createDom('div', { padding: '6px 14px', cursor: 'default', whiteSpace: 'nowrap' });
         entry.textContent = item.label;
@@ -41650,6 +41796,17 @@ var table = {
                 ignoreEvent: true
             });
         }
+        // Anchors dispatch last→first, so they must precede the resize strips/
+        // corners below — otherwise anchor_0 shadows the TL corner handle.
+        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
+            coordinates: coordinates,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            isTouch: isTouch,
+            isDrawing: overlay.isDrawing(),
+            lock: overlay.lock,
+            keyPrefix: 'anchor_'
+        })), false));
         // Row/column resize strips on the internal gridlines (selected only —
         // TradingView surfaces them through its active-edge hit zones).
         if (isSelected === true && !overlay.lock && !overlay.isDrawing()) {
@@ -41709,15 +41866,6 @@ var table = {
                 finally { if (e_3) throw e_3.error; }
             }
         }
-        figures.push.apply(figures, __spreadArray([], __read(createAnchorFigures({
-            coordinates: coordinates,
-            isSelected: isSelected,
-            isHovered: isHovered,
-            isTouch: isTouch,
-            isDrawing: overlay.isDrawing(),
-            lock: overlay.lock,
-            keyPrefix: 'anchor_'
-        })), false));
         return figures;
     },
     onPressedMoveStart: function (_a) {
@@ -41864,7 +42012,11 @@ var table = {
     },
     onRightClick: function (_a) {
         var _b;
-        var overlay = _a.overlay, chart = _a.chart, figure = _a.figure, x = _a.x, y = _a.y;
+        var overlay = _a.overlay, chart = _a.chart, figure = _a.figure, x = _a.x, y = _a.y, preventDefault = _a.preventDefault;
+        // Structure edits are destructive — a locked table keeps its menu off.
+        if (overlay.lock) {
+            return;
+        }
         var grid = getGrid(overlay);
         var index = cellIndexFromKey(figure === null || figure === void 0 ? void 0 : figure.key, grid.cols);
         if (index === null && isNumber(x) && isNumber(y)) {
@@ -41873,9 +42025,15 @@ var table = {
         if (index === null) {
             return;
         }
+        // Suppress the generic drawings context-menu (both would open).
+        preventDefault === null || preventDefault === void 0 ? void 0 : preventDefault();
         activeCells.set(overlay, index);
         overlay.invalidateFigures();
         openTableMenu(chart, overlay, { x: x !== null && x !== void 0 ? x : 0, y: y !== null && y !== void 0 ? y : 0 }, index);
+    },
+    onRemoved: function (_a) {
+        var overlay = _a.overlay;
+        closeTableMenu(overlay);
     },
     onDrawEnd: function (_a) {
         var overlay = _a.overlay, chart = _a.chart;
@@ -43331,7 +43489,9 @@ function gannArcFigures(start, end, arcs, fillBack, transparency, lineSize, keyP
             figures.push({
                 key: "".concat(keyPrefix, "_arcfill_").concat(index),
                 type: 'path',
-                attrs: { x: 0, y: 0, width: 0, height: 0, path: path },
+                // Real bbox of the ellipse — path figures hit-test their declared
+                // rect, and 0×0 puts a phantom dead-zone at the pane origin.
+                attrs: { x: start.x - rx, y: start.y - ry, width: rx * 2, height: ry * 2, path: path },
                 styles: { style: 'fill', color: alphaColor(arc.color, alpha) }
             });
         }
@@ -43345,7 +43505,9 @@ function gannArcFigures(start, end, arcs, fillBack, transparency, lineSize, keyP
                 height: 0,
                 path: "M".concat(pointAt(rx, ry, t0), " A").concat(round2(rx), " ").concat(round2(ry), " 0 0 ").concat(sweep, " ").concat(pointAt(rx, ry, t1))
             },
-            styles: { style: 'stroke', color: arc.color, lineWidth: lineSize }
+            styles: { style: 'stroke', color: arc.color, lineWidth: lineSize },
+            // Stroke-only path — rect hit-test would swallow the whole bbox.
+            ignoreEvent: true
         });
         prevRx = rx;
         prevRy = ry;
@@ -43465,11 +43627,13 @@ var fibCircles = {
                         figures.push({
                             key: "fib_circle_fill_".concat(index),
                             type: 'path',
+                            // Outer-ring bbox — 0×0 declared bounds put a phantom hit
+                            // zone at the pane origin instead of over the ring.
                             attrs: {
-                                x: 0,
-                                y: 0,
-                                width: 0,
-                                height: 0,
+                                x: cx_1 - ring.rx,
+                                y: cy_1 - ring.ry,
+                                width: ring.rx * 2,
+                                height: ring.ry * 2,
                                 path: ellipseRingPath(cx_1, cy_1, ring.rx, ring.ry, inner.rx, inner.ry)
                             },
                             styles: { style: 'fill', color: alphaColor(ring.level.color, alpha_1) }
@@ -43484,7 +43648,11 @@ var fibCircles = {
                         type: 'ellipse',
                         attrs: { x: cx_1, y: cy_1, rx: ring.rx, ry: ring.ry },
                         styles: { style: 'stroke', borderColor: ring.level.color, borderSize: lineSize_1 },
-                        bounds: { x: cx_1 - ring.rx, y: cy_1 - ring.ry, width: ring.rx * 2, height: ring.ry * 2 }
+                        bounds: { x: cx_1 - ring.rx, y: cy_1 - ring.ry, width: ring.rx * 2, height: ring.ry * 2 },
+                        // Stroke-only ring — ellipse hit-tests its whole interior, so
+                        // the outermost ring would make a huge dead-zone. Select/drag
+                        // via the diameter line, fills (when on) and anchors.
+                        ignoreEvent: true
                     });
                     if (showLabels_1) {
                         // TV labelPoint is the ring's bottom point; `horzAlign Left` +
@@ -46136,7 +46304,9 @@ var forecast = {
         var c2 = coordinates[1];
         var isDrawing = overlay.isDrawing();
         var figures = [];
-        // ─── 1. Bezier curve (visual only) ───
+        // ─── 1. Bezier curve (visual only — path hit-tests its declared
+        // bounds, which span the whole pane; fc_curve_hitbox below is the
+        // intended drag surface) ───
         var cp = computeBezierControlPoint(c1, c2);
         var lineColorAlpha = alpha(ext.lineColor, ext.lineOpacity);
         figures.push({
@@ -46153,7 +46323,8 @@ var forecast = {
                 style: 'stroke',
                 color: lineColorAlpha,
                 lineWidth: ext.lineWidth
-            }
+            },
+            ignoreEvent: true
         });
         // ─── 2. Curve hitbox (transparent tube, body-drag surface) ───
         var hitboxPoly = buildCurveHitbox(c1, cp, c2, CURVE_HITBOX_HALF_WIDTH, CURVE_SAMPLES);
@@ -46440,7 +46611,8 @@ var forecast = {
                 key: 'fc_xstrip',
                 type: 'rect',
                 attrs: { x: stripLeftX, y: 0, width: stripWidthX, height: bounding.height },
-                styles: { style: 'fill', color: alpha(AXIS_STRIP_COLOR, AXIS_STRIP_OPACITY) }
+                styles: { style: 'fill', color: alpha(AXIS_STRIP_COLOR, AXIS_STRIP_OPACITY) },
+                ignoreEvent: true
             });
         }
         if (p1Date.length > 0) {
@@ -46463,7 +46635,8 @@ var forecast = {
                     paddingBottom: XAXIS_PILL_PADDING_V,
                     borderRadius: PILL_BORDER_RADIUS,
                     size: PILL_FONT_SIZE
-                }
+                },
+                ignoreEvent: true
             });
         }
         if (p2Date.length > 0) {
@@ -46486,7 +46659,8 @@ var forecast = {
                     paddingBottom: XAXIS_PILL_PADDING_V,
                     borderRadius: PILL_BORDER_RADIUS,
                     size: PILL_FONT_SIZE
-                }
+                },
+                ignoreEvent: true
             });
         }
         return figures;
@@ -46515,7 +46689,8 @@ var forecast = {
                 key: 'fc_ystrip',
                 type: 'rect',
                 attrs: { x: 0, y: stripTopY, width: bounding.width, height: stripHeightY },
-                styles: { style: 'fill', color: alpha(AXIS_STRIP_COLOR, AXIS_STRIP_OPACITY) }
+                styles: { style: 'fill', color: alpha(AXIS_STRIP_COLOR, AXIS_STRIP_OPACITY) },
+                ignoreEvent: true
             });
         }
         if (p1.value != null) {
@@ -46538,7 +46713,8 @@ var forecast = {
                     paddingBottom: XAXIS_PILL_PADDING_V,
                     borderRadius: PILL_BORDER_RADIUS,
                     size: PILL_FONT_SIZE
-                }
+                },
+                ignoreEvent: true
             });
         }
         if (p2.value != null) {
@@ -46561,7 +46737,8 @@ var forecast = {
                     paddingBottom: XAXIS_PILL_PADDING_V,
                     borderRadius: PILL_BORDER_RADIUS,
                     size: PILL_FONT_SIZE
-                }
+                },
+                ignoreEvent: true
             });
         }
         return figures;
@@ -52720,7 +52897,8 @@ var circle = {
                 key: 'circle_xstrip',
                 type: 'rect',
                 attrs: { x: leftX, y: 0, width: stripWidth, height: bounding.height },
-                styles: { style: 'fill', color: alphaColor(AXIS_PILL_COLOR$1, 0.2) }
+                styles: { style: 'fill', color: alphaColor(AXIS_PILL_COLOR$1, 0.2) },
+                ignoreEvent: true
             });
         }
         var dLeft = formatDate(leftTs);
@@ -52759,7 +52937,8 @@ var circle = {
                 key: 'circle_ystrip',
                 type: 'rect',
                 attrs: { x: 0, y: topY, width: bounding.width, height: stripHeight },
-                styles: { style: 'fill', color: alphaColor(AXIS_PILL_COLOR$1, 0.2) }
+                styles: { style: 'fill', color: alphaColor(AXIS_PILL_COLOR$1, 0.2) },
+                ignoreEvent: true
             });
         }
         var pillTop = buildYAxisPill(topY, topVal, AXIS_PILL_COLOR$1, precision, bounding, yAxis !== null && yAxis !== void 0 ? yAxis : undefined, 'circle_y0');
@@ -53322,7 +53501,8 @@ var ellipse = {
                 key: 'ellipse_xstrip',
                 type: 'rect',
                 attrs: { x: leftX, y: 0, width: stripWidth, height: bounding.height },
-                styles: { style: 'fill', color: alphaColor(AXIS_PILL_COLOR, 0.2) }
+                styles: { style: 'fill', color: alphaColor(AXIS_PILL_COLOR, 0.2) },
+                ignoreEvent: true
             });
         }
         // Pill labels come from the AABB edge positions — converted back to
@@ -53371,7 +53551,8 @@ var ellipse = {
                 key: 'ellipse_ystrip',
                 type: 'rect',
                 attrs: { x: 0, y: topY, width: bounding.width, height: stripHeight },
-                styles: { style: 'fill', color: alphaColor(AXIS_PILL_COLOR, 0.2) }
+                styles: { style: 'fill', color: alphaColor(AXIS_PILL_COLOR, 0.2) },
+                ignoreEvent: true
             });
         }
         var topPoint = coordinateToPoint$2(chart, overlay.paneId, { x: 0, y: topY });
