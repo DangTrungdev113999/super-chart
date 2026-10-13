@@ -47,7 +47,7 @@ Return `OverlayFigure[]`. Each figure:
   `rect`, `text`, `arc`, `path`, plus drawings `richText`.
   Attrs come in ARRAY form (`attrs: LineAttrs[]`) or single object —
   check `src/extension/figure/<type>.ts` `FigureAttrs` + draw/hit fns.
-- `ignoreEvent: true` for decorative figures (skips hit-test/closure alloc).
+- `ignoreEvent: true` only for transient preview/guide figures — every painted part of a finished drawing is a hit target (TV parity).
 - `pointIndex` makes a custom figure act as that anchor on drag.
 - `moveDirection: 'horz'|'vert'` constrains anchor drag axis (TV
   PossibleMovingDirections).

@@ -164,8 +164,7 @@ export function arrowMarkLabelFigure (
       size: fontSize,
       weight: ext.bold === true ? 'bold' : 'normal',
       fontStyle: ext.italic === true ? 'italic' : 'normal'
-    },
-    ignoreEvent: true
+    }
   }
 }
 

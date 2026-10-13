@@ -18,10 +18,13 @@ import { isValid } from '../../../common/utils/typeChecks'
 import { createAnchorFigures } from '../../interaction/anchors'
 import {
   buildYAxisPill,
+  flatLabelAnchor,
   formatNum,
-  labelSpecOf,
   lineColorOf,
+  lineLabelAnchorFn,
+  lineLabelEditorHooks,
   lineSizeOf,
+  liveLabelSpecOf,
   pricePrecisionOf,
   pushFlatLabel
 } from './lineCommon'
@@ -35,6 +38,15 @@ import type { LineExtendData } from './lineCommon'
  */
 
 export interface HorizStraightLineExtendData extends LineExtendData {}
+
+/** Editor anchor: the label spans the full pane width at c1.y —
+ *  mirrors createPointFigures. */
+const hslLabelAnchor = lineLabelAnchorFn((coordinates, bounding, _ext, style, lineWidth) => {
+  if (coordinates.length < 1) {
+    return null
+  }
+  return flatLabelAnchor(style, 0, bounding.width, coordinates[0].y, lineWidth)
+})
 
 const horizontalStraightLine: OverlayTemplate<HorizStraightLineExtendData> = {
   name: 'horizontalStraightLine',
@@ -77,13 +89,12 @@ const horizontalStraightLine: OverlayTemplate<HorizStraightLineExtendData> = {
           align: 'left' as CanvasTextAlign,
           baseline: 'bottom' as CanvasTextBaseline
         },
-        styles: { color: lineColor, size: 11, weight: 'normal', backgroundColor: 'transparent' },
-        ignoreEvent: true
+        styles: { color: lineColor, size: 11, weight: 'normal', backgroundColor: 'transparent' }
       })
     }
 
     // ─── Text label (flat over the full pane width) ───
-    const spec = labelSpecOf(ext)
+    const spec = liveLabelSpecOf(overlay, ext)
     if (spec !== null) {
       pushFlatLabel(figures, 'hsl_label', spec, 0, bounding.width, c1.y, lineColor, lineWidth)
     }
@@ -107,8 +118,7 @@ const horizontalStraightLine: OverlayTemplate<HorizStraightLineExtendData> = {
         key: 'hsl_stats',
         type: 'text',
         attrs: { x: sx, y: sy, text: `Dist: ${formatNum(bounding.width, 1)}px`, align: sAlign, baseline: sBaseline },
-        styles: { color: lineColor, size: 11, weight: 'normal', backgroundColor: 'transparent' },
-        ignoreEvent: true
+        styles: { color: lineColor, size: 11, weight: 'normal', backgroundColor: 'transparent' }
       })
     }
 
@@ -125,6 +135,9 @@ const horizontalStraightLine: OverlayTemplate<HorizStraightLineExtendData> = {
 
     return figures
   },
+
+  // ─── In-place label editing (TradingView parity) ───
+  ...lineLabelEditorHooks('hsl_label', hslLabelAnchor),
 
   createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis }) => {
     if (coordinates.length < 1) return []

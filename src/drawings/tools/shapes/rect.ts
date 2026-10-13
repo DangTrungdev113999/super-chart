@@ -121,8 +121,7 @@ const rect: OverlayTemplate<ShapeExtendData> = {
           color: ext.middleLineColor ?? stroke.color,
           size: ext.middleLineWidth ?? 1,
           dashedValue: MID_DASH[mlStyle]
-        },
-        ignoreEvent: true
+        }
       })
     }
 

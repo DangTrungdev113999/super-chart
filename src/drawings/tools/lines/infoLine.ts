@@ -24,15 +24,17 @@ import {
   buildYAxisBandFigures,
   getArrowCoordinates,
   getExtendedCoordinates,
-  labelSpecOf,
   lineColorOf,
+  lineLabelAnchorFn,
+  lineLabelEditorHooks,
   lineStyleOverrides,
+  liveLabelSpecOf,
   pricePrecisionOf,
   pushSidePriceLabel,
   rememberLineChart
 } from './lineCommon'
 
-import type { LineExtendData } from './lineCommon'
+import type { LabelSpec, LineExtendData, LineLabelAnchor } from './lineCommon'
 
 /**
  * 'infoLine' — TradingView Info Line. Two anchors; the segment carries a
@@ -84,6 +86,46 @@ function getPeriodMinutes (periodType: string, periodSpan: number): number {
   }
 }
 
+/**
+ * infoLine's flat (unrotated) label anchor: x centered between the
+ * anchors or edge-pinned per hAlign, y mid-anchor or ±20px off the
+ * anchor band per vAlign. Shared by the text figure and the in-place
+ * editor so both sit on the same pixel.
+ */
+function infoLineLabelAnchor (spec: LabelSpec, c1: Coordinate, c2: Coordinate): LineLabelAnchor {
+  const hAlign = spec.hAlign ?? 'center'
+  let textX = 0
+  if (hAlign === 'left') {
+    textX = Math.min(c1.x, c2.x)
+  } else if (hAlign === 'right') {
+    textX = Math.max(c1.x, c2.x)
+  } else {
+    textX = (c1.x + c2.x) / 2
+  }
+  const minY = Math.min(c1.y, c2.y)
+  const maxY = Math.max(c1.y, c2.y)
+  let textY = (c1.y + c2.y) / 2
+  if (spec.vAlign === 'top') {
+    textY = minY - 20
+  } else if (spec.vAlign === 'bottom') {
+    textY = maxY + 20
+  }
+  return {
+    x: textX,
+    y: textY,
+    angle: 0,
+    baseline: 'middle',
+    horzAlign: hAlign === 'left' || hAlign === 'right' ? hAlign : 'center'
+  }
+}
+
+const ilLabelAnchor = lineLabelAnchorFn((coordinates, _bounding, _ext, style) => {
+  if (coordinates.length < 2) {
+    return null
+  }
+  return infoLineLabelAnchor(style, coordinates[0], coordinates[1])
+})
+
 const infoLine: OverlayTemplate<InfoLineExtendData> = {
   name: 'infoLine',
   totalStep: 3,
@@ -131,13 +173,13 @@ const infoLine: OverlayTemplate<InfoLineExtendData> = {
     if (leftEnd === 1) {
       const coords = getArrowCoordinates(c2, extendLeft ? lineStart : c1)
       if (coords.length === 3) {
-        figures.push({ key: 'il_arrow_left', type: 'polygon', attrs: { coordinates: coords }, styles: { style: 'fill', color: lineColor }, ignoreEvent: true })
+        figures.push({ key: 'il_arrow_left', type: 'polygon', attrs: { coordinates: coords }, styles: { style: 'fill', color: lineColor } })
       }
     }
     if (rightEnd === 1) {
       const coords = getArrowCoordinates(c1, extendRight ? lineEnd : c2)
       if (coords.length === 3) {
-        figures.push({ key: 'il_arrow_right', type: 'polygon', attrs: { coordinates: coords }, styles: { style: 'fill', color: lineColor }, ignoreEvent: true })
+        figures.push({ key: 'il_arrow_right', type: 'polygon', attrs: { coordinates: coords }, styles: { style: 'fill', color: lineColor } })
       }
     }
 
@@ -273,8 +315,7 @@ const infoLine: OverlayTemplate<InfoLineExtendData> = {
             borderColor: 'rgba(255, 255, 255, 0.1)',
             borderSize: 1,
             borderRadius: 4
-          },
-          ignoreEvent: true
+          }
         })
         lines.forEach((line, index) => {
           figures.push({
@@ -287,8 +328,7 @@ const infoLine: OverlayTemplate<InfoLineExtendData> = {
               align: 'left' as CanvasTextAlign,
               baseline: 'middle' as CanvasTextBaseline
             },
-            styles: { color: '#D1D4DC', size: fontSize, weight: 'normal', backgroundColor: 'transparent' },
-            ignoreEvent: true
+            styles: { color: '#D1D4DC', size: fontSize, weight: 'normal', backgroundColor: 'transparent' }
           })
         })
       }
@@ -301,34 +341,18 @@ const infoLine: OverlayTemplate<InfoLineExtendData> = {
     }
 
     // ─── Custom text label (reference flat placement) ───
-    const spec = labelSpecOf(ext)
-    if (isValid(spec) && spec.text !== undefined && spec.text !== '') {
-      const hAlign = spec.hAlign ?? 'center'
-      let textX = 0
-      if (hAlign === 'left') {
-        textX = Math.min(c1.x, c2.x)
-      } else if (hAlign === 'right') {
-        textX = Math.max(c1.x, c2.x)
-      } else {
-        textX = (c1.x + c2.x) / 2
-      }
-      const minY = Math.min(c1.y, c2.y)
-      const maxY = Math.max(c1.y, c2.y)
-      let textY = (c1.y + c2.y) / 2
-      if (spec.vAlign === 'top') {
-        textY = minY - 20
-      } else if (spec.vAlign === 'bottom') {
-        textY = maxY + 20
-      }
+    const spec = liveLabelSpecOf(overlay, ext)
+    if (spec !== null) {
+      const anchor = infoLineLabelAnchor(spec, c1, c2)
       figures.push({
         key: 'il_label',
         type: 'text',
         attrs: {
-          x: textX,
-          y: textY,
+          x: anchor.x,
+          y: anchor.y,
           text: spec.text,
-          align: (hAlign === 'left' || hAlign === 'right' ? hAlign : 'center') as CanvasTextAlign,
-          baseline: 'middle' as CanvasTextBaseline
+          align: (anchor.horzAlign ?? 'center') as CanvasTextAlign,
+          baseline: anchor.baseline
         },
         styles: {
           color: spec.textColor ?? lineColor,
@@ -336,8 +360,7 @@ const infoLine: OverlayTemplate<InfoLineExtendData> = {
           weight: spec.bold === true ? 'bold' : 'normal',
           style: spec.italic === true ? 'italic' : 'normal',
           backgroundColor: 'transparent'
-        },
-        ignoreEvent: true
+        }
       })
     }
 
@@ -357,7 +380,7 @@ const infoLine: OverlayTemplate<InfoLineExtendData> = {
     return figures
   },
 
-  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis }) => {
+  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis, isSelected }) => {
     if (coordinates.length < 1) return []
     const ext: InfoLineExtendData = isValid(overlay.extendData) ? overlay.extendData : {}
     return buildYAxisBandFigures('il', {
@@ -366,18 +389,20 @@ const infoLine: OverlayTemplate<InfoLineExtendData> = {
       bounding,
       lineColor: lineColorOf(overlay, chart, ext.lineColor ?? ext.color),
       precision: pricePrecisionOf(chart, overlay, yAxis, ext.pricePrecision),
-      yAxis: yAxis ?? undefined
+      yAxis: yAxis ?? undefined,
+      isSelected
     })
   },
 
-  createXAxisFigures: ({ chart, overlay, coordinates, bounding }) => {
+  createXAxisFigures: ({ chart, overlay, coordinates, bounding, isSelected }) => {
     if (coordinates.length < 1) return []
     const ext: InfoLineExtendData = isValid(overlay.extendData) ? overlay.extendData : {}
     return buildXAxisBandFigures('il', {
       overlay,
       coordinates,
       bounding,
-      lineColor: lineColorOf(overlay, chart, ext.lineColor ?? ext.color)
+      lineColor: lineColorOf(overlay, chart, ext.lineColor ?? ext.color),
+      isSelected
     })
   },
 
@@ -391,7 +416,10 @@ const infoLine: OverlayTemplate<InfoLineExtendData> = {
     if (params.performPointIndex === 1) {
       applySnap45(this, params, 0)
     }
-  }
+  },
+
+  // ─── In-place label editing (TradingView parity) ───
+  ...lineLabelEditorHooks('il_label', ilLabelAnchor)
 }
 
 export default infoLine

@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-import { isArray, isBoolean, isNumber } from '../../common/utils/typeChecks'
+import { isArray, isBoolean, isNumber, isString } from '../../common/utils/typeChecks'
 import type { Overlay } from '../../component/Overlay'
 
 import type { DrawingStylePaths, DrawingToolItem, StylePath } from '../catalog'
@@ -247,25 +247,80 @@ function styleFields (overlay: Overlay, item: DrawingToolItem | undefined, draft
   return fields
 }
 
-function optionFields (overlay: Overlay, draft: SettingsDraft): SettingField[] {
-  // Top-level booleans on extendData become auto-labeled toggles — extend
-  // modes, fan/arc visibility flags etc. carried by rebuilt tools.
+/** Bounds for well-known auto-scanned extendData numbers (key → range). */
+const AUTO_NUMBER_BOUNDS: Record<string, { min?: number, max?: number, step?: number }> = {
+  transparency: { min: 0, max: 100, step: 1 },
+  fontsize: { min: 8, max: 72, step: 1 },
+  fontSize: { min: 8, max: 72, step: 1 },
+  lineWidth: { min: 1, max: 8, step: 1 },
+  smooth: { min: 0, max: 20, step: 1 },
+  scaleRatio: { min: 0, step: 0.01 },
+  degree: { min: 0, max: 14, step: 1 },
+  level: { min: 0, step: 0.001 },
+  coefficient: { min: 0, step: 0.001 }
+}
+
+function optionFields (overlay: Overlay, item: DrawingToolItem | undefined, draft: SettingsDraft): SettingField[] {
   const ed = overlay.extendData
   if (ed === null || typeof ed !== 'object') {
     return []
   }
+  // Top-level keys already bound by a stylePaths entry (e.g.
+  // extendData.lineColor) are covered by styleFields — skip them here so
+  // they don't double-emit.
+  const claimed = new Set<string>()
+  const paths = item?.stylePaths ?? {}
+  for (const sp of Object.values(paths) as Array<StylePath | undefined>) {
+    if (sp !== undefined && sp[0] === 'extendData' && sp.length === 2 && isString(sp[1])) {
+      claimed.add(sp[1])
+    }
+  }
   const record = ed as Record<string, unknown>
-  return Object.keys(record)
-    // `_`-prefixed runtime keys and `isEditing` are transient state —
-    // serialize strips them; surfacing them as toggles corrupts the strip.
-    .filter(key => key !== 'common' && key !== 'data' && !key.startsWith('_') && key !== 'isEditing' && isBoolean(record[key]))
-    .map(key => ({
-      id: `flag_${key}`,
-      kind: 'checkbox' as const,
-      label: key.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase()),
-      get: () => (overlay.extendData as Record<string, unknown>)[key],
-      set: v => { draft.extendData([key], v) }
-    }))
+  const fields: SettingField[] = []
+  for (const key of Object.keys(record)) {
+    // `_`-prefixed runtime keys, `isEditing`, nested objects and claimed
+    // style paths are excluded; primitives become auto-labeled controls.
+    if (
+      key === 'common' || key === 'data' || key === 'levels' ||
+      key === 'vlevels' || key === 'hlevels' || key === 'fanLevels' ||
+      key === 'arcs' ||
+      key.startsWith('_') || key === 'isEditing' || claimed.has(key)
+    ) {
+      continue
+    }
+    const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase())
+    const value = record[key]
+    if (isBoolean(value)) {
+      fields.push({
+        id: `flag_${key}`,
+        kind: 'checkbox',
+        label,
+        get: () => (overlay.extendData as Record<string, unknown>)[key],
+        set: v => { draft.extendData([key], v) }
+      })
+    } else if (isNumber(value)) {
+      const bounds = AUTO_NUMBER_BOUNDS[key] ?? {}
+      fields.push({
+        id: `num_${key}`,
+        kind: 'number',
+        label,
+        min: bounds.min,
+        max: bounds.max,
+        step: bounds.step ?? 0,
+        get: () => (overlay.extendData as Record<string, unknown>)[key],
+        set: v => { draft.extendData([key], v) }
+      })
+    } else if (isString(value)) {
+      fields.push({
+        id: `str_${key}`,
+        kind: 'text',
+        label,
+        get: () => (overlay.extendData as Record<string, unknown>)[key],
+        set: v => { draft.extendData([key], v) }
+      })
+    }
+  }
+  return fields
 }
 
 function levelsField (overlay: Overlay, draft: SettingsDraft): SettingField | null {
@@ -359,7 +414,7 @@ export function buildSettingsTabs (overlay: Overlay, item: DrawingToolItem | und
   if (levels !== null) {
     style.push(levels)
   }
-  style.push(...optionFields(overlay, draft))
+  style.push(...optionFields(overlay, item, draft))
 
   const tabs: SettingsTabSchema[] = []
   if (style.length > 0) {

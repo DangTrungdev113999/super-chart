@@ -178,8 +178,7 @@ const fibChannel: OverlayTemplate<FibChannelExtendData> = {
           attrs: {
             coordinates: [a.start, a.end, b.end, b.start]
           },
-          styles: { style: 'fill', color: fibAlphaColor(levels[i].color, FIB_FILL_ALPHA) },
-          ignoreEvent: true
+          styles: { style: 'fill', color: fibAlphaColor(levels[i].color, FIB_FILL_ALPHA) }
         })
       }
     }
@@ -206,8 +205,7 @@ const fibChannel: OverlayTemplate<FibChannelExtendData> = {
           align: 'right',
           baseline: 'bottom'
         },
-        styles: { color: line.level.color, size: labelSize, backgroundColor: 'transparent' },
-        ignoreEvent: true
+        styles: { color: line.level.color, size: labelSize, backgroundColor: 'transparent' }
       })
     })
 

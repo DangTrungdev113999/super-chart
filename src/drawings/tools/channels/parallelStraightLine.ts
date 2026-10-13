@@ -112,8 +112,7 @@ const parallelStraightLine: OverlayTemplate<ParallelChannelExtendData> = {
           key: 'pc_fill',
           type: 'polygon',
           attrs: { coordinates: band },
-          styles: { style: 'fill', color: channelFillColor(ext, stroke.color) },
-          ignoreEvent: true
+          styles: { style: 'fill', color: channelFillColor(ext, stroke.color) }
         })
       }
     }
@@ -152,8 +151,7 @@ const parallelStraightLine: OverlayTemplate<ParallelChannelExtendData> = {
           size: ext.medianLineWidth ?? Math.max(1, stroke.size - 1),
           style: medianStyle === 'solid' ? 'solid' : 'dashed',
           dashedValue: medianStyle === 'dotted' ? [2, 4] : [6, 4]
-        },
-        ignoreEvent: true
+        }
       })
     }
 
@@ -227,7 +225,10 @@ const parallelStraightLine: OverlayTemplate<ParallelChannelExtendData> = {
     return figures
   },
 
-  createXAxisFigures: ({ chart, overlay, coordinates }) => {
+  createXAxisFigures: ({ chart, overlay, coordinates, isSelected }) => {
+    if (isSelected !== true) {
+      return []
+    }
     if (coordinates.length < 1) {
       return []
     }
@@ -237,7 +238,10 @@ const parallelStraightLine: OverlayTemplate<ParallelChannelExtendData> = {
     return figures
   },
 
-  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis }) => {
+  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis, isSelected }) => {
+    if (isSelected !== true) {
+      return []
+    }
     if (coordinates.length < 1) {
       return []
     }

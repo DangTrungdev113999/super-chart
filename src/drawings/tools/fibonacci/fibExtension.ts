@@ -151,8 +151,7 @@ const fibExtension: OverlayTemplate<FibExtensionExtendData> = {
               { x: leftX, y: yB }
             ]
           },
-          styles: { style: 'fill', color: fibAlphaColor(levels[i].color, FIB_FILL_ALPHA) },
-          ignoreEvent: true
+          styles: { style: 'fill', color: fibAlphaColor(levels[i].color, FIB_FILL_ALPHA) }
         })
       }
     }
@@ -177,8 +176,7 @@ const fibExtension: OverlayTemplate<FibExtensionExtendData> = {
           align: 'left',
           baseline: 'bottom'
         },
-        styles: { color: level.color, size: labelSize, backgroundColor: 'transparent' },
-        ignoreEvent: true
+        styles: { color: level.color, size: labelSize, backgroundColor: 'transparent' }
       })
     })
 

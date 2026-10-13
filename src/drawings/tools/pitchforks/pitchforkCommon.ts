@@ -117,27 +117,27 @@ export const PITCHFORK_DEFAULT_LEVELS: PitchforkLevel[] = [
   { coeff: 2.618, visible: false, color: LEVEL_FALLBACK_COLORS[8] }
 ]
 
-const EPSILON = 1e-10
+export const EPSILON = 1e-10
 
 // ── vector helpers ──────────────────────────────────────────────────────
 
-function mid (a: Coordinate, b: Coordinate): Coordinate {
+export function mid (a: Coordinate, b: Coordinate): Coordinate {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
 }
 
-function sub (a: Coordinate, b: Coordinate): Coordinate {
+export function sub (a: Coordinate, b: Coordinate): Coordinate {
   return { x: a.x - b.x, y: a.y - b.y }
 }
 
-function addScaled (a: Coordinate, v: Coordinate, k: number): Coordinate {
+export function addScaled (a: Coordinate, v: Coordinate, k: number): Coordinate {
   return { x: a.x + v.x * k, y: a.y + v.y * k }
 }
 
-function add (a: Coordinate, b: Coordinate): Coordinate {
+export function add (a: Coordinate, b: Coordinate): Coordinate {
   return { x: a.x + b.x, y: a.y + b.y }
 }
 
-function len (v: Coordinate): number {
+export function len (v: Coordinate): number {
   return Math.sqrt(v.x * v.x + v.y * v.y)
 }
 
@@ -234,7 +234,7 @@ function computeGeometry (variant: PitchforkVariant, p1: Coordinate, p2: Coordin
  * (TradingView `extendright`); `extendBack` additionally extends through
  * the origin to the opposite edge (TradingView `extendleft` ⇔ extendLines).
  */
-function clipRayToPane (origin: Coordinate, dir: Coordinate, bounding: Bounding, extendBack: boolean): [Coordinate, Coordinate] | null {
+export function clipRayToPane (origin: Coordinate, dir: Coordinate, bounding: Bounding, extendBack: boolean): [Coordinate, Coordinate] | null {
   if (len(dir) < EPSILON) {
     return null
   }
@@ -280,7 +280,7 @@ function clipRayToPane (origin: Coordinate, dir: Coordinate, bounding: Bounding,
  * e1→e2 that contains `keep` — the TradingView clipPolygonByEdge primitive
  * ChannelRenderer builds its band fills from.
  */
-function clipPolygonByEdge (poly: Coordinate[], e1: Coordinate, e2: Coordinate, keep: Coordinate[]): Coordinate[] {
+export function clipPolygonByEdge (poly: Coordinate[], e1: Coordinate, e2: Coordinate, keep: Coordinate[]): Coordinate[] {
   const ex = e2.x - e1.x
   const ey = e2.y - e1.y
   const side = (p: Coordinate): number => ex * (p.y - e1.y) - ey * (p.x - e1.x)
@@ -338,7 +338,7 @@ function fillBand (currAnchor: Coordinate, prevAnchor: Coordinate, dir: Coordina
 
 // ── styles ──────────────────────────────────────────────────────────────
 
-interface ResolvedStroke {
+export interface ResolvedStroke {
   color: string
   size: number
   style: LineType
@@ -357,7 +357,7 @@ interface StrokeEntry {
  * generic `styles.line` (what the floating toolbar + settings dialog
  * write), then the per-element fallback color.
  */
-function resolveStroke (entry: StrokeEntry | undefined, line: Partial<SmoothLineStyle> | undefined, fallbackColor: string): ResolvedStroke {
+export function resolveStroke (entry: StrokeEntry | undefined, line: Partial<SmoothLineStyle> | undefined, fallbackColor: string): ResolvedStroke {
   const style: PitchforkLineStyle = entry?.style ?? (line?.style as PitchforkLineStyle | undefined) ?? 'solid'
   const dashed = entry?.dashed ?? (entry?.style === undefined ? line?.dashedValue : undefined)
   return {
@@ -368,7 +368,7 @@ function resolveStroke (entry: StrokeEntry | undefined, line: Partial<SmoothLine
   }
 }
 
-function applyTransparency (color: string, transparency: number): string {
+export function applyTransparency (color: string, transparency: number): string {
   // TradingView transparency is percent scale; tolerate a 0–1 fraction.
   const percent = transparency <= 1 ? transparency * 100 : transparency
   const alpha = Math.max(0, Math.min(1, (100 - percent) / 100))
@@ -387,7 +387,7 @@ function applyTransparency (color: string, transparency: number): string {
 
 // ── figure construction ─────────────────────────────────────────────────
 
-function pushLine (figures: OverlayFigure[], key: string, coordinates: Coordinate[][], stroke: ResolvedStroke): void {
+export function pushLine (figures: OverlayFigure[], key: string, coordinates: Coordinate[][], stroke: ResolvedStroke): void {
   if (coordinates.length > 0) {
     figures.push({
       key,
@@ -494,8 +494,7 @@ function buildPointFigures (variant: PitchforkVariant, params: OverlayCreateFigu
             key: `fill_${index}`,
             type: 'polygon',
             attrs: bands.map(bandCoordinates => ({ coordinates: bandCoordinates })),
-            styles: { style: 'fill', color: applyTransparency(stroke.color, transparency) },
-            ignoreEvent: true
+            styles: { style: 'fill', color: applyTransparency(stroke.color, transparency) }
           })
         }
       }

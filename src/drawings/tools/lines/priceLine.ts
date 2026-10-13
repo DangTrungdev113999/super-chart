@@ -18,10 +18,13 @@ import { isValid } from '../../../common/utils/typeChecks'
 import { createAnchorFigures } from '../../interaction/anchors'
 import {
   buildYAxisPill,
+  flatLabelAnchor,
   formatNum,
-  labelSpecOf,
   lineColorOf,
+  lineLabelAnchorFn,
+  lineLabelEditorHooks,
   lineSizeOf,
+  liveLabelSpecOf,
   pricePrecisionOf,
   pushFlatLabel
 } from './lineCommon'
@@ -35,6 +38,15 @@ import type { LineExtendData } from './lineCommon'
  */
 
 export interface PriceLineExtendData extends LineExtendData {}
+
+/** Editor anchor: the label spans c1.x → right edge at c1.y —
+ *  mirrors createPointFigures. */
+const plLabelAnchor = lineLabelAnchorFn((coordinates, bounding, _ext, style, lineWidth) => {
+  if (coordinates.length < 1) {
+    return null
+  }
+  return flatLabelAnchor(style, coordinates[0].x, bounding.width, coordinates[0].y, lineWidth)
+})
 
 const priceLine: OverlayTemplate<PriceLineExtendData> = {
   name: 'priceLine',
@@ -86,13 +98,12 @@ const priceLine: OverlayTemplate<PriceLineExtendData> = {
           paddingTop: 2,
           paddingBottom: 2,
           borderRadius: 3
-        },
-        ignoreEvent: true
+        }
       })
     }
 
     // ─── Optional text label across the span ───
-    const spec = labelSpecOf(ext)
+    const spec = liveLabelSpecOf(overlay, ext)
     if (spec !== null) {
       pushFlatLabel(figures, 'pl_label', spec, c1.x, bounding.width, c1.y, lineColor, lineWidth)
     }
@@ -110,6 +121,9 @@ const priceLine: OverlayTemplate<PriceLineExtendData> = {
 
     return figures
   },
+
+  // ─── In-place label editing (TradingView parity) ───
+  ...lineLabelEditorHooks('pl_label', plLabelAnchor),
 
   createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis }) => {
     if (coordinates.length < 1) return []

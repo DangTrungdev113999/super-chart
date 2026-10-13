@@ -121,8 +121,7 @@ const fibRetracement: OverlayTemplate<FibRetracementExtendData> = {
               { x: leftX, y: yB }
             ]
           },
-          styles: { style: 'fill', color: fibAlphaColor(levels[i].color, FIB_FILL_ALPHA) },
-          ignoreEvent: true
+          styles: { style: 'fill', color: fibAlphaColor(levels[i].color, FIB_FILL_ALPHA) }
         })
       }
     }
@@ -158,8 +157,7 @@ const fibRetracement: OverlayTemplate<FibRetracementExtendData> = {
           align: 'left',
           baseline: 'bottom'
         },
-        styles: { color: level.color, size: labelSize, backgroundColor: 'transparent' },
-        ignoreEvent: true
+        styles: { color: level.color, size: labelSize, backgroundColor: 'transparent' }
       })
     })
 

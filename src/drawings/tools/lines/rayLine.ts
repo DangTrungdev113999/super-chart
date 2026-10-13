@@ -21,13 +21,16 @@ import {
   applySnap45,
   buildXAxisBandFigures,
   buildYAxisBandFigures,
+  diagonalLabelAnchor,
   getArrowCoordinates,
   getLinearYFromCoordinates,
   inlineStatsLines,
-  labelSpecOf,
   layoutDiagonalLabel,
   lineColorOf,
+  lineLabelAnchorFn,
+  lineLabelEditorHooks,
   lineSizeOf,
+  liveLabelSpecOf,
   pricePrecisionOf,
   pushAnchorPriceLabel,
   pushInlineStats,
@@ -44,6 +47,28 @@ import type { LineExtendData } from './lineCommon'
  */
 
 export interface RayLineExtendData extends LineExtendData {}
+
+/** Editor anchor: same ray span (origin → edge tip, optional extendLeft)
+ *  as createPointFigures, so the DOM box lands on the painted label. */
+const rayLabelAnchor = lineLabelAnchorFn((coordinates, bounding, ext, style, lineWidth) => {
+  if (coordinates.length < 2) {
+    return null
+  }
+  const [c1, c2] = coordinates
+  const rayTip: Coordinate = c1.x === c2.x && c1.y !== c2.y
+    ? { x: c1.x, y: c1.y < c2.y ? bounding.height : 0 }
+    : c1.x > c2.x
+      ? { x: 0, y: getLinearYFromCoordinates(c1, c2, { x: 0, y: c1.y }) }
+      : { x: bounding.width, y: getLinearYFromCoordinates(c1, c2, { x: bounding.width, y: c1.y }) }
+  const lineStart: Coordinate = ext.extendLeft === true
+    ? c1.x === c2.x && c1.y !== c2.y
+      ? { x: c1.x, y: c1.y < c2.y ? 0 : bounding.height }
+      : c1.x > c2.x
+        ? { x: bounding.width, y: getLinearYFromCoordinates(c1, c2, { x: bounding.width, y: c1.y }) }
+        : { x: 0, y: getLinearYFromCoordinates(c1, c2, { x: 0, y: c1.y }) }
+    : c1
+  return diagonalLabelAnchor(style, lineStart, rayTip, lineWidth)
+})
 
 const rayLine: OverlayTemplate<RayLineExtendData> = {
   name: 'rayLine',
@@ -85,7 +110,7 @@ const rayLine: OverlayTemplate<RayLineExtendData> = {
       : c1
 
     // ─── Label layout first (may request a gap in the line) ───
-    const spec = labelSpecOf(ext)
+    const spec = liveLabelSpecOf(overlay, ext)
     const labelLayout = spec !== null
       ? layoutDiagonalLabel('ray_label', spec, lineStart, rayTip, lineColor, lineWidth)
       : null
@@ -101,8 +126,7 @@ const rayLine: OverlayTemplate<RayLineExtendData> = {
           key: 'ray_arrow',
           type: 'polygon',
           attrs: { coordinates: coords },
-          styles: { style: 'fill', color: lineColor },
-          ignoreEvent: true
+          styles: { style: 'fill', color: lineColor }
         })
       }
     }
@@ -114,8 +138,7 @@ const rayLine: OverlayTemplate<RayLineExtendData> = {
           key: 'ray_arrow_left',
           type: 'polygon',
           attrs: { coordinates: coords },
-          styles: { style: 'fill', color: lineColor },
-          ignoreEvent: true
+          styles: { style: 'fill', color: lineColor }
         })
       }
     }
@@ -156,7 +179,7 @@ const rayLine: OverlayTemplate<RayLineExtendData> = {
     return figures
   },
 
-  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis }) => {
+  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis, isSelected }) => {
     if (coordinates.length < 1) return []
     const ext: RayLineExtendData = isValid(overlay.extendData) ? overlay.extendData : {}
     return buildYAxisBandFigures('ray', {
@@ -165,18 +188,20 @@ const rayLine: OverlayTemplate<RayLineExtendData> = {
       bounding,
       lineColor: lineColorOf(overlay, chart, ext.lineColor ?? ext.color),
       precision: pricePrecisionOf(chart, overlay, yAxis, ext.pricePrecision),
-      yAxis: yAxis ?? undefined
+      yAxis: yAxis ?? undefined,
+      isSelected
     })
   },
 
-  createXAxisFigures: ({ chart, overlay, coordinates, bounding }) => {
+  createXAxisFigures: ({ chart, overlay, coordinates, bounding, isSelected }) => {
     if (coordinates.length < 1) return []
     const ext: RayLineExtendData = isValid(overlay.extendData) ? overlay.extendData : {}
     return buildXAxisBandFigures('ray', {
       overlay,
       coordinates,
       bounding,
-      lineColor: lineColorOf(overlay, chart, ext.lineColor ?? ext.color)
+      lineColor: lineColorOf(overlay, chart, ext.lineColor ?? ext.color),
+      isSelected
     })
   },
 
@@ -190,7 +215,10 @@ const rayLine: OverlayTemplate<RayLineExtendData> = {
     if (params.performPointIndex === 1) {
       applySnap45(this, params, 0)
     }
-  }
+  },
+
+  // ─── In-place label editing (TradingView parity) ───
+  ...lineLabelEditorHooks('ray_label', rayLabelAnchor)
 }
 
 export default rayLine

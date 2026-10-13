@@ -26,13 +26,16 @@ import {
   applySnap45,
   buildXAxisBandFigures,
   buildYAxisBandFigures,
+  diagonalLabelAnchor,
   formatNum,
   getExtendedCoordinates,
-  labelSpecOf,
   layoutDiagonalLabel,
   lineChartOf,
   lineColorOf,
+  lineLabelAnchorFn,
+  lineLabelEditorHooks,
   lineStyleOverrides,
+  liveLabelSpecOf,
   pricePrecisionOf,
   pushLineWithGap,
   pushSidePriceLabel,
@@ -51,6 +54,38 @@ import type { LineExtendData } from './lineCommon'
  */
 
 export interface TrendAngleExtendData extends LineExtendData {}
+
+/**
+ * Editor anchor: re-derives the rendered span (P1 → angle/distance-based
+ * rendered endpoint, optional edge extension) exactly as
+ * createPointFigures does.
+ */
+const taLabelAnchor = lineLabelAnchorFn((coordinates, bounding, ext, style, lineWidth) => {
+  if (coordinates.length < 2) {
+    return null
+  }
+  const [c1, c2] = coordinates
+  const hasStored = isNumber(ext.angle) && isNumber(ext.distance) && ext.distance > 0
+  const angleRad = hasStored && isNumber(ext.angle)
+    ? ext.angle
+    : Math.atan2(c1.y - c2.y, c2.x - c1.x)
+  const distance = hasStored && isNumber(ext.distance)
+    ? ext.distance
+    : Math.sqrt((c2.x - c1.x) * (c2.x - c1.x) + (c2.y - c1.y) * (c2.y - c1.y))
+  const c2r: Coordinate = hasStored
+    ? { x: c1.x + Math.cos(angleRad) * distance, y: c1.y - Math.sin(angleRad) * distance }
+    : c2
+  const extendLeft = ext.extendLeft === true
+  const extendRight = ext.extendRight === true
+  let lineStart: Coordinate = { x: c1.x, y: c1.y }
+  let lineEnd: Coordinate = { x: c2r.x, y: c2r.y }
+  if (extendLeft || extendRight) {
+    const [s, e] = getExtendedCoordinates(c1, c2r, bounding.width, bounding.height, extendLeft, extendRight)
+    lineStart = s
+    lineEnd = e
+  }
+  return diagonalLabelAnchor(style, lineStart, lineEnd, lineWidth)
+})
 
 const BASELINE_COLOR = '#787B86'
 const ARC_RADIUS = 30
@@ -123,15 +158,13 @@ const trendAngle: OverlayTemplate<TrendAngleExtendData> = {
         key: 'ta_baseline0',
         type: 'line',
         attrs: { coordinates: [c1, { x: bounding.width, y: c1.y }] },
-        styles: baselineStyle,
-        ignoreEvent: true
+        styles: baselineStyle
       })
       figures.push({
         key: 'ta_baseline1',
         type: 'line',
         attrs: { coordinates: [{ x: 0, y: c2r.y }, { x: bounding.width, y: c2r.y }] },
-        styles: baselineStyle,
-        ignoreEvent: true
+        styles: baselineStyle
       })
     }
 
@@ -145,7 +178,7 @@ const trendAngle: OverlayTemplate<TrendAngleExtendData> = {
       lineStart = s
       lineEnd = e
     }
-    const spec = labelSpecOf(ext)
+    const spec = liveLabelSpecOf(overlay, ext)
     const labelLayout = spec !== null
       ? layoutDiagonalLabel('ta_label', spec, lineStart, lineEnd, lineColor, lineStyles.size)
       : null
@@ -173,8 +206,7 @@ const trendAngle: OverlayTemplate<TrendAngleExtendData> = {
         size: 1,
         style: 'dashed',
         dashedValue: [2, 2]
-      },
-      ignoreEvent: true
+      }
     })
 
     // ─── Angle label on the arc bisector ───
@@ -189,8 +221,7 @@ const trendAngle: OverlayTemplate<TrendAngleExtendData> = {
         align: 'center' as CanvasTextAlign,
         baseline: 'middle' as CanvasTextBaseline
       },
-      styles: { color: lineColor, size: 12, weight: 'normal', backgroundColor: 'transparent' },
-      ignoreEvent: true
+      styles: { color: lineColor, size: 12, weight: 'normal', backgroundColor: 'transparent' }
     })
 
     // ─── Price labels beside the anchors (reference style) ───
@@ -216,7 +247,7 @@ const trendAngle: OverlayTemplate<TrendAngleExtendData> = {
     return figures
   },
 
-  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis }) => {
+  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis, isSelected }) => {
     if (coordinates.length < 1) return []
     const ext: TrendAngleExtendData = isValid(overlay.extendData) ? overlay.extendData : {}
     return buildYAxisBandFigures('ta', {
@@ -225,18 +256,20 @@ const trendAngle: OverlayTemplate<TrendAngleExtendData> = {
       bounding,
       lineColor: lineColorOf(overlay, chart, ext.lineColor ?? ext.color),
       precision: pricePrecisionOf(chart, overlay, yAxis, ext.pricePrecision),
-      yAxis: yAxis ?? undefined
+      yAxis: yAxis ?? undefined,
+      isSelected
     })
   },
 
-  createXAxisFigures: ({ chart, overlay, coordinates, bounding }) => {
+  createXAxisFigures: ({ chart, overlay, coordinates, bounding, isSelected }) => {
     if (coordinates.length < 1) return []
     const ext: TrendAngleExtendData = isValid(overlay.extendData) ? overlay.extendData : {}
     return buildXAxisBandFigures('ta', {
       overlay,
       coordinates,
       bounding,
-      lineColor: lineColorOf(overlay, chart, ext.lineColor ?? ext.color)
+      lineColor: lineColorOf(overlay, chart, ext.lineColor ?? ext.color),
+      isSelected
     })
   },
 
@@ -282,7 +315,10 @@ const trendAngle: OverlayTemplate<TrendAngleExtendData> = {
     }
     applySnap45(this, params, 0)
     measureAngle(this, params)
-  }
+  },
+
+  // ─── In-place label editing (TradingView parity) ───
+  ...lineLabelEditorHooks('ta_label', taLabelAnchor)
 }
 
 export default trendAngle

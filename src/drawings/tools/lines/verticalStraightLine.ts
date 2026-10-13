@@ -20,10 +20,13 @@ import {
   buildXAxisPill,
   formatDate,
   formatNum,
-  labelSpecOf,
   lineColorOf,
+  lineLabelAnchorFn,
+  lineLabelEditorHooks,
   lineSizeOf,
-  pushVertLabel
+  liveLabelSpecOf,
+  pushVertLabel,
+  vertLabelAnchor
 } from './lineCommon'
 
 import type { LineExtendData } from './lineCommon'
@@ -35,6 +38,15 @@ import type { LineExtendData } from './lineCommon'
  */
 
 export interface VertStraightLineExtendData extends LineExtendData {}
+
+/** Editor anchor: the label spans the full pane height at c1.x —
+ *  mirrors createPointFigures. */
+const vslLabelAnchor = lineLabelAnchorFn((coordinates, bounding, _ext, style, lineWidth) => {
+  if (coordinates.length < 1) {
+    return null
+  }
+  return vertLabelAnchor(style, coordinates[0].x, 0, bounding.height, lineWidth)
+})
 
 const verticalStraightLine: OverlayTemplate<VertStraightLineExtendData> = {
   name: 'verticalStraightLine',
@@ -63,7 +75,7 @@ const verticalStraightLine: OverlayTemplate<VertStraightLineExtendData> = {
     })
 
     // ─── Text label (rotated along the line) ───
-    const spec = labelSpecOf(ext)
+    const spec = liveLabelSpecOf(overlay, ext)
     if (spec !== null) {
       pushVertLabel(figures, 'vsl_label', spec, c1.x, 0, bounding.height, lineColor, lineWidth)
     }
@@ -81,8 +93,7 @@ const verticalStraightLine: OverlayTemplate<VertStraightLineExtendData> = {
           align: 'left' as CanvasTextAlign,
           baseline: 'top' as CanvasTextBaseline
         },
-        styles: { color: lineColor, size: 10, weight: 'normal', backgroundColor: 'transparent' },
-        ignoreEvent: true
+        styles: { color: lineColor, size: 10, weight: 'normal', backgroundColor: 'transparent' }
       })
     }
 
@@ -107,7 +118,10 @@ const verticalStraightLine: OverlayTemplate<VertStraightLineExtendData> = {
     const d0 = formatDate(overlay.points[0]?.timestamp)
     if (d0 === '') return []
     return [buildXAxisPill(coordinates[0].x, d0, lineColor, 'vsl_x0')]
-  }
+  },
+
+  // ─── In-place label editing (TradingView parity) ───
+  ...lineLabelEditorHooks('vsl_label', vslLabelAnchor)
 }
 
 export default verticalStraightLine

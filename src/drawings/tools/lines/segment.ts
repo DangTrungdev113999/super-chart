@@ -21,13 +21,16 @@ import {
   applySnap45,
   buildXAxisBandFigures,
   buildYAxisBandFigures,
+  diagonalLabelAnchor,
   getArrowCoordinates,
   getExtendedCoordinates,
   inlineStatsLines,
-  labelSpecOf,
   layoutDiagonalLabel,
   lineColorOf,
+  lineLabelAnchorFn,
+  lineLabelEditorHooks,
   lineSizeOf,
+  liveLabelSpecOf,
   pricePrecisionOf,
   pushAnchorPriceLabel,
   pushInlineStats,
@@ -44,6 +47,28 @@ import type { LineExtendData } from './lineCommon'
  */
 
 export interface SegmentExtendData extends LineExtendData {}
+
+/**
+ * Re-derives the rendered span (anchors extended to pane edges per
+ * extendLeft/extendRight) exactly as createPointFigures does, so the
+ * in-place editor lands on the painted label.
+ */
+const segLabelAnchor = lineLabelAnchorFn((coordinates, bounding, ext, style, lineWidth) => {
+  if (coordinates.length < 2) {
+    return null
+  }
+  const [c1, c2] = coordinates
+  const extendLeft = ext.extendLeft === true
+  const extendRight = ext.extendRight === true
+  let lineStart: Coordinate = { x: c1.x, y: c1.y }
+  let lineEnd: Coordinate = { x: c2.x, y: c2.y }
+  if (extendLeft || extendRight) {
+    const [s, e] = getExtendedCoordinates(c1, c2, bounding.width, bounding.height, extendLeft, extendRight)
+    lineStart = s
+    lineEnd = e
+  }
+  return diagonalLabelAnchor(style, lineStart, lineEnd, lineWidth)
+})
 
 const segment: OverlayTemplate<SegmentExtendData> = {
   name: 'segment',
@@ -79,7 +104,7 @@ const segment: OverlayTemplate<SegmentExtendData> = {
     }
 
     // ─── Text label layout first — it can request a gap in the line ───
-    const spec = labelSpecOf(ext)
+    const spec = liveLabelSpecOf(overlay, ext)
     const labelLayout = spec !== null
       ? layoutDiagonalLabel('seg_label', spec, lineStart, lineEnd, lineColor, lineWidth)
       : null
@@ -96,8 +121,7 @@ const segment: OverlayTemplate<SegmentExtendData> = {
           key: 'seg_arrow_left',
           type: 'polygon',
           attrs: { coordinates: coords },
-          styles: { style: 'fill', color: lineColor },
-          ignoreEvent: true
+          styles: { style: 'fill', color: lineColor }
         })
       }
     }
@@ -108,8 +132,7 @@ const segment: OverlayTemplate<SegmentExtendData> = {
           key: 'seg_arrow_right',
           type: 'polygon',
           attrs: { coordinates: coords },
-          styles: { style: 'fill', color: lineColor },
-          ignoreEvent: true
+          styles: { style: 'fill', color: lineColor }
         })
       }
     }
@@ -154,7 +177,7 @@ const segment: OverlayTemplate<SegmentExtendData> = {
     return figures
   },
 
-  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis }) => {
+  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis, isSelected }) => {
     if (coordinates.length < 1) return []
     const ext: SegmentExtendData = isValid(overlay.extendData) ? overlay.extendData : {}
     return buildYAxisBandFigures('seg', {
@@ -163,18 +186,20 @@ const segment: OverlayTemplate<SegmentExtendData> = {
       bounding,
       lineColor: lineColorOf(overlay, chart, ext.lineColor ?? ext.color),
       precision: pricePrecisionOf(chart, overlay, yAxis, ext.pricePrecision),
-      yAxis: yAxis ?? undefined
+      yAxis: yAxis ?? undefined,
+      isSelected
     })
   },
 
-  createXAxisFigures: ({ chart, overlay, coordinates, bounding }) => {
+  createXAxisFigures: ({ chart, overlay, coordinates, bounding, isSelected }) => {
     if (coordinates.length < 1) return []
     const ext: SegmentExtendData = isValid(overlay.extendData) ? overlay.extendData : {}
     return buildXAxisBandFigures('seg', {
       overlay,
       coordinates,
       bounding,
-      lineColor: lineColorOf(overlay, chart, ext.lineColor ?? ext.color)
+      lineColor: lineColorOf(overlay, chart, ext.lineColor ?? ext.color),
+      isSelected
     })
   },
 
@@ -192,7 +217,11 @@ const segment: OverlayTemplate<SegmentExtendData> = {
     if (params.performPointIndex === 1) {
       applySnap45(this, params, 0)
     }
-  }
+  },
+
+  // ─── In-place label editing (TradingView parity): double-click the
+  //     line, or single-click the label figure once selected. ───
+  ...lineLabelEditorHooks('seg_label', segLabelAnchor)
 }
 
 export default segment

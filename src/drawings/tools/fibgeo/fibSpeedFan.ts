@@ -218,8 +218,7 @@ const fibSpeedFan: OverlayTemplate<FibSpeedFanExtendData> = {
                 key: `srf_hfill_${e}`,
                 type: 'polygon',
                 attrs: { coordinates: wedge },
-                styles: { style: 'fill', color: alphaColor(hLevels[e].level.color, alpha) },
-                ignoreEvent: true
+                styles: { style: 'fill', color: alphaColor(hLevels[e].level.color, alpha) }
               })
             }
           }
@@ -235,8 +234,7 @@ const fibSpeedFan: OverlayTemplate<FibSpeedFanExtendData> = {
                 key: `srf_vfill_${e}`,
                 type: 'polygon',
                 attrs: { coordinates: wedge },
-                styles: { style: 'fill', color: alphaColor(vLevels[e].level.color, alpha) },
-                ignoreEvent: true
+                styles: { style: 'fill', color: alphaColor(vLevels[e].level.color, alpha) }
               })
             }
           }

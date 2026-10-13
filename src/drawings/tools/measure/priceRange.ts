@@ -91,15 +91,13 @@ const priceRange: OverlayTemplate<PriceRangeExtendData> = {
       key: 'pr_edge_t',
       type: 'line',
       attrs: { coordinates: [{ x, y }, { x: x + width, y }] },
-      styles: { style: lineStyle === 'solid' ? 'solid' : 'dashed', color, size: lineWidth, dashedValue: dashed },
-      ignoreEvent: true
+      styles: { style: lineStyle === 'solid' ? 'solid' : 'dashed', color, size: lineWidth, dashedValue: dashed }
     })
     figures.push({
       key: 'pr_edge_b',
       type: 'line',
       attrs: { coordinates: [{ x, y: y + height }, { x: x + width, y: y + height }] },
-      styles: { style: lineStyle === 'solid' ? 'solid' : 'dashed', color, size: lineWidth, dashedValue: dashed },
-      ignoreEvent: true
+      styles: { style: lineStyle === 'solid' ? 'solid' : 'dashed', color, size: lineWidth, dashedValue: dashed }
     })
 
     // Vertical arrow at mid-width + circle marker on the start level.
@@ -108,8 +106,7 @@ const priceRange: OverlayTemplate<PriceRangeExtendData> = {
       key: 'pr_arrow',
       type: 'line',
       attrs: { coordinates: [{ x: midX, y: start.y }, { x: midX, y: end.y }] },
-      styles: { style: 'solid', color, size: lineWidth },
-      ignoreEvent: true
+      styles: { style: 'solid', color, size: lineWidth }
     })
     figures.push({
       key: 'pr_arrow_head',
@@ -121,15 +118,13 @@ const priceRange: OverlayTemplate<PriceRangeExtendData> = {
           { x: midX + ARROW_SIZE / 2, y: end.y - ARROW_SIZE * vDirection }
         ]
       },
-      styles: { style: 'solid', color, size: 1 },
-      ignoreEvent: true
+      styles: { style: 'solid', color, size: 1 }
     })
     figures.push({
       key: 'pr_start_dot',
       type: 'circle',
       attrs: { x: midX, y: start.y, r: 3 },
-      styles: { style: 'stroke', borderColor: color, borderSize: 1 },
-      ignoreEvent: true
+      styles: { style: 'stroke', borderColor: color, borderSize: 1 }
     })
 
     // Label on the end side: "Δ (±%) ticks" — center sits one gap past

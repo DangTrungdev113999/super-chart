@@ -65,7 +65,7 @@ export const FIB_LABEL_SIZE = 12
 /** Cull margin (px) for vertical lines outside the pane. */
 export const FIB_TIME_CULL = 100
 
-/** 'fibonacciLine' default — TV retracement set + hidden extension rows. */
+/** 'fibonacciLine' default — TradingView's 24-level retracement set. */
 export const FIB_RETRACEMENT_LEVELS: FibLevel[] = [
   { visible: true, coeff: 0, color: '#787b86' },
   { visible: true, coeff: 0.236, color: '#f23645' },
@@ -75,7 +75,21 @@ export const FIB_RETRACEMENT_LEVELS: FibLevel[] = [
   { visible: true, coeff: 0.786, color: '#00bcd4' },
   { visible: true, coeff: 1, color: '#787b86' },
   { visible: false, coeff: 1.272, color: '#ff9800' },
-  { visible: false, coeff: 1.618, color: '#2962ff' }
+  { visible: false, coeff: 1.414, color: '#e91e63' },
+  { visible: false, coeff: 1.618, color: '#2962ff' },
+  { visible: false, coeff: 2.272, color: '#ff9800' },
+  { visible: false, coeff: 2.414, color: '#e91e63' },
+  { visible: false, coeff: 2.618, color: '#f23645' },
+  { visible: false, coeff: 3.618, color: '#9c27b0' },
+  { visible: false, coeff: 4.236, color: '#e91e63' },
+  { visible: false, coeff: 4.618, color: '#673ab7' },
+  { visible: false, coeff: 5.618, color: '#3f51b5' },
+  { visible: false, coeff: 6.618, color: '#2962ff' },
+  { visible: false, coeff: 7.618, color: '#00bcd4' },
+  { visible: false, coeff: 8.618, color: '#089981' },
+  { visible: false, coeff: 9.618, color: '#4caf50' },
+  { visible: false, coeff: 10.618, color: '#ff9800' },
+  { visible: false, coeff: 11.618, color: '#f23645' }
 ]
 
 /** 'fibChannel' / 'fibExtension' default — consumer's 11-level set. */

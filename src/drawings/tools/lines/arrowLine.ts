@@ -20,13 +20,16 @@ import {
   applySnap45,
   buildXAxisBandFigures,
   buildYAxisBandFigures,
+  diagonalLabelAnchor,
   getArrowCoordinates,
   getExtendedCoordinates,
   inlineStatsLines,
-  labelSpecOf,
   layoutDiagonalLabel,
   lineColorOf,
+  lineLabelAnchorFn,
+  lineLabelEditorHooks,
   lineSizeOf,
+  liveLabelSpecOf,
   pricePrecisionOf,
   pushAnchorPriceLabel,
   pushInlineStats,
@@ -44,6 +47,25 @@ import type { LineExtendData } from './lineCommon'
  */
 
 export interface ArrowLineExtendData extends LineExtendData {}
+
+/** Editor anchor: same rendered span as createPointFigures (optional
+ *  edge extension), so the DOM box lands on the painted label. */
+const alLabelAnchor = lineLabelAnchorFn((coordinates, bounding, ext, style, lineWidth) => {
+  if (coordinates.length < 2) {
+    return null
+  }
+  const [c1, c2] = coordinates
+  const extendLeft = ext.extendLeft === true
+  const extendRight = ext.extendRight === true
+  let lineStart = c1
+  let lineEnd = c2
+  if (extendLeft || extendRight) {
+    const [s, e] = getExtendedCoordinates(c1, c2, bounding.width, bounding.height, extendLeft, extendRight)
+    lineStart = s
+    lineEnd = e
+  }
+  return diagonalLabelAnchor(style, lineStart, lineEnd, lineWidth)
+})
 
 const arrowLine: OverlayTemplate<ArrowLineExtendData> = {
   name: 'arrowLine',
@@ -79,7 +101,7 @@ const arrowLine: OverlayTemplate<ArrowLineExtendData> = {
     }
 
     // ─── Text label layout first — it can request a gap in the line ───
-    const spec = labelSpecOf(ext)
+    const spec = liveLabelSpecOf(overlay, ext)
     const labelLayout = spec !== null
       ? layoutDiagonalLabel('al_label', spec, lineStart, lineEnd, lineColor, lineWidth)
       : null
@@ -96,8 +118,7 @@ const arrowLine: OverlayTemplate<ArrowLineExtendData> = {
           key: 'al_arrow_left',
           type: 'polygon',
           attrs: { coordinates: coords },
-          styles: { style: 'fill', color: lineColor },
-          ignoreEvent: true
+          styles: { style: 'fill', color: lineColor }
         })
       }
     }
@@ -108,8 +129,7 @@ const arrowLine: OverlayTemplate<ArrowLineExtendData> = {
           key: 'al_arrow_right',
           type: 'polygon',
           attrs: { coordinates: coords },
-          styles: { style: 'fill', color: lineColor },
-          ignoreEvent: true
+          styles: { style: 'fill', color: lineColor }
         })
       }
     }
@@ -165,18 +185,22 @@ const arrowLine: OverlayTemplate<ArrowLineExtendData> = {
     }
   },
 
-  createXAxisFigures: ({ chart, overlay, coordinates, bounding }) => {
+  // ─── In-place label editing (TradingView parity) ───
+  ...lineLabelEditorHooks('al_label', alLabelAnchor),
+
+  createXAxisFigures: ({ chart, overlay, coordinates, bounding, isSelected }) => {
     if (coordinates.length < 1) return []
     const ext: ArrowLineExtendData = isValid(overlay.extendData) ? overlay.extendData : {}
     return buildXAxisBandFigures('al', {
       overlay,
       coordinates,
       bounding,
-      lineColor: lineColorOf(overlay, chart, ext.lineColor ?? ext.color)
+      lineColor: lineColorOf(overlay, chart, ext.lineColor ?? ext.color),
+      isSelected
     })
   },
 
-  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis }) => {
+  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis, isSelected }) => {
     if (coordinates.length < 1) return []
     const ext: ArrowLineExtendData = isValid(overlay.extendData) ? overlay.extendData : {}
     return buildYAxisBandFigures('al', {
@@ -185,7 +209,8 @@ const arrowLine: OverlayTemplate<ArrowLineExtendData> = {
       bounding,
       lineColor: lineColorOf(overlay, chart, ext.lineColor ?? ext.color),
       precision: pricePrecisionOf(chart, overlay, yAxis, ext.pricePrecision),
-      yAxis: yAxis ?? undefined
+      yAxis: yAxis ?? undefined,
+      isSelected
     })
   }
 }

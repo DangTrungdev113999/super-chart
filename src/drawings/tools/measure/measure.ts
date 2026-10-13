@@ -100,8 +100,7 @@ const measure: OverlayTemplate<MeasureExtendData> = {
         borderColor,
         borderSize: 1
       },
-      bounds: { x: x - ARROW_SIZE, y: y - ARROW_SIZE, width: width + ARROW_SIZE * 2, height: height + ARROW_SIZE * 2 },
-      ignoreEvent: true
+      bounds: { x: x - ARROW_SIZE, y: y - ARROW_SIZE, width: width + ARROW_SIZE * 2, height: height + ARROW_SIZE * 2 }
     }]
 
     // Crosshair edges at the release corner (consumer parity).
@@ -109,15 +108,13 @@ const measure: OverlayTemplate<MeasureExtendData> = {
       key: 'ms_cross_h',
       type: 'line',
       attrs: { coordinates: [{ x: start.x, y: end.y }, { x: end.x, y: end.y }] },
-      styles: { style: 'solid', color: borderColor, size: 1 },
-      ignoreEvent: true
+      styles: { style: 'solid', color: borderColor, size: 1 }
     })
     figures.push({
       key: 'ms_cross_v',
       type: 'line',
       attrs: { coordinates: [{ x: end.x, y: start.y }, { x: end.x, y: end.y }] },
-      styles: { style: 'solid', color: borderColor, size: 1 },
-      ignoreEvent: true
+      styles: { style: 'solid', color: borderColor, size: 1 }
     })
 
     // Horizontal arrow at mid-height.
@@ -126,8 +123,7 @@ const measure: OverlayTemplate<MeasureExtendData> = {
       key: 'ms_arrow_h',
       type: 'line',
       attrs: { coordinates: [{ x: start.x, y: midY }, { x: end.x, y: midY }] },
-      styles: { style: 'solid', color: borderColor, size: 1 },
-      ignoreEvent: true
+      styles: { style: 'solid', color: borderColor, size: 1 }
     })
     figures.push({
       key: 'ms_arrow_h_head',
@@ -139,8 +135,7 @@ const measure: OverlayTemplate<MeasureExtendData> = {
           { x: end.x - ARROW_SIZE * direction, y: midY + ARROW_SIZE / 2 }
         ]
       },
-      styles: { style: 'solid', color: borderColor, size: 1 },
-      ignoreEvent: true
+      styles: { style: 'solid', color: borderColor, size: 1 }
     })
 
     // Vertical arrow at mid-width.
@@ -149,8 +144,7 @@ const measure: OverlayTemplate<MeasureExtendData> = {
       key: 'ms_arrow_v',
       type: 'line',
       attrs: { coordinates: [{ x: midX, y: start.y }, { x: midX, y: end.y }] },
-      styles: { style: 'solid', color: borderColor, size: 1 },
-      ignoreEvent: true
+      styles: { style: 'solid', color: borderColor, size: 1 }
     })
     figures.push({
       key: 'ms_arrow_v_head',
@@ -162,8 +156,7 @@ const measure: OverlayTemplate<MeasureExtendData> = {
           { x: midX + ARROW_SIZE / 2, y: end.y - ARROW_SIZE * vDirection }
         ]
       },
-      styles: { style: 'solid', color: borderColor, size: 1 },
-      ignoreEvent: true
+      styles: { style: 'solid', color: borderColor, size: 1 }
     })
 
     // Tooltip pinned below the rect — above it when it would clip the pane.

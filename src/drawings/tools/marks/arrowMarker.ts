@@ -110,8 +110,7 @@ const arrowMarker: OverlayTemplate<ArrowMarkerExtendData> = {
         styles: {
           color: ext.textColor ?? color,
           size
-        },
-        ignoreEvent: true
+        }
       })
     }
 

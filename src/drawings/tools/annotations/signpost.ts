@@ -162,8 +162,7 @@ const signpost: OverlayTemplate<SignpostExtendData> = {
           width: POLE_WIDTH,
           height: poleHeight
         },
-        styles: { style: 'fill', color: poleColor },
-        ignoreEvent: true
+        styles: { style: 'fill', color: poleColor }
       },
       // Sign board — flat pentagon with an arrow tip on the right edge.
       {
@@ -189,16 +188,14 @@ const signpost: OverlayTemplate<SignpostExtendData> = {
           y: headCenterY,
           ...data
         },
-        styles: { color: styles.color },
-        ignoreEvent: true
+        styles: { color: styles.color }
       },
       // Base dot at the anchor.
       {
         key: 'base',
         type: 'circle',
         attrs: { x: point.x, y: point.y, r: BASE_RADIUS },
-        styles: { style: 'fill', color: poleColor },
-        ignoreEvent: true
+        styles: { style: 'fill', color: poleColor }
       }
     ]
     figures.push(...createAnchorFigures({

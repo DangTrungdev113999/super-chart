@@ -265,8 +265,7 @@ export function pillFigures (
       borderColor: opts.borderColor,
       borderSize: opts.borderSize ?? 1,
       borderRadius: opts.borderRadius ?? 4
-    },
-    ignoreEvent: true
+    }
   }]
 
   let lineY = topY + padV
@@ -288,8 +287,7 @@ export function pillFigures (
         weight: line.weight,
         family,
         backgroundColor: 'transparent'
-      },
-      ignoreEvent: true
+      }
     })
     lineY += size + gap
   })

@@ -154,8 +154,7 @@ export function elliottWaveFigures (
         color: stroke.color,
         size: stroke.size,
         dashedValue: stroke.dashedValue
-      },
-      ignoreEvent: true
+      }
     })
   }
 

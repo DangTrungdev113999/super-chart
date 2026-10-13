@@ -128,8 +128,7 @@ const gannFan: OverlayTemplate<GannFanExtendData> = {
                 key: `gann_fan_fill_${e}`,
                 type: 'polygon',
                 attrs: { coordinates: [p1, division, divisions[neighbor]] },
-                styles: { style: 'fill', color: alphaColor(level.color, alpha) },
-                ignoreEvent: true
+                styles: { style: 'fill', color: alphaColor(level.color, alpha) }
               })
             }
           }

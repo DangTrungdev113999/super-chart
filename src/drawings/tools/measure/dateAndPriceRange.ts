@@ -100,15 +100,13 @@ const dateAndPriceRange: OverlayTemplate<DateAndPriceRangeExtendData> = {
       key: 'dpr_cross_h',
       type: 'line',
       attrs: { coordinates: [{ x: start.x, y: end.y }, { x: end.x, y: end.y }] },
-      styles: lineFigureStyle,
-      ignoreEvent: true
+      styles: lineFigureStyle
     })
     figures.push({
       key: 'dpr_cross_v',
       type: 'line',
       attrs: { coordinates: [{ x: end.x, y: start.y }, { x: end.x, y: end.y }] },
-      styles: lineFigureStyle,
-      ignoreEvent: true
+      styles: lineFigureStyle
     })
 
     // Horizontal arrow at mid-height.
@@ -117,8 +115,7 @@ const dateAndPriceRange: OverlayTemplate<DateAndPriceRangeExtendData> = {
       key: 'dpr_arrow_h',
       type: 'line',
       attrs: { coordinates: [{ x: start.x, y: midY }, { x: end.x, y: midY }] },
-      styles: lineFigureStyle,
-      ignoreEvent: true
+      styles: lineFigureStyle
     })
     figures.push({
       key: 'dpr_arrow_h_head',
@@ -130,8 +127,7 @@ const dateAndPriceRange: OverlayTemplate<DateAndPriceRangeExtendData> = {
           { x: end.x - ARROW_SIZE * direction, y: midY + ARROW_SIZE / 2 }
         ]
       },
-      styles: { style: 'solid', color, size: 1 },
-      ignoreEvent: true
+      styles: { style: 'solid', color, size: 1 }
     })
 
     // Vertical arrow at mid-width.
@@ -140,8 +136,7 @@ const dateAndPriceRange: OverlayTemplate<DateAndPriceRangeExtendData> = {
       key: 'dpr_arrow_v',
       type: 'line',
       attrs: { coordinates: [{ x: midX, y: start.y }, { x: midX, y: end.y }] },
-      styles: { style: 'solid', color, size: lineWidth },
-      ignoreEvent: true
+      styles: { style: 'solid', color, size: lineWidth }
     })
     figures.push({
       key: 'dpr_arrow_v_head',
@@ -153,8 +148,7 @@ const dateAndPriceRange: OverlayTemplate<DateAndPriceRangeExtendData> = {
           { x: midX + ARROW_SIZE / 2, y: end.y - ARROW_SIZE * vDirection }
         ]
       },
-      styles: { style: 'solid', color, size: 1 },
-      ignoreEvent: true
+      styles: { style: 'solid', color, size: 1 }
     })
 
     // Dark tooltip below the rect (above when it would clip the pane):

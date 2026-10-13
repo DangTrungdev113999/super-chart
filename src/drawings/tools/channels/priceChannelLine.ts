@@ -174,8 +174,7 @@ const priceChannelLine: OverlayTemplate<PriceChannelLineExtendData> = {
           key: 'pcl_fill',
           type: 'polygon',
           attrs: { coordinates: band },
-          styles: { style: 'fill', color: channelFillColor(ext, stroke.color) },
-          ignoreEvent: true
+          styles: { style: 'fill', color: channelFillColor(ext, stroke.color) }
         })
       }
     }
@@ -239,7 +238,10 @@ const priceChannelLine: OverlayTemplate<PriceChannelLineExtendData> = {
     return figures
   },
 
-  createXAxisFigures: ({ chart, overlay, coordinates }) => {
+  createXAxisFigures: ({ chart, overlay, coordinates, isSelected }) => {
+    if (isSelected !== true) {
+      return []
+    }
     if (coordinates.length < 1) {
       return []
     }
@@ -249,7 +251,10 @@ const priceChannelLine: OverlayTemplate<PriceChannelLineExtendData> = {
     return figures
   },
 
-  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis }) => {
+  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis, isSelected }) => {
+    if (isSelected !== true) {
+      return []
+    }
     if (coordinates.length < 1) {
       return []
     }

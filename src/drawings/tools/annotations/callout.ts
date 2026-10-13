@@ -177,8 +177,7 @@ const callout: OverlayTemplate<CalloutExtendData> = {
             { x: target.x, y: target.y }
           ]
         },
-        styles: { color: connectorColor, size: connectorWidth },
-        ignoreEvent: true
+        styles: { color: connectorColor, size: connectorWidth }
       })
 
       // Arrowhead at the target — filled triangle along the ray direction.
@@ -199,8 +198,7 @@ const callout: OverlayTemplate<CalloutExtendData> = {
             }
           ]
         },
-        styles: { style: 'fill', color: connectorColor },
-        ignoreEvent: true
+        styles: { style: 'fill', color: connectorColor }
       })
 
       // The text box IS the second anchor — dragging it moves point 1.

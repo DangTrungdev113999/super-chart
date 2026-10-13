@@ -146,8 +146,7 @@ const comment: OverlayTemplate<CommentExtendData> = {
             { x: point.x + tailHalf, y: boxBottom - 1 }
           ]
         },
-        styles: { style: 'fill', color: styles.backgroundColor },
-        ignoreEvent: true
+        styles: { style: 'fill', color: styles.backgroundColor }
       }
     ]
     figures.push(...createAnchorFigures({

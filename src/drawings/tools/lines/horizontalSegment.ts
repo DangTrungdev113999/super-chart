@@ -20,11 +20,14 @@ import { createAnchorFigures } from '../../interaction/anchors'
 import {
   buildXAxisBandFigures,
   buildYAxisPill,
+  flatLabelAnchor,
   formatNum,
   getArrowCoordinates,
-  labelSpecOf,
   lineColorOf,
+  lineLabelAnchorFn,
+  lineLabelEditorHooks,
   lineSizeOf,
+  liveLabelSpecOf,
   pricePrecisionOf,
   pushFlatLabel
 } from './lineCommon'
@@ -39,6 +42,15 @@ import type { LineExtendData } from './lineCommon'
  */
 
 export interface HorizSegmentExtendData extends LineExtendData {}
+
+/** Editor anchor: the rendered span is c1.x→c2.x at c1.y (P1's value is
+ *  authoritative) — mirrors createPointFigures. */
+const hsLabelAnchor = lineLabelAnchorFn((coordinates, _bounding, _ext, style, lineWidth) => {
+  if (coordinates.length < 2) {
+    return null
+  }
+  return flatLabelAnchor(style, coordinates[0].x, coordinates[1].x, coordinates[0].y, lineWidth)
+})
 
 const horizontalSegment: OverlayTemplate<HorizSegmentExtendData> = {
   name: 'horizontalSegment',
@@ -79,13 +91,13 @@ const horizontalSegment: OverlayTemplate<HorizSegmentExtendData> = {
     if (leftEnd === 1) {
       const coords = getArrowCoordinates(rightPt, leftPt)
       if (coords.length === 3) {
-        figures.push({ key: 'hs_arrow_left', type: 'polygon', attrs: { coordinates: coords }, styles: { style: 'fill', color: lineColor }, ignoreEvent: true })
+        figures.push({ key: 'hs_arrow_left', type: 'polygon', attrs: { coordinates: coords }, styles: { style: 'fill', color: lineColor } })
       }
     }
     if (rightEnd === 1) {
       const coords = getArrowCoordinates(leftPt, rightPt)
       if (coords.length === 3) {
-        figures.push({ key: 'hs_arrow_right', type: 'polygon', attrs: { coordinates: coords }, styles: { style: 'fill', color: lineColor }, ignoreEvent: true })
+        figures.push({ key: 'hs_arrow_right', type: 'polygon', attrs: { coordinates: coords }, styles: { style: 'fill', color: lineColor } })
       }
     }
 
@@ -103,14 +115,13 @@ const horizontalSegment: OverlayTemplate<HorizSegmentExtendData> = {
             align: 'center' as CanvasTextAlign,
             baseline: 'bottom' as CanvasTextBaseline
           },
-          styles: { color: lineColor, size: 11, weight: 'normal', backgroundColor: 'transparent' },
-          ignoreEvent: true
+          styles: { color: lineColor, size: 11, weight: 'normal', backgroundColor: 'transparent' }
         })
       }
     }
 
     // ─── Text label over the span ───
-    const spec = labelSpecOf(ext)
+    const spec = liveLabelSpecOf(overlay, ext)
     if (spec !== null) {
       pushFlatLabel(figures, 'hs_label', spec, lineStart.x, lineEnd.x, c1.y, lineColor, lineWidth)
     }
@@ -155,8 +166,7 @@ const horizontalSegment: OverlayTemplate<HorizSegmentExtendData> = {
           key: 'hs_stats',
           type: 'text',
           attrs: { x: sx, y: sy, text: statLines.join('  '), align: sAlign, baseline: sBaseline },
-          styles: { color: lineColor, size: 11, weight: 'normal', backgroundColor: 'transparent' },
-          ignoreEvent: true
+          styles: { color: lineColor, size: 11, weight: 'normal', backgroundColor: 'transparent' }
         })
       }
     }
@@ -183,8 +193,8 @@ const horizontalSegment: OverlayTemplate<HorizSegmentExtendData> = {
     return figures
   },
 
-  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis }) => {
-    if (coordinates.length < 1) return []
+  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis, isSelected }) => {
+    if (coordinates.length < 1 || isSelected !== true) return []
     const ext: HorizSegmentExtendData = isValid(overlay.extendData) ? overlay.extendData : {}
     const lineColor = lineColorOf(overlay, chart, ext.lineColor ?? ext.color)
     const precision = pricePrecisionOf(chart, overlay, yAxis, ext.pricePrecision)
@@ -192,14 +202,15 @@ const horizontalSegment: OverlayTemplate<HorizSegmentExtendData> = {
     return pill != null ? [pill] : []
   },
 
-  createXAxisFigures: ({ chart, overlay, coordinates, bounding }) => {
+  createXAxisFigures: ({ chart, overlay, coordinates, bounding, isSelected }) => {
     if (coordinates.length < 1) return []
     const ext: HorizSegmentExtendData = isValid(overlay.extendData) ? overlay.extendData : {}
     return buildXAxisBandFigures('hs', {
       overlay,
       coordinates,
       bounding,
-      lineColor: lineColorOf(overlay, chart, ext.lineColor ?? ext.color)
+      lineColor: lineColorOf(overlay, chart, ext.lineColor ?? ext.color),
+      isSelected
     })
   },
 
@@ -218,7 +229,10 @@ const horizontalSegment: OverlayTemplate<HorizSegmentExtendData> = {
     if (params.currentStep === 2) {
       params.points[0].value = params.performPoint.value
     }
-  }
+  },
+
+  // ─── In-place label editing (TradingView parity) ───
+  ...lineLabelEditorHooks('hs_label', hsLabelAnchor)
 }
 
 export default horizontalSegment

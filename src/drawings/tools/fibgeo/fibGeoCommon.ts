@@ -233,8 +233,7 @@ export function labelFigure (key: string, x: number, y: number, text: string, co
       paddingRight: 0,
       paddingTop: 0,
       paddingBottom: 0
-    },
-    ignoreEvent: true
+    }
   }
 }
 
@@ -576,8 +575,7 @@ export function gannArcFigures (start: Coordinate, end: Coordinate, arcs: GannAr
         key: `${keyPrefix}_arcfill_${index}`,
         type: 'path',
         attrs: { x: 0, y: 0, width: 0, height: 0, path },
-        styles: { style: 'fill', color: alphaColor(arc.color, alpha) },
-        ignoreEvent: true
+        styles: { style: 'fill', color: alphaColor(arc.color, alpha) }
       })
     }
     figures.push({
@@ -590,8 +588,7 @@ export function gannArcFigures (start: Coordinate, end: Coordinate, arcs: GannAr
         height: 0,
         path: `M${pointAt(rx, ry, t0)} A${round2(rx)} ${round2(ry)} 0 0 ${sweep} ${pointAt(rx, ry, t1)}`
       },
-      styles: { style: 'stroke', color: arc.color, lineWidth: lineSize },
-      ignoreEvent: true
+      styles: { style: 'stroke', color: arc.color, lineWidth: lineSize }
     })
     prevRx = rx
     prevRy = ry

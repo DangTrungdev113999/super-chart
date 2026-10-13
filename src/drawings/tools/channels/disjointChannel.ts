@@ -118,8 +118,7 @@ const disjointChannel: OverlayTemplate<DisjointChannelExtendData> = {
           key: `dc_fill_${index}`,
           type: 'polygon',
           attrs: { coordinates: poly },
-          styles: { style: 'fill', color: fill },
-          ignoreEvent: true
+          styles: { style: 'fill', color: fill }
         })
       })
     }
@@ -149,8 +148,7 @@ const disjointChannel: OverlayTemplate<DisjointChannelExtendData> = {
           key: 'dc_arrow_l1',
           type: 'polygon',
           attrs: { coordinates: c1 },
-          styles: { style: 'fill', color: stroke.color },
-          ignoreEvent: true
+          styles: { style: 'fill', color: stroke.color }
         })
       }
       if (hasMirror) {
@@ -160,8 +158,7 @@ const disjointChannel: OverlayTemplate<DisjointChannelExtendData> = {
             key: 'dc_arrow_l2',
             type: 'polygon',
             attrs: { coordinates: c2 },
-            styles: { style: 'fill', color: stroke.color },
-            ignoreEvent: true
+            styles: { style: 'fill', color: stroke.color }
           })
         }
       }
@@ -173,8 +170,7 @@ const disjointChannel: OverlayTemplate<DisjointChannelExtendData> = {
           key: 'dc_arrow_r1',
           type: 'polygon',
           attrs: { coordinates: c1 },
-          styles: { style: 'fill', color: stroke.color },
-          ignoreEvent: true
+          styles: { style: 'fill', color: stroke.color }
         })
       }
       if (hasMirror) {
@@ -184,8 +180,7 @@ const disjointChannel: OverlayTemplate<DisjointChannelExtendData> = {
             key: 'dc_arrow_r2',
             type: 'polygon',
             attrs: { coordinates: c2 },
-            styles: { style: 'fill', color: stroke.color },
-            ignoreEvent: true
+            styles: { style: 'fill', color: stroke.color }
           })
         }
       }
@@ -241,7 +236,10 @@ const disjointChannel: OverlayTemplate<DisjointChannelExtendData> = {
     return figures
   },
 
-  createXAxisFigures: ({ chart, overlay, coordinates }) => {
+  createXAxisFigures: ({ chart, overlay, coordinates, isSelected }) => {
+    if (isSelected !== true) {
+      return []
+    }
     if (coordinates.length < 1) {
       return []
     }
@@ -251,7 +249,10 @@ const disjointChannel: OverlayTemplate<DisjointChannelExtendData> = {
     return figures
   },
 
-  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis }) => {
+  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis, isSelected }) => {
+    if (isSelected !== true) {
+      return []
+    }
     if (coordinates.length < 1) {
       return []
     }

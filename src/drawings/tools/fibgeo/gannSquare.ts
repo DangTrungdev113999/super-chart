@@ -108,7 +108,10 @@ const gannSquare: OverlayTemplate<GannSquareExtendData> = {
     return figures
   }),
 
-  createXAxisFigures: ({ overlay, coordinates }) => {
+  createXAxisFigures: ({ overlay, coordinates, isSelected }) => {
+    if (isSelected !== true) {
+      return []
+    }
     if (coordinates.length < 1) {
       return []
     }
@@ -129,8 +132,8 @@ const gannSquare: OverlayTemplate<GannSquareExtendData> = {
     return figures
   },
 
-  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis }) => {
-    if (coordinates.length < 1) {
+  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis, isSelected }) => {
+    if (coordinates.length < 1 || isSelected !== true) {
       return []
     }
     const lineColor = overlay.styles?.line?.color ?? TRENDLINE_COLOR

@@ -98,8 +98,7 @@ const fibTimeZone: OverlayTemplate<FibTimeZoneExtendData> = {
               { x: xA, y: bounding.height }
             ]
           },
-          styles: { style: 'fill', color: fibAlphaColor(positions[i].level.color, FIB_FILL_ALPHA) },
-          ignoreEvent: true
+          styles: { style: 'fill', color: fibAlphaColor(positions[i].level.color, FIB_FILL_ALPHA) }
         })
       }
     }
@@ -125,8 +124,7 @@ const fibTimeZone: OverlayTemplate<FibTimeZoneExtendData> = {
             align: 'left',
             baseline: 'bottom'
           },
-          styles: { color: level.color, size: labelSize, backgroundColor: 'transparent' },
-          ignoreEvent: true
+          styles: { color: level.color, size: labelSize, backgroundColor: 'transparent' }
         })
       }
     })

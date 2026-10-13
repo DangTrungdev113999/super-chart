@@ -15,9 +15,13 @@
 import type { Overlay, OverlayFigure, OverlayTemplate } from '../../component/Overlay'
 import type { Chart } from '../../Chart'
 
+import { isArray, isNumber, isObject, isValid } from '../../common/utils/typeChecks'
+
 import { createAnchorFigures } from '../interaction/anchors'
+import { shapeHandleFigure, pointToCoordinate } from './shapes/shapeCommon'
+import { lineChartOf } from './lines/lineCommon'
 import { openOverlayTextEditor } from '../editor/overlayTextEditor'
-import type { TextBoxData } from '../text/textBox'
+import { computeTextBoxLayout, type TextBoxData } from '../text/textBox'
 import type { RichTextAttrs, RichTextStyle } from '../figures/richText'
 import { resolvedHorzTextAlign, resolvedTextStyles, liveTextOf } from './annotations/common'
 
@@ -94,6 +98,31 @@ function getFigureStyle (overlay: Overlay<TextToolExtendData>): RichTextStyle {
   }
 }
 
+const TEXT_WRAP_HANDLE_KEY = 'text_wrap_handle'
+/** Smallest wrap width the handle can leave — keeps the box grabbable. */
+const MIN_WRAP_WIDTH_PX = 60
+
+/** Bar index → pane-pixel X, or null when the axis can't convert. */
+function indexToPaneX (chart: Chart, paneId: string, dataIndex: number): number | null {
+  try {
+    const converted = chart.convertToPixel({ dataIndex }, { paneId })
+    const c = isArray(converted) ? converted[0] : converted
+    return isValid(c) && isNumber(c.x) ? c.x : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Merge a patch into `extendData` in place — the prescribed mutation path
+ * for perform* callbacks (positionCommon's writePositionExt pattern).
+ */
+function writeTextExt (overlay: Overlay<TextToolExtendData>, patch: Partial<TextToolExtendData>): void {
+  const base = isObject(overlay.extendData) ? overlay.extendData : {}
+  overlay.extendData = { ...base, ...patch }
+  overlay.invalidateFigures()
+}
+
 function openEditor (chart: Chart, overlay: Overlay<TextToolExtendData>): void {
   // Mirror/ghost/locked overlays never open an editor — editing happens on
   // the owning chart and propagates through the sync layer.
@@ -153,7 +182,51 @@ const textNote: OverlayTemplate<TextToolExtendData> = {
       lock: overlay.lock,
       keyPrefix: 'anchor_'
     }))
+    // TradingView's wrap-width handle: a square on the box's right edge,
+    // shown only when word wrapping is enabled (wordWrapWidth set) —
+    // dragging it resizes the wrap width, not the anchor.
+    const interactive = !overlay.lock && !overlay.isDrawing() &&
+      ((isSelected ?? false) || (isHovered ?? false))
+    if (interactive && data.wordWrapWidth !== undefined) {
+      const box = computeTextBoxLayout(data, coordinates[0])
+      figures.push(shapeHandleFigure(
+        TEXT_WRAP_HANDLE_KEY,
+        { x: box.boxLeft + box.boxWidth, y: box.boxTop + box.boxHeight / 2 },
+        { pointIndex: 0, moveDirection: 'horz', cursor: 'ew-resize', isTouch }
+      ))
+    }
     return figures
+  },
+  // Wrap-handle drags claim pointIndex 0 with 'horz' constraint: the kernel
+  // writes the cursor's dataIndex into points[0]. Restore the anchor and
+  // store the pointer's px distance from the box's left edge instead —
+  // the positionCommon `pos_width_handle` pattern.
+  performEventPressedMove: function (this: Overlay<TextToolExtendData>, params) {
+    if (params.figureKey !== TEXT_WRAP_HANDLE_KEY) {
+      return
+    }
+    const chart = lineChartOf(this)
+    const ext = (this.extendData as TextToolExtendData | undefined) ?? {}
+    const moved = params.points[0]
+    const prev = params.prevPoints[0]
+    if (chart === undefined || ext.wordWrapWidth === undefined) {
+      return
+    }
+    const cursorIndex = isValid(moved) ? moved.dataIndex : undefined
+    if (isValid(moved) && isValid(prev)) {
+      moved.timestamp = prev.timestamp
+      moved.dataIndex = prev.dataIndex
+      moved.value = prev.value
+    }
+    const prevPx = isValid(prev) ? pointToCoordinate(chart, this.paneId, prev) : null
+    const cursorX = isNumber(cursorIndex) ? indexToPaneX(chart, this.paneId, cursorIndex) : null
+    if (prevPx === null || cursorX === null) {
+      return
+    }
+    const box = computeTextBoxLayout(getBoxData(this), prevPx)
+    writeTextExt(this, {
+      wordWrapWidth: Math.max(cursorX - box.boxLeft, MIN_WRAP_WIDTH_PX)
+    })
   },
   onDrawEnd: ({ overlay, chart }) => {
     // Placing a text tool drops straight into editing (TV parity) — but

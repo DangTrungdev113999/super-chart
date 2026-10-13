@@ -84,15 +84,13 @@ const dateRange: OverlayTemplate<DateRangeExtendData> = {
       key: 'dr_edge_l',
       type: 'line',
       attrs: { coordinates: [{ x, y }, { x, y: y + height }] },
-      styles: lineFigureStyle,
-      ignoreEvent: true
+      styles: lineFigureStyle
     })
     figures.push({
       key: 'dr_edge_r',
       type: 'line',
       attrs: { coordinates: [{ x: x + width, y }, { x: x + width, y: y + height }] },
-      styles: lineFigureStyle,
-      ignoreEvent: true
+      styles: lineFigureStyle
     })
 
     // Horizontal arrow at mid-height pointing toward the end anchor.
@@ -101,8 +99,7 @@ const dateRange: OverlayTemplate<DateRangeExtendData> = {
       key: 'dr_arrow',
       type: 'line',
       attrs: { coordinates: [{ x: start.x, y: midY }, { x: end.x, y: midY }] },
-      styles: lineFigureStyle,
-      ignoreEvent: true
+      styles: lineFigureStyle
     })
     figures.push({
       key: 'dr_arrow_head',
@@ -114,8 +111,7 @@ const dateRange: OverlayTemplate<DateRangeExtendData> = {
           { x: end.x - ARROW_SIZE * direction, y: midY + ARROW_SIZE / 2 }
         ]
       },
-      styles: { style: 'solid', color, size: 1 },
-      ignoreEvent: true
+      styles: { style: 'solid', color, size: 1 }
     })
 
     // Label pill below the band: "N thanh, 3n 5h" (+ "Khối lượng 1.2M").

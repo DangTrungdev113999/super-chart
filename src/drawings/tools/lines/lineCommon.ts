@@ -14,19 +14,25 @@
 
 import type Coordinate from '../../../common/Coordinate'
 import type Point from '../../../common/Point'
+import type Nullable from '../../../common/Nullable'
+import type Bounding from '../../../common/Bounding'
 import type { Chart } from '../../../Chart'
 import type { YAxis } from '../../../component/YAxis'
 import type {
   Overlay,
+  OverlayEventCallback,
   OverlayFigure,
   OverlayPerformEventParams
 } from '../../../component/Overlay'
 
-import { isArray, isNumber, isString, isValid } from '../../../common/utils/typeChecks'
+import { isArray, isNumber, isObject, isString, isValid } from '../../../common/utils/typeChecks'
 import type { LineType } from '../../../common/Styles'
 import { formatPrecision } from '../../../common/utils/format'
 import { calcTextWidth } from '../../../common/utils/canvas'
 import { isSnap45Active, snap45Coordinate } from '../../interaction/snap45'
+import { commitText, liveTextOf, openAnnotationEditor } from '../annotations/common'
+import type { TextBoxData, TextBoxVertAlign } from '../../text/textBox'
+import type { ChartInternal } from '../../../extension/overlay/lineCommon'
 import {
   getArrowCoordinates,
   getExtendedCoordinates,
@@ -292,6 +298,22 @@ export interface LabelSpec {
   vAlign?: string
 }
 
+/**
+ * Label style/position fields honoring both kernel and consumer field
+ * casing — resolved regardless of `text` presence: the in-place editor
+ * needs the label's geometry even while the committed text is empty.
+ */
+export function labelStyleOf (ext: LineExtendData): LabelSpec {
+  return {
+    textColor: ext.textcolor ?? ext.textColor,
+    fontSize: ext.fontsize ?? ext.textSize ?? 14,
+    bold: ext.bold ?? ext.textBold ?? false,
+    italic: ext.italic ?? ext.textItalic ?? false,
+    hAlign: ext.horzLabelsAlign ?? ext.textHorizontalAlign ?? 'center',
+    vAlign: ext.vertLabelsAlign ?? ext.textVerticalAlign ?? 'top'
+  }
+}
+
 /** Read label fields honoring both kernel and consumer field casing. */
 export function labelSpecOf (ext: LineExtendData): LabelSpec | null {
   const text = ext.text
@@ -301,15 +323,17 @@ export function labelSpecOf (ext: LineExtendData): LabelSpec | null {
   if (ext.showLabel === false) {
     return null
   }
-  return {
-    text,
-    textColor: ext.textcolor ?? ext.textColor,
-    fontSize: ext.fontsize ?? ext.textSize ?? 14,
-    bold: ext.bold ?? ext.textBold ?? false,
-    italic: ext.italic ?? ext.textItalic ?? false,
-    hAlign: ext.horzLabelsAlign ?? ext.textHorizontalAlign ?? 'center',
-    vAlign: ext.vertLabelsAlign ?? ext.textVerticalAlign ?? 'top'
-  }
+  return { text, ...labelStyleOf(ext) }
+}
+
+/**
+ * labelSpecOf honoring the in-flight editor buffer — while a session is
+ * open the figure paints the typed text; an empty buffer hides the label
+ * (and its line gap) live, matching the committed `text === ''` state.
+ */
+export function liveLabelSpecOf (overlay: Overlay, ext: LineExtendData): LabelSpec | null {
+  const live = liveTextOf(overlay)
+  return labelSpecOf(live !== undefined ? { ...ext, text: live } : ext)
 }
 
 export interface DiagonalLabelLayout {
@@ -323,25 +347,40 @@ export interface DiagonalLabelLayout {
 }
 
 /**
- * TradingView trend-line label layout: rotated with the line, anchored at
- * 15%/50%/85% along the RENDERED line (extension included) and offset
- * perpendicular when vAlign is top/bottom. `center`/`middle` puts the text
- * on the line and reports a gap interval for the caller to cut out.
+ * A label's rendered anchor — shared by the text figure (whose `rotation`
+ * pivots on attrs x/y) and the in-place editor (whose TextBoxData `angle`
+ * rotates around the alignment-dependent rotation point that lands on the
+ * same pixel when the box has zero padding).
  */
-export function layoutDiagonalLabel (
-  key: string,
+export interface LineLabelAnchor {
+  x: number
+  y: number
+  /** Rendered glyph rotation in radians — figure `rotation`, editor `angle`. */
+  angle: number
+  /** Canvas baseline of the rendered label — maps to the editor's vertAlign. */
+  baseline: CanvasTextBaseline
+  /** Figure align / editor horzAlign — 'center' (default) on rotated labels. */
+  horzAlign?: 'left' | 'center' | 'right'
+}
+
+export interface DiagonalLabelAnchor extends LineLabelAnchor {
+  /** Fraction along lineStart→lineEnd the label anchors at (0.15/0.5/0.85). */
+  t: number
+}
+
+/**
+ * Diagonal-label anchor math factored out of layoutDiagonalLabel: rotated
+ * with the line, anchored at 15%/50%/85% along the RENDERED span
+ * (extension included) and offset perpendicular when vAlign is
+ * top/bottom; `center`/`middle` keep the text on the line.
+ */
+export function diagonalLabelAnchor (
   spec: LabelSpec,
   lineStart: Coordinate,
   lineEnd: Coordinate,
-  lineColor: string,
   lineWidth: number
-): DiagonalLabelLayout | null {
-  const text = spec.text
-  if (!isString(text) || text === '') {
-    return null
-  }
+): DiagonalLabelAnchor {
   const fontSize = spec.fontSize ?? 14
-  const textColor = spec.textColor ?? lineColor
 
   const dx = lineEnd.x - lineStart.x
   const dy = lineEnd.y - lineStart.y
@@ -370,16 +409,47 @@ export function layoutDiagonalLabel (
   const perpX = -Math.sin(angle) * offsetPx
   const perpY = Math.cos(angle) * offsetPx
 
+  return {
+    x: anchorX + perpX,
+    y: anchorY + perpY,
+    angle,
+    baseline,
+    t
+  }
+}
+
+/**
+ * TradingView trend-line label layout: rotated with the line, anchored at
+ * 15%/50%/85% along the RENDERED line (extension included) and offset
+ * perpendicular when vAlign is top/bottom. `center`/`middle` puts the text
+ * on the line and reports a gap interval for the caller to cut out.
+ */
+export function layoutDiagonalLabel (
+  key: string,
+  spec: LabelSpec,
+  lineStart: Coordinate,
+  lineEnd: Coordinate,
+  lineColor: string,
+  lineWidth: number
+): DiagonalLabelLayout | null {
+  const text = spec.text
+  if (!isString(text) || text === '') {
+    return null
+  }
+  const fontSize = spec.fontSize ?? 14
+  const textColor = spec.textColor ?? lineColor
+  const anchor = diagonalLabelAnchor(spec, lineStart, lineEnd, lineWidth)
+
   const figure: OverlayFigure = {
     key,
     type: 'text',
     attrs: {
-      x: anchorX + perpX,
-      y: anchorY + perpY,
+      x: anchor.x,
+      y: anchor.y,
       text,
       align: 'center' as CanvasTextAlign,
-      baseline,
-      rotation: angle
+      baseline: anchor.baseline,
+      rotation: anchor.angle
     },
     styles: {
       color: textColor,
@@ -387,18 +457,19 @@ export function layoutDiagonalLabel (
       weight: spec.bold === true ? 'bold' : 'normal',
       style: spec.italic === true ? 'italic' : 'normal',
       backgroundColor: 'transparent'
-    },
-    ignoreEvent: true
+    }
   }
 
-  const onLine = vAlign === 'center' || vAlign === 'middle'
+  const dx = lineEnd.x - lineStart.x
+  const dy = lineEnd.y - lineStart.y
+  const onLine = spec.vAlign === 'center' || spec.vAlign === 'middle'
   if (onLine && (dx !== 0 || dy !== 0)) {
     const lineLen = Math.sqrt(dx * dx + dy * dy)
     const textLen = calcTextWidth(text, fontSize, spec.bold === true ? 'bold' : 'normal') + 16
     const halfGap = Math.min(textLen / 2, lineLen * 0.4)
     const gapT: [number, number] = [
-      Math.max(0, t - halfGap / lineLen),
-      Math.min(1, t + halfGap / lineLen)
+      Math.max(0, anchor.t - halfGap / lineLen),
+      Math.min(1, anchor.t + halfGap / lineLen)
     ]
     return { figure, gap: gapT }
   }
@@ -452,6 +523,38 @@ export function pushLineWithGap (
 }
 
 /**
+ * Flat-label anchor math factored out of pushFlatLabel: centered (or 15%/
+ * 85% for hAlign left/right) along `x0..x1`, offset above/below the line
+ * when vAlign is top/bottom, unrotated.
+ */
+export function flatLabelAnchor (
+  spec: LabelSpec,
+  x0: number,
+  x1: number,
+  y: number,
+  lineWidth: number
+): LineLabelAnchor {
+  const fontSize = spec.fontSize ?? 14
+  const leftX = Math.min(x0, x1)
+  const width = Math.abs(x1 - x0)
+  let tx = leftX + width * 0.5
+  if (spec.hAlign === 'left') tx = leftX + width * 0.15
+  else if (spec.hAlign === 'right') tx = leftX + width * 0.85
+
+  const gap = 5
+  let offsetY = 0
+  let baseline: CanvasTextBaseline = 'middle'
+  if (spec.vAlign === 'top') {
+    offsetY = -(lineWidth / 2 + gap + fontSize)
+    baseline = 'bottom'
+  } else if (spec.vAlign === 'bottom') {
+    offsetY = lineWidth / 2 + gap + fontSize
+    baseline = 'top'
+  }
+  return { x: tx, y: y + offsetY, angle: 0, baseline }
+}
+
+/**
  * Non-rotated label over a horizontal span (horizontal* tools). `x0..x1`
  * is the alignment range, `y` the line's vertical position.
  */
@@ -470,36 +573,52 @@ export function pushFlatLabel (
     return
   }
   const fontSize = spec.fontSize ?? 14
-  const leftX = Math.min(x0, x1)
-  const width = Math.abs(x1 - x0)
-  let tx = leftX + width * 0.5
-  if (spec.hAlign === 'left') tx = leftX + width * 0.15
-  else if (spec.hAlign === 'right') tx = leftX + width * 0.85
-
-  const gap = 5
-  let offsetY = 0
-  let baseline: CanvasTextBaseline = 'middle'
-  if (spec.vAlign === 'top') {
-    offsetY = -(lineWidth / 2 + gap + fontSize)
-    baseline = 'bottom'
-  } else if (spec.vAlign === 'bottom') {
-    offsetY = lineWidth / 2 + gap + fontSize
-    baseline = 'top'
-  }
+  const anchor = flatLabelAnchor(spec, x0, x1, y, lineWidth)
 
   figures.push({
     key,
     type: 'text',
-    attrs: { x: tx, y: y + offsetY, text, align: 'center' as CanvasTextAlign, baseline },
+    attrs: { x: anchor.x, y: anchor.y, text, align: 'center' as CanvasTextAlign, baseline: anchor.baseline },
     styles: {
       color: spec.textColor ?? lineColor,
       size: fontSize,
       weight: spec.bold === true ? 'bold' : 'normal',
       style: spec.italic === true ? 'italic' : 'normal',
       backgroundColor: 'transparent'
-    },
-    ignoreEvent: true
+    }
   })
+}
+
+/**
+ * Vert-label anchor math factored out of pushVertLabel: rotated -90°,
+ * centered (or 15%/85% for hAlign left/right) along `y0..y1`, offset to
+ * the line's right/left when vAlign is top/bottom.
+ */
+export function vertLabelAnchor (
+  spec: LabelSpec,
+  x: number,
+  y0: number,
+  y1: number,
+  lineWidth: number
+): LineLabelAnchor {
+  const fontSize = spec.fontSize ?? 14
+  const topY = Math.min(y0, y1)
+  const spanH = Math.abs(y1 - y0)
+  let ty = topY + spanH * 0.5
+  if (spec.hAlign === 'left') ty = topY + spanH * 0.15
+  else if (spec.hAlign === 'right') ty = topY + spanH * 0.85
+
+  const gap = 5
+  let offsetX = 0
+  let baseline: CanvasTextBaseline = 'middle'
+  if (spec.vAlign === 'top') {
+    offsetX = lineWidth / 2 + gap + fontSize
+    baseline = 'bottom'
+  } else if (spec.vAlign === 'bottom') {
+    offsetX = -(lineWidth / 2 + gap + fontSize)
+    baseline = 'top'
+  }
+  return { x: x + offsetX, y: ty, angle: -Math.PI / 2, baseline }
 }
 
 /**
@@ -521,33 +640,18 @@ export function pushVertLabel (
     return
   }
   const fontSize = spec.fontSize ?? 14
-  const topY = Math.min(y0, y1)
-  const spanH = Math.abs(y1 - y0)
-  let ty = topY + spanH * 0.5
-  if (spec.hAlign === 'left') ty = topY + spanH * 0.15
-  else if (spec.hAlign === 'right') ty = topY + spanH * 0.85
-
-  const gap = 5
-  let offsetX = 0
-  let baseline: CanvasTextBaseline = 'middle'
-  if (spec.vAlign === 'top') {
-    offsetX = lineWidth / 2 + gap + fontSize
-    baseline = 'bottom'
-  } else if (spec.vAlign === 'bottom') {
-    offsetX = -(lineWidth / 2 + gap + fontSize)
-    baseline = 'top'
-  }
+  const anchor = vertLabelAnchor(spec, x, y0, y1, lineWidth)
 
   figures.push({
     key,
     type: 'text',
     attrs: {
-      x: x + offsetX,
-      y: ty,
+      x: anchor.x,
+      y: anchor.y,
       text,
       align: 'center' as CanvasTextAlign,
-      baseline,
-      rotation: -Math.PI / 2
+      baseline: anchor.baseline,
+      rotation: anchor.angle
     },
     styles: {
       color: spec.textColor ?? lineColor,
@@ -555,8 +659,7 @@ export function pushVertLabel (
       weight: spec.bold === true ? 'bold' : 'normal',
       style: spec.italic === true ? 'italic' : 'normal',
       backgroundColor: 'transparent'
-    },
-    ignoreEvent: true
+    }
   })
 }
 
@@ -586,8 +689,7 @@ export function pushAnchorPriceLabel (
       align: 'center' as CanvasTextAlign,
       baseline: 'bottom' as CanvasTextBaseline
     },
-    styles: { color, size: 11, weight: 'normal', backgroundColor: 'transparent' },
-    ignoreEvent: true
+    styles: { color, size: 11, weight: 'normal', backgroundColor: 'transparent' }
   })
 }
 
@@ -623,8 +725,7 @@ export function pushSidePriceLabel (
       paddingRight: 4,
       paddingTop: 2,
       paddingBottom: 2
-    },
-    ignoreEvent: true
+    }
   })
 }
 
@@ -744,8 +845,7 @@ export function pushInlineStats (
     key,
     type: 'text',
     attrs: { x: sx, y: sy, text: statsText, align: sAlign, baseline: sBaseline },
-    styles: { color, size: 11, weight: 'normal', backgroundColor: 'transparent' },
-    ignoreEvent: true
+    styles: { color, size: 11, weight: 'normal', backgroundColor: 'transparent' }
   })
 }
 
@@ -758,6 +858,8 @@ export interface AxisViewParams {
   coordinates: Coordinate[]
   bounding: { width: number, height: number }
   lineColor: string
+  /** Axis pills render only while the overlay is selected (kernel parity). */
+  isSelected?: boolean
   /** Required for y-axis price pills; unused by the x-axis builder. */
   precision?: number
   yAxis?: { isFromZero: () => boolean }
@@ -767,6 +869,9 @@ export interface AxisViewParams {
 export function buildYAxisBandFigures (keyPrefix: string, params: AxisViewParams): OverlayFigure[] {
   const { overlay, coordinates, bounding, lineColor, precision, yAxis } = params
   const figures: OverlayFigure[] = []
+  if (params.isSelected !== true) {
+    return figures
+  }
   if (coordinates.length >= 2) {
     const stripTop = Math.min(coordinates[0].y, coordinates[1].y)
     const stripH = Math.abs(coordinates[1].y - coordinates[0].y)
@@ -797,6 +902,9 @@ export function buildYAxisBandFigures (keyPrefix: string, params: AxisViewParams
 export function buildXAxisBandFigures (keyPrefix: string, params: AxisViewParams): OverlayFigure[] {
   const { overlay, coordinates, bounding, lineColor } = params
   const figures: OverlayFigure[] = []
+  if (params.isSelected !== true) {
+    return figures
+  }
   if (coordinates.length >= 2) {
     const stripLeft = Math.min(coordinates[0].x, coordinates[1].x)
     const stripW = Math.abs(coordinates[1].x - coordinates[0].x)
@@ -821,4 +929,192 @@ export function buildXAxisBandFigures (keyPrefix: string, params: AxisViewParams
     }
   }
   return figures
+}
+
+// ═══════════════════════════════════════
+// In-place label text editor (TradingView parity)
+// ═══════════════════════════════════════
+
+/**
+ * overlay.points converted to pane CSS pixels — the same array
+ * createPointFigures receives as `coordinates`. Partial points are
+ * dropped, so a mid-draw overlay yields a short list.
+ */
+export function overlayPixelCoordinates (chart: Chart, overlay: Overlay): Coordinate[] {
+  const converted = chart.convertToPixel(overlay.points, { paneId: overlay.paneId })
+  if (!isArray(converted)) {
+    return []
+  }
+  const coordinates: Coordinate[] = []
+  for (const c of converted) {
+    if (isValid(c) && isNumber(c.x) && isNumber(c.y)) {
+      coordinates.push({ x: c.x, y: c.y })
+    }
+  }
+  return coordinates
+}
+
+/**
+ * The pane's main-widget bounding in the same CSS-pixel space
+ * createPointFigures receives — needed by label span math that runs to
+ * the pane edges (extended/ray/straight tools).
+ */
+export function linePaneBounding (chart: Chart, overlay: Overlay): Bounding | undefined {
+  // 'main' = the overlay widget's rect — the same bounding createPointFigures gets.
+  return chart.getSize(overlay.paneId, 'main') ?? undefined
+}
+
+/**
+ * Canvas baseline → editor-box vertAlign. The rendered figure is bare
+ * text (no padding), so with `boxPadding: 0` the box edge/center lands on
+ * the exact pixel the figure's baseline occupies.
+ */
+export function labelBaselineVertAlign (baseline: CanvasTextBaseline): TextBoxVertAlign {
+  if (baseline === 'top') {
+    return 'top'
+  }
+  if (baseline === 'bottom') {
+    return 'bottom'
+  }
+  return 'middle'
+}
+
+/**
+ * Recompute the label's rendered anchor at event time — the editor runs
+ * outside createPointFigures, so each tool re-derives its span (points →
+ * pixels, pane bounding, extension/ray/stored-angle math) exactly as its
+ * figure pass does. null → the editor falls back to the first point.
+ * `ext` is LineExtendData — every label field lives there.
+ */
+export type LineLabelAnchorFn =
+  (chart: Chart, overlay: Overlay, ext: LineExtendData) => Nullable<LineLabelAnchor>
+
+/**
+ * Open the in-place DOM editor over a line's rendered label. The box
+ * mirrors the text figure: `boxPadding: 0` so the box edge sits on the
+ * baseline pixel, and horzAlign/vertAlign chosen so the editor's
+ * alignment-dependent rotation point equals attrs x/y — the same pivot
+ * the canvas `rotation` spins around (editor `angle` = figure rotation).
+ *
+ * Commit writes `extendData.text` via the safe-merge commitText; an empty
+ * commit writes `''` — the label hides but the line overlay is never
+ * removed (onEmpty suppresses the editor's default overlay removal).
+ */
+export function openLineLabelEditor<E extends object> (
+  chart: Chart,
+  overlay: Overlay<E>,
+  anchorFn: LineLabelAnchorFn
+): void {
+  const readExt = (): LineExtendData => (
+    isObject(overlay.extendData) ? overlay.extendData : {}
+  ) as LineExtendData
+  openAnnotationEditor<E>({
+    chart,
+    overlay,
+    forbidLineBreaks: true,
+    data: (): TextBoxData => {
+      const ext = readExt()
+      const style = labelStyleOf(ext)
+      const anchor = anchorFn(chart, overlay, ext)
+      const horzAlign = anchor?.horzAlign ?? 'center'
+      return {
+        text: liveTextOf(overlay) ?? ext.text ?? '',
+        fontSize: style.fontSize ?? 14,
+        bold: style.bold,
+        italic: style.italic,
+        horzAlign,
+        vertAlign: anchor !== null ? labelBaselineVertAlign(anchor.baseline) : 'middle',
+        horzTextAlign: horzAlign,
+        angle: anchor?.angle ?? 0,
+        boxPadding: 0
+      }
+    },
+    anchor: (): Coordinate => {
+      const anchor = anchorFn(chart, overlay, readExt())
+      if (anchor !== null) {
+        return { x: anchor.x, y: anchor.y }
+      }
+      const coordinate = chart.convertToPixel(overlay.points[0] ?? {}, { paneId: overlay.paneId }) as Partial<Coordinate>
+      return { x: coordinate.x ?? 0, y: coordinate.y ?? 0 }
+    },
+    onCommit: (value) => {
+      commitText(chart, overlay, value)
+    },
+    onEmpty: () => {
+      commitText(chart, overlay, '')
+    }
+  })
+}
+
+export interface LineLabelEditorHooks<E extends object> {
+  onClick: OverlayEventCallback<E>
+  onDoubleClick: OverlayEventCallback<E>
+}
+
+/**
+ * The two template hooks every label-bearing line tool shares.
+ *
+ * - onDoubleClick anywhere on the overlay opens the editor over the label
+ *   (OverlayView already suppresses the hook while isDrawing()).
+ * - onClick opens it only when the click lands ON the label figure
+ *   (`figure.key === figureKey`) AND the overlay was already selected —
+ *   the view fires onClick before committing the click's new selection,
+ *   so getClickOverlayInfo() here still reports the pre-click state.
+ * Ghost/synced/locked overlays never open an editor.
+ */
+export function lineLabelEditorHooks<E extends LineExtendData> (
+  figureKey: string,
+  anchorFn: LineLabelAnchorFn
+): LineLabelEditorHooks<E> {
+  return {
+    onClick: ({ chart, overlay, figure }) => {
+      if (overlay.ghost || overlay.synced || overlay.lock || overlay.isDrawing()) {
+        return
+      }
+      if (figure?.key !== figureKey) {
+        return
+      }
+      const clickInfo = (chart as unknown as ChartInternal).getChartStore().getClickOverlayInfo()
+      if (clickInfo.overlay?.id === overlay.id && clickInfo.figureType !== 'none') {
+        openLineLabelEditor(chart, overlay, anchorFn)
+      }
+    },
+    onDoubleClick: ({ chart, overlay }) => {
+      if (overlay.ghost || overlay.synced || overlay.lock || overlay.isDrawing()) {
+        return
+      }
+      openLineLabelEditor(chart, overlay, anchorFn)
+    }
+  }
+}
+
+/**
+ * Anchor-fn factory shared by every label-bearing line tool. It re-runs
+ * the coordinate plumbing (points → pane pixels, pane bounding, label
+ * style, line width) and delegates only the tool-specific span math to
+ * `resolve` — the same math the tool's createPointFigures applies.
+ * Resolve returns null when the geometry isn't available (mid-draw).
+ */
+export function lineLabelAnchorFn (
+  resolve: (
+    coordinates: Coordinate[],
+    bounding: Bounding,
+    ext: LineExtendData,
+    style: LabelSpec,
+    lineWidth: number
+  ) => Nullable<LineLabelAnchor>
+): LineLabelAnchorFn {
+  return (chart, overlay, ext) => {
+    const bounding = linePaneBounding(chart, overlay)
+    if (bounding === undefined) {
+      return null
+    }
+    return resolve(
+      overlayPixelCoordinates(chart, overlay),
+      bounding,
+      ext,
+      labelStyleOf(ext),
+      lineSizeOf(overlay, chart, ext.lineWidth)
+    )
+  }
 }

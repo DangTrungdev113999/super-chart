@@ -332,8 +332,7 @@ export function shapeTextFigure (
       // through fontStyle or the font string is never italicized.
       fontStyle: spec.italic ? 'italic' : undefined,
       backgroundColor: 'transparent'
-    },
-    ignoreEvent: true
+    }
   }
 }
 

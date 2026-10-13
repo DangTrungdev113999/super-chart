@@ -155,7 +155,10 @@ const gannFixed: OverlayTemplate<GannFixedExtendData> = {
     return figures
   }),
 
-  createXAxisFigures: ({ chart, overlay, coordinates }) => {
+  createXAxisFigures: ({ chart, overlay, coordinates, isSelected }) => {
+    if (isSelected !== true) {
+      return []
+    }
     if (coordinates.length < 1) {
       return []
     }
@@ -189,7 +192,10 @@ const gannFixed: OverlayTemplate<GannFixedExtendData> = {
     return figures
   },
 
-  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis }) => {
+  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis, isSelected }) => {
+    if (isSelected !== true) {
+      return []
+    }
     if (coordinates.length < 1) {
       return []
     }

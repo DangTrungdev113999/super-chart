@@ -153,15 +153,13 @@ const gannBox: OverlayTemplate<GannBoxExtendData> = {
               key: `gb_hband_${curr}`,
               type: 'rect',
               attrs: { x: minX, y: Math.min(ys[prev], ys[curr]), width, height: Math.abs(ys[curr] - ys[prev]) },
-              styles: { style: 'fill', color: alphaColor(level.color, alpha) },
-              ignoreEvent: true
+              styles: { style: 'fill', color: alphaColor(level.color, alpha) }
             })
             figures.push({
               key: `gb_vband_${curr}`,
               type: 'rect',
               attrs: { x: Math.min(xs[prev], xs[curr]), y: minY, width: Math.abs(xs[curr] - xs[prev]), height },
-              styles: { style: 'fill', color: alphaColor(level.color, alpha) },
-              ignoreEvent: true
+              styles: { style: 'fill', color: alphaColor(level.color, alpha) }
             })
           }
         }
@@ -274,7 +272,10 @@ const gannBox: OverlayTemplate<GannBoxExtendData> = {
     return figures
   }),
 
-  createXAxisFigures: ({ overlay, coordinates }) => {
+  createXAxisFigures: ({ overlay, coordinates, isSelected }) => {
+    if (isSelected !== true) {
+      return []
+    }
     if (coordinates.length < 1) {
       return []
     }
@@ -295,7 +296,10 @@ const gannBox: OverlayTemplate<GannBoxExtendData> = {
     return figures
   },
 
-  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis }) => {
+  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis, isSelected }) => {
+    if (isSelected !== true) {
+      return []
+    }
     if (coordinates.length < 1) {
       return []
     }

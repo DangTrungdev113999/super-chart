@@ -329,8 +329,7 @@ const forecast: OverlayTemplate<ForecastExtendData> = {
         style: 'stroke',
         color: lineColorAlpha,
         lineWidth: ext.lineWidth
-      },
-      ignoreEvent: true
+      }
     })
 
     // ─── 2. Curve hitbox (transparent tube, body-drag surface) ───
@@ -384,8 +383,7 @@ const forecast: OverlayTemplate<ForecastExtendData> = {
         color: alpha(ext.sourceTextColor, ext.sourceTextOpacity),
         size: PILL_FONT_SIZE,
         backgroundColor: 'transparent'
-      },
-      ignoreEvent: true
+      }
     })
     figures.push({
       key: 'fc_p1_text_date',
@@ -401,8 +399,7 @@ const forecast: OverlayTemplate<ForecastExtendData> = {
         color: alpha(ext.sourceTextColor, ext.sourceTextOpacity),
         size: PILL_FONT_SIZE,
         backgroundColor: 'transparent'
-      },
-      ignoreEvent: true
+      }
     })
 
     // ─── 4. P2 info pill ───
@@ -467,8 +464,7 @@ const forecast: OverlayTemplate<ForecastExtendData> = {
         color: alpha(ext.targetTextColor, ext.targetTextOpacity),
         size: PILL_FONT_SIZE,
         backgroundColor: 'transparent'
-      },
-      ignoreEvent: true
+      }
     })
     figures.push({
       key: 'fc_p2_text_line2',
@@ -484,8 +480,7 @@ const forecast: OverlayTemplate<ForecastExtendData> = {
         color: alpha(ext.targetTextColor, ext.targetTextOpacity),
         size: PILL_FONT_SIZE,
         backgroundColor: 'transparent'
-      },
-      ignoreEvent: true
+      }
     })
 
     // ─── 5. Status badge (hidden while drawing) ───
@@ -533,8 +528,7 @@ const forecast: OverlayTemplate<ForecastExtendData> = {
           color: alpha(badgeTextHex, badgeTextOpacity),
           size: BADGE_FONT_SIZE,
           backgroundColor: 'transparent'
-        },
-        ignoreEvent: true
+        }
       })
     }
 
@@ -545,8 +539,7 @@ const forecast: OverlayTemplate<ForecastExtendData> = {
       key: 'fc_arrow',
       type: 'polygon',
       attrs: { coordinates: arrowPoly },
-      styles: { style: 'fill', color: lineColorAlpha },
-      ignoreEvent: true
+      styles: { style: 'fill', color: lineColorAlpha }
     })
 
     // ─── 7. Endpoint dots + selection anchors ───
@@ -556,15 +549,13 @@ const forecast: OverlayTemplate<ForecastExtendData> = {
       key: 'fc_dot_p1',
       type: 'circle',
       attrs: { x: c1.x, y: c1.y, r: DOT_RADIUS },
-      styles: { style: 'fill', color: DOT_COLOR },
-      ignoreEvent: true
+      styles: { style: 'fill', color: DOT_COLOR }
     })
     figures.push({
       key: 'fc_dot_p2',
       type: 'circle',
       attrs: { x: c2.x, y: c2.y, r: DOT_RADIUS },
-      styles: { style: 'fill', color: DOT_COLOR },
-      ignoreEvent: true
+      styles: { style: 'fill', color: DOT_COLOR }
     })
     figures.push(...createAnchorFigures({
       coordinates,
@@ -581,8 +572,7 @@ const forecast: OverlayTemplate<ForecastExtendData> = {
       key: 'fc_footer_bg_p1',
       type: 'circle',
       attrs: { x: c1.x, y: footerY, r: FOOTER_RADIUS },
-      styles: { style: 'stroke', borderColor: FOOTER_COLOR, borderSize: FOOTER_BORDER_SIZE },
-      ignoreEvent: true
+      styles: { style: 'stroke', borderColor: FOOTER_COLOR, borderSize: FOOTER_BORDER_SIZE }
     })
     figures.push({
       key: 'fc_footer_text_p1',
@@ -594,15 +584,13 @@ const forecast: OverlayTemplate<ForecastExtendData> = {
         align: 'center' as CanvasTextAlign,
         baseline: 'middle' as CanvasTextBaseline
       },
-      styles: { color: FOOTER_COLOR, size: FOOTER_FONT_SIZE, backgroundColor: 'transparent' },
-      ignoreEvent: true
+      styles: { color: FOOTER_COLOR, size: FOOTER_FONT_SIZE, backgroundColor: 'transparent' }
     })
     figures.push({
       key: 'fc_footer_bg_p2',
       type: 'circle',
       attrs: { x: c2.x, y: footerY, r: FOOTER_RADIUS },
-      styles: { style: 'stroke', borderColor: FOOTER_COLOR, borderSize: FOOTER_BORDER_SIZE },
-      ignoreEvent: true
+      styles: { style: 'stroke', borderColor: FOOTER_COLOR, borderSize: FOOTER_BORDER_SIZE }
     })
     figures.push({
       key: 'fc_footer_text_p2',
@@ -614,8 +602,7 @@ const forecast: OverlayTemplate<ForecastExtendData> = {
         align: 'center' as CanvasTextAlign,
         baseline: 'middle' as CanvasTextBaseline
       },
-      styles: { color: FOOTER_COLOR, size: FOOTER_FONT_SIZE, backgroundColor: 'transparent' },
-      ignoreEvent: true
+      styles: { color: FOOTER_COLOR, size: FOOTER_FONT_SIZE, backgroundColor: 'transparent' }
     })
 
     return figures
@@ -653,8 +640,7 @@ const forecast: OverlayTemplate<ForecastExtendData> = {
         key: 'fc_xstrip',
         type: 'rect',
         attrs: { x: stripLeftX, y: 0, width: stripWidthX, height: bounding.height },
-        styles: { style: 'fill', color: alpha(AXIS_STRIP_COLOR, AXIS_STRIP_OPACITY) },
-        ignoreEvent: true
+        styles: { style: 'fill', color: alpha(AXIS_STRIP_COLOR, AXIS_STRIP_OPACITY) }
       })
     }
 
@@ -678,8 +664,7 @@ const forecast: OverlayTemplate<ForecastExtendData> = {
           paddingBottom: XAXIS_PILL_PADDING_V,
           borderRadius: PILL_BORDER_RADIUS,
           size: PILL_FONT_SIZE
-        },
-        ignoreEvent: true
+        }
       })
     }
     if (p2Date.length > 0) {
@@ -702,8 +687,7 @@ const forecast: OverlayTemplate<ForecastExtendData> = {
           paddingBottom: XAXIS_PILL_PADDING_V,
           borderRadius: PILL_BORDER_RADIUS,
           size: PILL_FONT_SIZE
-        },
-        ignoreEvent: true
+        }
       })
     }
 
@@ -736,8 +720,7 @@ const forecast: OverlayTemplate<ForecastExtendData> = {
         key: 'fc_ystrip',
         type: 'rect',
         attrs: { x: 0, y: stripTopY, width: bounding.width, height: stripHeightY },
-        styles: { style: 'fill', color: alpha(AXIS_STRIP_COLOR, AXIS_STRIP_OPACITY) },
-        ignoreEvent: true
+        styles: { style: 'fill', color: alpha(AXIS_STRIP_COLOR, AXIS_STRIP_OPACITY) }
       })
     }
 
@@ -761,8 +744,7 @@ const forecast: OverlayTemplate<ForecastExtendData> = {
           paddingBottom: XAXIS_PILL_PADDING_V,
           borderRadius: PILL_BORDER_RADIUS,
           size: PILL_FONT_SIZE
-        },
-        ignoreEvent: true
+        }
       })
     }
     if (p2.value != null) {
@@ -785,8 +767,7 @@ const forecast: OverlayTemplate<ForecastExtendData> = {
           paddingBottom: XAXIS_PILL_PADDING_V,
           borderRadius: PILL_BORDER_RADIUS,
           size: PILL_FONT_SIZE
-        },
-        ignoreEvent: true
+        }
       })
     }
 

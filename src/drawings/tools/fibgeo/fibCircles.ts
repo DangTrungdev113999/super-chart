@@ -123,8 +123,7 @@ const fibCircles: OverlayTemplate<FibCirclesExtendData> = {
                 height: 0,
                 path: ellipseRingPath(cx, cy, ring.rx, ring.ry, inner.rx, inner.ry)
               },
-              styles: { style: 'fill', color: alphaColor(ring.level.color, alpha) },
-              ignoreEvent: true
+              styles: { style: 'fill', color: alphaColor(ring.level.color, alpha) }
             })
           })
         }

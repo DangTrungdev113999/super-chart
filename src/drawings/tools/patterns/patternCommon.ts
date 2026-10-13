@@ -206,8 +206,7 @@ export function vertexPillFigure (
       paddingTop: 2,
       paddingBottom: 2,
       borderRadius: 4
-    },
-    ignoreEvent: true
+    }
   }
 }
 
@@ -242,8 +241,7 @@ export function ratioPillFigure (
       paddingTop: 2,
       paddingBottom: 2,
       borderRadius: 4
-    },
-    ignoreEvent: true
+    }
   }
 }
 
@@ -268,8 +266,7 @@ export function ratioTrendFigure (
       size,
       // TV LINESTYLE_DOTTED — a tight 2px dash.
       dashedValue: [2, 2]
-    },
-    ignoreEvent: true
+    }
   }
 }
 
@@ -414,16 +411,14 @@ export function fivePointPatternFigures (
       key: 'ptn_tri_xab',
       type: 'polygon',
       attrs: { coordinates: [x, a, b] },
-      styles: { style: 'fill', color: fill },
-      ignoreEvent: true
+      styles: { style: 'fill', color: fill }
     })
     if (coordinates.length >= 5) {
       figures.push({
         key: 'ptn_tri_bcd',
         type: 'polygon',
         attrs: { coordinates: [b, c, d] },
-        styles: { style: 'fill', color: fill },
-        ignoreEvent: true
+        styles: { style: 'fill', color: fill }
       })
     }
   }

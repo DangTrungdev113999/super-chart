@@ -354,7 +354,10 @@ const gannComplex: OverlayTemplate<GannComplexExtendData> = {
     return figures
   }),
 
-  createXAxisFigures: ({ overlay, coordinates }) => {
+  createXAxisFigures: ({ overlay, coordinates, isSelected }) => {
+    if (isSelected !== true) {
+      return []
+    }
     if (coordinates.length < 1) {
       return []
     }
@@ -375,7 +378,10 @@ const gannComplex: OverlayTemplate<GannComplexExtendData> = {
     return figures
   },
 
-  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis }) => {
+  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis, isSelected }) => {
+    if (isSelected !== true) {
+      return []
+    }
     if (coordinates.length < 1) {
       return []
     }

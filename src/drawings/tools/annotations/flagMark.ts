@@ -93,8 +93,7 @@ const flagMark: OverlayTemplate<FlagMarkExtendData> = {
           width: poleWidth,
           height: poleHeight
         },
-        styles: { style: 'fill', color: poleColor },
-        ignoreEvent: true
+        styles: { style: 'fill', color: poleColor }
       },
       // Pennant — rectangle with a V notch in the right edge (swallowtail).
       {

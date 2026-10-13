@@ -285,8 +285,7 @@ export function buildPositionFigures (
     key: 'pos_entry_line',
     type: 'line',
     attrs: { coordinates: [{ x: geo.leftX, y: geo.entryY }, { x: geo.leftX + zoneWidth, y: geo.entryY }] },
-    styles: { style: 'dashed', color: ext.lineColor, size: 1, dashedValue: [6, 4] },
-    ignoreEvent: true
+    styles: { style: 'dashed', color: ext.lineColor, size: 1, dashedValue: [6, 4] }
   })
 
   // ── Dashed center line through the zones ──
@@ -294,8 +293,7 @@ export function buildPositionFigures (
     key: 'pos_center_line',
     type: 'line',
     attrs: { coordinates: [{ x: centerX, y: geo.profitY }, { x: centerX, y: geo.stopY }] },
-    styles: { style: 'dashed', color: ext.lineColor, size: 1, dashedValue: [4, 4] },
-    ignoreEvent: true
+    styles: { style: 'dashed', color: ext.lineColor, size: 1, dashedValue: [4, 4] }
   })
 
   // ── Labels: hover/selection or alwaysShowStats ──
@@ -404,8 +402,7 @@ export function buildPositionYAxisFigures (
         paddingTop: 2,
         paddingBottom: 2,
         borderRadius: 2
-      },
-      ignoreEvent: true
+      }
     })
   }
   pill('entry', geo.entryY, (overlay.points[0] as Partial<Point> | undefined)?.value ?? null, ext.lineColor)

@@ -20,13 +20,16 @@ import {
   applySnap45,
   buildXAxisBandFigures,
   buildYAxisBandFigures,
+  diagonalLabelAnchor,
   getArrowCoordinates,
   getExtendedCoordinates,
   inlineStatsLines,
-  labelSpecOf,
   layoutDiagonalLabel,
   lineColorOf,
+  lineLabelAnchorFn,
+  lineLabelEditorHooks,
   lineSizeOf,
+  liveLabelSpecOf,
   pricePrecisionOf,
   pushAnchorPriceLabel,
   pushInlineStats,
@@ -43,6 +46,19 @@ import type { LineExtendData } from './lineCommon'
  */
 
 export interface StraightLineExtendData extends LineExtendData {}
+
+/** Editor anchor: same always-extended span as createPointFigures. */
+const slLabelAnchor = lineLabelAnchorFn((coordinates, bounding, ext, style, lineWidth) => {
+  if (coordinates.length < 2) {
+    return null
+  }
+  const [c1, c2] = coordinates
+  const [lineStart, lineEnd] = getExtendedCoordinates(
+    c1, c2, bounding.width, bounding.height,
+    ext.extendLeft !== false, ext.extendRight !== false
+  )
+  return diagonalLabelAnchor(style, lineStart, lineEnd, lineWidth)
+})
 
 const straightLine: OverlayTemplate<StraightLineExtendData> = {
   name: 'straightLine',
@@ -73,7 +89,7 @@ const straightLine: OverlayTemplate<StraightLineExtendData> = {
     )
 
     // ─── Label layout first (may request a gap in the line) ───
-    const spec = labelSpecOf(ext)
+    const spec = liveLabelSpecOf(overlay, ext)
     const labelLayout = spec !== null
       ? layoutDiagonalLabel('sl_label', spec, lineStart, lineEnd, lineColor, lineWidth)
       : null
@@ -90,8 +106,7 @@ const straightLine: OverlayTemplate<StraightLineExtendData> = {
           key: 'sl_arrow_left',
           type: 'polygon',
           attrs: { coordinates: coords },
-          styles: { style: 'fill', color: lineColor },
-          ignoreEvent: true
+          styles: { style: 'fill', color: lineColor }
         })
       }
     }
@@ -102,8 +117,7 @@ const straightLine: OverlayTemplate<StraightLineExtendData> = {
           key: 'sl_arrow_right',
           type: 'polygon',
           attrs: { coordinates: coords },
-          styles: { style: 'fill', color: lineColor },
-          ignoreEvent: true
+          styles: { style: 'fill', color: lineColor }
         })
       }
     }
@@ -147,7 +161,7 @@ const straightLine: OverlayTemplate<StraightLineExtendData> = {
     return figures
   },
 
-  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis }) => {
+  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis, isSelected }) => {
     if (coordinates.length < 1) return []
     const ext: StraightLineExtendData = isValid(overlay.extendData) ? overlay.extendData : {}
     return buildYAxisBandFigures('sl', {
@@ -156,18 +170,20 @@ const straightLine: OverlayTemplate<StraightLineExtendData> = {
       bounding,
       lineColor: lineColorOf(overlay, chart, ext.lineColor ?? ext.color),
       precision: pricePrecisionOf(chart, overlay, yAxis, ext.pricePrecision),
-      yAxis: yAxis ?? undefined
+      yAxis: yAxis ?? undefined,
+      isSelected
     })
   },
 
-  createXAxisFigures: ({ chart, overlay, coordinates, bounding }) => {
+  createXAxisFigures: ({ chart, overlay, coordinates, bounding, isSelected }) => {
     if (coordinates.length < 1) return []
     const ext: StraightLineExtendData = isValid(overlay.extendData) ? overlay.extendData : {}
     return buildXAxisBandFigures('sl', {
       overlay,
       coordinates,
       bounding,
-      lineColor: lineColorOf(overlay, chart, ext.lineColor ?? ext.color)
+      lineColor: lineColorOf(overlay, chart, ext.lineColor ?? ext.color),
+      isSelected
     })
   },
 
@@ -181,7 +197,10 @@ const straightLine: OverlayTemplate<StraightLineExtendData> = {
     if (params.performPointIndex === 1) {
       applySnap45(this, params, 0)
     }
-  }
+  },
+
+  // ─── In-place label editing (TradingView parity) ───
+  ...lineLabelEditorHooks('sl_label', slLabelAnchor)
 }
 
 export default straightLine

@@ -21,10 +21,13 @@ import {
   buildXAxisPill,
   formatDate,
   getArrowCoordinates,
-  labelSpecOf,
   lineColorOf,
+  lineLabelAnchorFn,
+  lineLabelEditorHooks,
   lineSizeOf,
-  pushVertLabel
+  liveLabelSpecOf,
+  pushVertLabel,
+  vertLabelAnchor
 } from './lineCommon'
 
 import type { LineExtendData } from './lineCommon'
@@ -36,6 +39,16 @@ import type { LineExtendData } from './lineCommon'
  */
 
 export interface VertSegmentExtendData extends LineExtendData {}
+
+/** Editor anchor: the segment spans top→bottom at the shared c1.x —
+ *  mirrors createPointFigures. */
+const vsLabelAnchor = lineLabelAnchorFn((coordinates, _bounding, _ext, style, lineWidth) => {
+  if (coordinates.length < 2) {
+    return null
+  }
+  const [c1, c2] = coordinates
+  return vertLabelAnchor(style, c1.x, Math.min(c1.y, c2.y), Math.max(c1.y, c2.y), lineWidth)
+})
 
 const verticalSegment: OverlayTemplate<VertSegmentExtendData> = {
   name: 'verticalSegment',
@@ -73,8 +86,7 @@ const verticalSegment: OverlayTemplate<VertSegmentExtendData> = {
           key: 'vs_arrow_top',
           type: 'polygon',
           attrs: { coordinates: tip },
-          styles: { style: 'fill', color: lineColor },
-          ignoreEvent: true
+          styles: { style: 'fill', color: lineColor }
         })
       }
     }
@@ -85,14 +97,13 @@ const verticalSegment: OverlayTemplate<VertSegmentExtendData> = {
           key: 'vs_arrow_bottom',
           type: 'polygon',
           attrs: { coordinates: tip },
-          styles: { style: 'fill', color: lineColor },
-          ignoreEvent: true
+          styles: { style: 'fill', color: lineColor }
         })
       }
     }
 
     // Rotated text label along the segment.
-    const spec = labelSpecOf(ext)
+    const spec = liveLabelSpecOf(overlay, ext)
     if (spec !== null) {
       pushVertLabel(figures, 'vs_label', spec, c1.x, top, bottom, lineColor, lineWidth)
     }
@@ -140,7 +151,10 @@ const verticalSegment: OverlayTemplate<VertSegmentExtendData> = {
     const d0 = formatDate(overlay.points[0]?.timestamp)
     if (d0 === '') return []
     return [buildXAxisPill(coordinates[0].x, d0, lineColor, 'vs_x0')]
-  }
+  },
+
+  // ─── In-place label editing (TradingView parity) ───
+  ...lineLabelEditorHooks('vs_label', vsLabelAnchor)
 }
 
 export default verticalSegment

@@ -65,6 +65,7 @@ import shortPosition from './measure/shortPosition'
 import insidePitchfork from './pitchforks/insidePitchfork'
 import modifiedSchiffPitchfork from './pitchforks/modifiedSchiffPitchfork'
 import pitchfork from './pitchforks/pitchfork'
+import pitchfan from './pitchforks/pitchfan'
 import schiffPitchfork from './pitchforks/schiffPitchfork'
 
 import arrowLine from './lines/arrowLine'
@@ -198,6 +199,7 @@ const drawingTools = [
   insidePitchfork,
   modifiedSchiffPitchfork,
   pitchfork,
+  pitchfan,
   schiffPitchfork,
   arrowLine,
   crossLine,

@@ -138,16 +138,14 @@ const headAndShoulders: OverlayTemplate<PatternExtendData> = {
           key: 'hs_tri_head',
           type: 'polygon',
           attrs: { coordinates: [coordinates[2], coordinates[3], coordinates[4]] },
-          styles: { style: 'fill', color: fill },
-          ignoreEvent: true
+          styles: { style: 'fill', color: fill }
         })
         if (isValid(neckLeft)) {
           figures.push({
             key: 'hs_tri_left',
             type: 'polygon',
             attrs: { coordinates: [neckLeft, coordinates[1], coordinates[2]] },
-            styles: { style: 'fill', color: fill },
-            ignoreEvent: true
+            styles: { style: 'fill', color: fill }
           })
         }
         if (isValid(neckRight)) {
@@ -155,8 +153,7 @@ const headAndShoulders: OverlayTemplate<PatternExtendData> = {
             key: 'hs_tri_right',
             type: 'polygon',
             attrs: { coordinates: [coordinates[4], coordinates[5], neckRight] },
-            styles: { style: 'fill', color: fill },
-            ignoreEvent: true
+            styles: { style: 'fill', color: fill }
           })
         }
       }

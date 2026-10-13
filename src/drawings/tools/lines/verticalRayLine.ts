@@ -20,10 +20,13 @@ import { createAnchorFigures } from '../../interaction/anchors'
 import {
   buildXAxisPill,
   formatDate,
-  labelSpecOf,
   lineColorOf,
+  lineLabelAnchorFn,
+  lineLabelEditorHooks,
   lineSizeOf,
-  pushVertLabel
+  liveLabelSpecOf,
+  pushVertLabel,
+  vertLabelAnchor
 } from './lineCommon'
 
 import type { LineExtendData } from './lineCommon'
@@ -34,6 +37,17 @@ import type { LineExtendData } from './lineCommon'
  */
 
 export interface VertRayExtendData extends LineExtendData {}
+
+/** Editor anchor: the ray spans c1.y → pane edge in c2's direction at
+ *  c1.x — mirrors createPointFigures. */
+const vrLabelAnchor = lineLabelAnchorFn((coordinates, bounding, _ext, style, lineWidth) => {
+  if (coordinates.length < 2) {
+    return null
+  }
+  const [c1, c2] = coordinates
+  const endY = c2.y > c1.y ? bounding.height : 0
+  return vertLabelAnchor(style, c1.x, Math.min(c1.y, endY), Math.max(c1.y, endY), lineWidth)
+})
 
 const verticalRayLine: OverlayTemplate<VertRayExtendData> = {
   name: 'verticalRayLine',
@@ -63,7 +77,7 @@ const verticalRayLine: OverlayTemplate<VertRayExtendData> = {
       styles: { style: 'solid', color: lineColor, size: lineWidth }
     })
 
-    const spec = labelSpecOf(ext)
+    const spec = liveLabelSpecOf(overlay, ext)
     if (spec !== null) {
       pushVertLabel(figures, 'vr_label', spec, c1.x, Math.min(c1.y, endY), Math.max(c1.y, endY), lineColor, lineWidth)
     }
@@ -110,7 +124,10 @@ const verticalRayLine: OverlayTemplate<VertRayExtendData> = {
     const d0 = formatDate(overlay.points[0]?.timestamp)
     if (d0 === '') return []
     return [buildXAxisPill(coordinates[0].x, d0, lineColor, 'vr_x0')]
-  }
+  },
+
+  // ─── In-place label editing (TradingView parity) ───
+  ...lineLabelEditorHooks('vr_label', vrLabelAnchor)
 }
 
 export default verticalRayLine

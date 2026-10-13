@@ -107,8 +107,7 @@ const timeCycles: OverlayTemplate<PatternExtendData> = {
             key: 'tc_dome_fill',
             type: 'polygon',
             attrs: domeRings.map(coordinates => ({ coordinates })),
-            styles: { style: 'fill', color: patternFillColorOf(ext, stroke.color) },
-            ignoreEvent: true
+            styles: { style: 'fill', color: patternFillColorOf(ext, stroke.color) }
           })
         }
       }

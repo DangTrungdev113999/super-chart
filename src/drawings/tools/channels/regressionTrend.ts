@@ -396,8 +396,7 @@ const regressionTrend: OverlayTemplate<RegressionTrendExtendData> = {
         styles: {
           style: 'fill',
           color: cfg.upperFillColor ?? alphaRgba(cfg.upperColor, RT_FILL_ALPHA)
-        },
-        ignoreEvent: true
+        }
       })
     }
     if (cfg.useLowerDeviation) {
@@ -408,8 +407,7 @@ const regressionTrend: OverlayTemplate<RegressionTrendExtendData> = {
         styles: {
           style: 'fill',
           color: cfg.lowerFillColor ?? alphaRgba(cfg.lowerColor, RT_FILL_ALPHA)
-        },
-        ignoreEvent: true
+        }
       })
     }
 
@@ -473,8 +471,7 @@ const regressionTrend: OverlayTemplate<RegressionTrendExtendData> = {
           weight: 'normal',
           family: 'Arial, sans-serif',
           backgroundColor: 'transparent'
-        },
-        ignoreEvent: true
+        }
       })
     }
 
@@ -495,7 +492,10 @@ const regressionTrend: OverlayTemplate<RegressionTrendExtendData> = {
     return figures
   }, { slot: 'point' }),
 
-  createXAxisFigures: ({ chart, overlay, coordinates }) => {
+  createXAxisFigures: ({ chart, overlay, coordinates, isSelected }) => {
+    if (isSelected !== true) {
+      return []
+    }
     rememberLineChart(overlay, chart)
     if (coordinates.length < 1) {
       return []

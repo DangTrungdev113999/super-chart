@@ -176,8 +176,7 @@ const priceLabel: OverlayTemplate<PriceLabelExtendData> = {
             { x: point.x + tipWidth, y: point.y + layout.boxHeight / 2 }
           ]
         },
-        styles: { style: 'fill', color: styles.backgroundColor },
-        ignoreEvent: true
+        styles: { style: 'fill', color: styles.backgroundColor }
       },
       {
         key: 'labelPill',

@@ -20,12 +20,15 @@ import { createAnchorFigures } from '../../interaction/anchors'
 import {
   buildXAxisPill,
   buildYAxisPill,
+  flatLabelAnchor,
   formatDate,
   formatNum,
   getArrowCoordinates,
-  labelSpecOf,
   lineColorOf,
+  lineLabelAnchorFn,
+  lineLabelEditorHooks,
   lineSizeOf,
+  liveLabelSpecOf,
   pricePrecisionOf,
   pushFlatLabel
 } from './lineCommon'
@@ -44,6 +47,18 @@ import type { LineExtendData } from './lineCommon'
  */
 
 export interface HorizRayLineExtendData extends LineExtendData {}
+
+/** Editor anchor: same ray span (anchor → left/right pane edge) as
+ *  createPointFigures, so the DOM box lands on the painted label. */
+const hrlLabelAnchor = lineLabelAnchorFn((coordinates, bounding, _ext, style, lineWidth) => {
+  if (coordinates.length < 1) {
+    return null
+  }
+  const [c1] = coordinates
+  const c2 = coordinates[1]
+  const tipX = isValid(c2) && c2.x < c1.x ? 0 : bounding.width
+  return flatLabelAnchor(style, c1.x, tipX, c1.y, lineWidth)
+})
 
 const horizontalRayLine: OverlayTemplate<HorizRayLineExtendData> = {
   name: 'horizontalRayLine',
@@ -87,8 +102,7 @@ const horizontalRayLine: OverlayTemplate<HorizRayLineExtendData> = {
           key: 'hrl_arrow',
           type: 'polygon',
           attrs: { coordinates: coords },
-          styles: { style: 'fill', color: lineColor },
-          ignoreEvent: true
+          styles: { style: 'fill', color: lineColor }
         })
       }
     }
@@ -106,13 +120,12 @@ const horizontalRayLine: OverlayTemplate<HorizRayLineExtendData> = {
           align: 'center' as CanvasTextAlign,
           baseline: 'bottom' as CanvasTextBaseline
         },
-        styles: { color: lineColor, size: 11, weight: 'normal', backgroundColor: 'transparent' },
-        ignoreEvent: true
+        styles: { color: lineColor, size: 11, weight: 'normal', backgroundColor: 'transparent' }
       })
     }
 
     // ─── Text label over the rendered ray span ───
-    const spec = labelSpecOf(ext)
+    const spec = liveLabelSpecOf(overlay, ext)
     if (spec !== null) {
       pushFlatLabel(figures, 'hrl_label', spec, c1.x, rayTip.x, c1.y, lineColor, lineWidth)
     }
@@ -157,8 +170,7 @@ const horizontalRayLine: OverlayTemplate<HorizRayLineExtendData> = {
           key: 'hrl_stats',
           type: 'text',
           attrs: { x: sx, y: sy, text: statLines.join('  '), align: sAlign, baseline: sBaseline },
-          styles: { color: lineColor, size: 11, weight: 'normal', backgroundColor: 'transparent' },
-          ignoreEvent: true
+          styles: { color: lineColor, size: 11, weight: 'normal', backgroundColor: 'transparent' }
         })
       }
     }
@@ -186,8 +198,8 @@ const horizontalRayLine: OverlayTemplate<HorizRayLineExtendData> = {
     return pill != null ? [pill] : []
   },
 
-  createXAxisFigures: ({ chart, overlay, coordinates }) => {
-    if (coordinates.length < 1) return []
+  createXAxisFigures: ({ chart, overlay, coordinates, isSelected }) => {
+    if (coordinates.length < 1 || isSelected !== true) return []
     const ext: HorizRayLineExtendData = isValid(overlay.extendData) ? overlay.extendData : {}
     const lineColor = lineColorOf(overlay, chart, ext.lineColor ?? ext.color)
     const d0 = formatDate(overlay.points[0]?.timestamp)
@@ -200,7 +212,10 @@ const horizontalRayLine: OverlayTemplate<HorizRayLineExtendData> = {
     if (points.length > 1) {
       points[1].value = performPoint.value
     }
-  }
+  },
+
+  // ─── In-place label editing (TradingView parity) ───
+  ...lineLabelEditorHooks('hrl_label', hrlLabelAnchor)
 }
 
 export default horizontalRayLine

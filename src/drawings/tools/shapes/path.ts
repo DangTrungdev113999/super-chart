@@ -101,8 +101,7 @@ const path: OverlayTemplate<ShapeExtendData> = {
           key: 'path_arrow',
           type: 'polygon',
           attrs: { coordinates: arrow },
-          styles: { style: 'fill', color: stroke.color },
-          ignoreEvent: true
+          styles: { style: 'fill', color: stroke.color }
         })
       }
     }
