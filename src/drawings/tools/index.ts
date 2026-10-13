@@ -27,6 +27,7 @@ import anchoredNote from './annotations/anchoredNote'
 import anchoredText from './annotations/anchoredText'
 import callout from './annotations/callout'
 import comment from './annotations/comment'
+import emoji from './annotations/emoji'
 import flagMark from './annotations/flagMark'
 import simpleTag from './annotations/note'
 import priceNote from './annotations/priceNote'
@@ -165,6 +166,7 @@ const drawingTools = [
   anchoredText,
   callout,
   comment,
+  emoji,
   flagMark,
   simpleTag,
   priceNote,

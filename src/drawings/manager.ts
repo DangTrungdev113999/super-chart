@@ -21,6 +21,7 @@ import type { Overlay, OverlayCreate, OverlayChangeEvent } from '../component/Ov
 import { serializeOverlay, serializedToOverlayCreate, serializedFingerprint, type SerializedDrawing } from './serialize'
 import { createDrawingHistory, type DrawingHistory, type UndoApply } from './history'
 import type { DrawingStore, DrawingScope, DrawingStoreEvent } from './persistence'
+import { applyDrawingTemplate } from './templates'
 import { getDrawingInteractionState } from './interaction/snap45'
 
 /**
@@ -428,6 +429,23 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
         const wasArmed = armed.has(overlay.id)
         commitCreate(overlay)
         finishArmed(overlay, wasArmed)
+        // TV parity — a finished drawing lands selected so its handles +
+        // floating toolbar appear immediately (incl. between stay-in-
+        // drawing re-arms). Skip ghost/synced mirrors: they are remote
+        // echoes, not something the user just drew.
+        // NOTE the kernel auto-selects an in-progress overlay mid-draw, so
+        // at drawEnd it is usually ALREADY the click-info overlay — a bare
+        // selectOverlay(id) is a no-op that emits nothing and subscribers
+        // that filtered the drawing-state select (floating toolbar) never
+        // get a usable event. Re-emit in that case; select otherwise.
+        if (!overlay.synced && !overlay.ghost) {
+          const clickInfo = chart.getChartStore().getClickOverlayInfo()
+          if (clickInfo.overlay?.id === overlay.id) {
+            emit('select', { overlay })
+          } else {
+            chart.selectOverlay(overlay.id)
+          }
+        }
         break
       }
       case 'editStart': {
@@ -582,6 +600,11 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
         break
       }
       case 'select': {
+        // Eraser cursor mode: clicking a drawing deletes it (TV's eraser).
+        if (getDrawingInteractionState(chart).cursorMode === 'eraser') {
+          chart.removeOverlay({ id: overlay.id })
+          break
+        }
         emit('select', { overlay })
         break
       }
@@ -880,13 +903,13 @@ export function createDrawingManager (chart: Chart, options?: DrawingManagerOpti
       activatingOverlay = true
       let id: string | null = null
       try {
-        id = chart.createOverlay({
+        id = chart.createOverlay(applyDrawingTemplate({
           name,
           groupId: DRAWINGS_GROUP_ID,
           extendData: opts?.extendData,
           points: opts?.points,
           ...(mode !== undefined ? { mode } : {})
-        }) as Nullable<string>
+        })) as Nullable<string>
       } catch (err) {
         // Never claim an arm that failed — a createOverlay throw leaves
         // listeners thinking a tool collects clicks when nothing exists.

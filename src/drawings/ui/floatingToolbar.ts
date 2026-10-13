@@ -25,6 +25,7 @@ import { findCatalogItemByOverlay, type DrawingStylePaths, type StylePath, type 
 import { getDrawingIcon } from '../icons'
 import { isAlign45Enabled, setAlign45Enabled } from '../interaction/snap45'
 import { serializeOverlay, serializedToOverlayCreate } from '../serialize'
+import { getDrawingTemplate, saveDrawingTemplate, clearDrawingTemplate } from '../templates'
 import { injectDrawingStyles, PALETTE } from './styles'
 
 /**
@@ -281,10 +282,42 @@ export function attachFloatingToolbar (
 
   /** role → button glyph. TV shows the glyph with a color bar under it. */
   const COLOR_ROLE_ICONS: Record<string, string> = {
-    line: 'colorLine',
-    fill: 'fill',
-    text: 'text',
-    background: 'background'
+    line: 'ft-line-tool-color',
+    fill: 'ft-line-tool-color',
+    text: 'ft-text-color',
+    background: 'ft-line-tool-color'
+  }
+
+  /** TV's templates dropdown — apply/save/clear this tool's default style. */
+  function templatesControl (): HTMLElement {
+    const b = btn('ft-templates', 'Templates', () => {
+      openMenu(b, menu => {
+        if (current === null) {
+          return
+        }
+        const overlay = current
+        const template = getDrawingTemplate(overlay.name)
+        if (template !== null) {
+          menu.appendChild(styleMenuItem('Apply default', false, () => {
+            const patch: { styles?: Overlay['styles'], extendData?: unknown } = {}
+            if (template.styles !== undefined) {
+              patch.styles = template.styles
+            }
+            if (template.extendData !== undefined) {
+              patch.extendData = template.extendData
+            }
+            manager.update(overlay.id, patch)
+          }))
+          menu.appendChild(styleMenuItem('Remove default', false, () => {
+            clearDrawingTemplate(overlay.name)
+          }))
+        }
+        menu.appendChild(styleMenuItem('Save as default', false, () => {
+          saveDrawingTemplate(overlay.name, overlay)
+        }))
+      })
+    })
+    return b
   }
 
   function colorControl (role: 'line' | 'fill' | 'text' | 'background', path: StylePath): HTMLElement {
@@ -335,7 +368,7 @@ export function attachFloatingToolbar (
   }
 
   function lineStyleControl (path: StylePath): HTMLElement {
-    return dropdownButton('trendLine', 'Line style', LINE_STYLES.map(s => ({
+    return dropdownButton('ft-style', 'Line style', LINE_STYLES.map(s => ({
       title: s.title,
       active: currentPathValue(path) === s.value,
       onClick: () => {
@@ -470,7 +503,7 @@ export function attachFloatingToolbar (
   }
 
   function moreMenu (): HTMLElement {
-    const b = btn('more', 'More', () => {
+    const b = btn('ft-more', 'More', () => {
       openMenu(b, menu => {
         if (current === null) {
           return
@@ -492,13 +525,13 @@ export function attachFloatingToolbar (
         menu.appendChild(label2)
         menu.appendChild(styleMenuItem(!overlay.visible ? 'Show' : 'Hide', false, () => {
           manager.update(overlay.id, { visible: !overlay.visible })
-        }, 'hide'))
+        }, 'hide-all'))
         menu.appendChild(styleMenuItem('Clone', false, () => {
           cloneOverlay(overlay)
-        }, 'rect'))
+        }, 'LineToolRectangle'))
         menu.appendChild(styleMenuItem(overlay.lock ? 'Unlock' : 'Lock', overlay.lock, () => {
           manager.update(overlay.id, { lock: !overlay.lock })
-        }, 'lock'))
+        }, 'ft-lock'))
         hooks?.additionalActions?.(overlay).forEach(action => {
           menu.appendChild(styleMenuItem(action.title, false, () => {
             action.onClick(overlay)
@@ -544,6 +577,8 @@ export function attachFloatingToolbar (
     }
     const overlay = current
     switch (control.kind) {
+      case 'templates':
+        return templatesControl()
       case 'color': {
         const path = resolvePath(control, control.role)
         return path !== undefined ? colorControl(control.role, path) : null
@@ -571,16 +606,16 @@ export function attachFloatingToolbar (
       case 'geometry':
         return geometryControl(control.options)
       case 'levels':
-        return btn('settings', 'Levels', () => {
+        return btn('ft-settings', 'Levels', () => {
           hooks?.onSettings?.(overlay)
         })
       case 'snap45':
-        return btn('magnet', 'Snap to 45°', () => {
+        return btn('magnet-button', 'Snap to 45°', () => {
           setAlign45Enabled(chart, !isAlign45Enabled(chart))
           rerender()
         }, isAlign45Enabled(chart))
       case 'anchor':
-        return btn('anchoredText', 'Anchor', () => {
+        return btn('LineToolTextAbsolute', 'Anchor', () => {
           const ext = overlay.extendData as Record<string, unknown> | null | undefined
           const anchored = ext?.anchored === true
           manager.update(overlay.id, { extendData: { ...ext, anchored: !anchored } })
@@ -589,16 +624,16 @@ export function attachFloatingToolbar (
         if (hooks?.onAlert === undefined) {
           return null
         }
-        return btn('flag', 'Alert', () => {
+        return btn('LineToolFlagMark', 'Alert', () => {
           hooks.onAlert?.(overlay)
         })
       case 'lock':
-        return btn('lock', overlay.lock ? 'Unlock' : 'Lock', () => {
+        return btn('ft-lock', overlay.lock ? 'Unlock' : 'Lock', () => {
           manager.update(overlay.id, { lock: !overlay.lock })
           rerender()
         }, overlay.lock)
       case 'visibility':
-        return btn(overlay.visible ? 'show' : 'hide', !overlay.visible ? 'Show' : 'Hide', () => {
+        return btn(overlay.visible ? 'show' : 'hide-all', !overlay.visible ? 'Show' : 'Hide', () => {
           manager.update(overlay.id, { visible: !overlay.visible })
           rerender()
         }, !overlay.visible)
@@ -610,11 +645,11 @@ export function attachFloatingToolbar (
         if (hooks?.onSettings === undefined) {
           return null
         }
-        return btn('settings', 'Settings', () => {
+        return btn('ft-settings', 'Settings', () => {
           hooks.onSettings?.(overlay)
         })
       case 'remove':
-        return btn('remove', 'Remove', () => {
+        return btn('ft-remove', 'Remove', () => {
           manager.remove(overlay.id)
         })
       case 'more':
@@ -663,7 +698,11 @@ export function attachFloatingToolbar (
     })
     element.appendChild(grip)
 
+    // TV order: grip | templates | <quick controls> | settings | lock | remove | ⋯
     const recipe = recipeFor(current)
+    if (!current.isDrawing() && !current.lock) {
+      element.appendChild(templatesControl())
+    }
     let needSep = false
     recipe.forEach(control => {
       const el = controlEl(control)

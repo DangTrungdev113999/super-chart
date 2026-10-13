@@ -23,6 +23,8 @@
  * `getDrawingIcon` resolves an iconId to markup; unknown ids get the
  * generic 'tool' glyph so a tool is never invisible in a toolbar.
  */
+import { getTvIcon } from './tvIcons'
+
 export type DrawingIconId = string
 
 const SVG_OPEN = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">'
@@ -112,10 +114,18 @@ export function registerDrawingIcon (iconId: DrawingIconId, svgMarkup: string): 
   ICON_ID_SET.add(iconId)
 }
 
-/** Inline SVG markup for an icon id — generic 'tool' glyph as fallback. */
+/** Inline SVG markup for an icon id — TV's own glyphs take precedence
+ * (iconIds keyed by TV data-names like 'LineToolTrendLine'), then the
+ * legacy ICONS map, then the generic 'tool' glyph as fallback. */
 export function getDrawingIcon (iconId: DrawingIconId | undefined): string {
-  if (iconId !== undefined && ICON_ID_SET.has(iconId)) {
-    return ICONS[iconId]
+  if (iconId !== undefined) {
+    const tv = getTvIcon(iconId)
+    if (tv !== '') {
+      return tv
+    }
+    if (ICON_ID_SET.has(iconId)) {
+      return ICONS[iconId]
+    }
   }
   return ICONS.tool
 }

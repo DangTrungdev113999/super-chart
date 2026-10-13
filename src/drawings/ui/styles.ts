@@ -430,6 +430,62 @@ const CSS = `
   margin: 4px 0;
   background: #0f0f0f;
 }
+.sc-drw-tools-sep {
+  width: 24px;
+  height: 1px;
+  margin: 4px auto;
+  background: rgba(219, 219, 219, 0.12);
+  flex: none;
+}
+.sc-drw-emoji {
+  width: 300px;
+  background: #1f1f1f;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+  color: #dbdbdb;
+  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif;
+  z-index: 20;
+  overflow: hidden;
+}
+.sc-drw-emoji-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 6px 8px 0;
+  border-bottom: 1px solid rgba(219, 219, 219, 0.1);
+}
+.sc-drw-emoji-tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #8c8c8c;
+  font-size: 13px;
+  padding: 8px 4px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+.sc-drw-emoji-tab[data-on="true"] {
+  color: #dbdbdb;
+  border-bottom-color: #2962ff;
+}
+.sc-drw-emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+  padding: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.sc-drw-emoji-cell {
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  font-size: 20px;
+  line-height: 1;
+  padding: 5px 0;
+  cursor: pointer;
+}
+.sc-drw-emoji-cell:hover { background: #2e2e2e; }
 `
 
 /** Inject the drawings UI stylesheet — idempotent, SSR-safe. */

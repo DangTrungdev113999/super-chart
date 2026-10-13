@@ -40,6 +40,12 @@ export interface DrawingInteractionState {
    * manager.activate unless the caller passes `continuous` explicitly.
    */
   stayInDrawing: boolean
+  /**
+   * Cursor-group mode from the left rail: 'cursor' (cross), 'dot',
+   * 'arrowCursor' (no crosshair), 'demonstration', 'eraser' (click removes
+   * drawings), 'zoom' (click zooms in, shift-click zooms out).
+   */
+  cursorMode: string
 }
 
 const states = new WeakMap<Chart, DrawingInteractionState>()
@@ -47,7 +53,7 @@ const states = new WeakMap<Chart, DrawingInteractionState>()
 export function getDrawingInteractionState (chart: Chart): DrawingInteractionState {
   let state = states.get(chart)
   if (state === undefined) {
-    state = { align45: false, magnet: false, stayInDrawing: false }
+    state = { align45: false, magnet: false, stayInDrawing: false, cursorMode: 'cursor' }
     states.set(chart, state)
   }
   return state

@@ -22,6 +22,8 @@ import type { Overlay, OverlayCreate } from '../component/Overlay'
 import { getOverlayTemplate } from '../extension/overlay/index'
 
 import { createDrawingManager, type DrawingManager, type DrawingManagerOptions } from './manager'
+import { applyDrawingTemplate } from './templates'
+import { getDrawingInteractionState } from './interaction/snap45'
 import { getDrawingCatalog, findCatalogItem, findCatalogItemByHotkey, type DrawingToolGroup } from './catalog'
 import type { DrawingStore } from './persistence'
 import { serializeOverlay, serializedToOverlayCreate, type SerializedDrawing, type SerializedDrawingPoint } from './serialize'
@@ -151,6 +153,14 @@ export interface DrawingsApi extends DrawingManager {
    */
   registerToolHotkey: (key: string, overlayName: string) => void
 
+  /**
+   * Switch the cursor-group mode (TV's left-rail first flyout):
+   * 'cursor' | 'dot' | 'arrowCursor' | 'demonstration' | 'eraser' | 'zoom'.
+   * The palette calls this for non-tool picks the host didn't handle;
+   * hosts can call it directly too.
+   */
+  setCursorMode: (mode: string) => void
+
   configure: (opts: DrawingsConfigureOptions) => void
 }
 
@@ -276,6 +286,18 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
     }
     return chart.removeOverlay({ id: inProgress.id })
   }
+
+  // Zoom cursor mode: a pane click zooms in at that point (shift-click
+  // zooms out) — TV's standalone zoom button semantics.
+  const chartContainer = chart.getDom()
+  const onZoomClick = (e: MouseEvent): void => {
+    if (getDrawingInteractionState(chart).cursorMode !== 'zoom' || chartContainer === null) {
+      return
+    }
+    const rect = chartContainer.getBoundingClientRect()
+    chart.zoomAtCoordinate(e.shiftKey ? 0.72 : 1.38, { x: e.clientX - rect.left, y: e.clientY - rect.top }, 150)
+  }
+  chartContainer?.addEventListener('click', onZoomClick)
 
   let clipboard: SerializedDrawing | null = null
   const keyboardOpt = options?.keyboard
@@ -425,11 +447,11 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
     if (!validateCreate(name, points)) {
       return null
     }
-    return manager.create({
+    return manager.create(applyDrawingTemplate({
       ...rest,
       name,
       points: points?.map(toPoint)
-    })
+    }))
   }
 
   function base (args: SemanticDrawingBase): Omit<DrawingCreateSpec, 'name' | 'points'> {
@@ -626,6 +648,20 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
       extraToolHotkeys.set(key, overlayName)
     },
 
+    setCursorMode (mode) {
+      const interaction = getDrawingInteractionState(chart)
+      interaction.cursorMode = mode
+      manager.deactivate()
+      // Crosshair visibility + CSS cursor mirror TV's cursor modes.
+      const showCrosshair = mode === 'cursor' || mode === 'dot'
+      chart.setStyles(`crosshair.show=${showCrosshair ? 'true' : 'false'}`)
+      const container = chart.getDom()
+      if (container !== null) {
+        container.style.cursor =
+          mode === 'eraser' ? 'cell' : mode === 'zoom' ? 'zoom-in' : 'default'
+      }
+    },
+
     configure (opts) {
       if ('store' in opts) {
         manager.attachStore(opts.store ?? null)
@@ -634,6 +670,7 @@ export function createDrawingsApi (chart: Chart, options?: DrawingsApiOptions): 
 
     destroy () {
       apiDestroyed = true
+      chartContainer?.removeEventListener('click', onZoomClick)
       unbindKeyboard?.()
       unbindSelection.forEach(unsub => {
         unsub()

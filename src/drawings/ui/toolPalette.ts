@@ -99,6 +99,9 @@ export interface ToolPalette {
   destroy: () => void
 }
 
+/** Cursor-group ids the palette maps to chart cursor modes by default. */
+const CURSOR_MODES = new Set(['cursor', 'dot', 'arrowCursor', 'demonstration', 'eraser', 'zoom'])
+
 function humanize (id: string): string {
   return id.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
@@ -207,8 +210,112 @@ export function mountToolPalette (
     return null
   }
 
+  // ── Emoji / symbol picker (font-icons group) ─────────────────────────────
+
+  let emojiPop: HTMLElement | null = null
+
+  function closeEmojiPicker (): void {
+    emojiPop?.remove()
+    emojiPop = null
+  }
+
+  // Curated grids — TV ships hundreds; these cover the common trading set.
+  const EMOJI_TABS: Array<{ id: string, title: string, glyphs: string[] }> = [
+    {
+      id: 'emojis',
+      title: 'Emojis',
+      glyphs: [
+        '😀', '😁', '😂', '🤣', '😃', '😄', '😅', '😆', '😉', '😊', '😋', '😎', '😍', '😘', '🥰', '😗',
+        '😙', '😚', '🙂', '🤗', '🤩', '🤔', '🤨', '😐', '😑', '😶', '🙄', '😏', '😣', '😥', '😮', '🤐',
+        '😯', '😪', '😫', '🥱', '😴', '😌', '😛', '😜', '😝', '🤤', '😒', '😓', '😔', '😕', '🙃', '🤑',
+        '😲', '🙁', '😖', '😞', '😟', '😤', '😢', '😭', '😦', '😧', '😨', '😩', '🤯', '😬', '😰', '😱',
+        '🥵', '🥶', '😳', '🤪', '😵', '😡', '😠', '🤬', '😷', '🤒', '🤕', '🤢', '🤮', '🥴', '😇', '🥳',
+        '🤠', '🤡', '🥸', '🤫', '🤭', '🧐', '🤓', '👍', '👎', '👏', '🙌', '🙏', '💪', '🤝', '✍️', '👀'
+      ]
+    },
+    {
+      id: 'symbols',
+      title: 'Symbols',
+      glyphs: [
+        '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '💯', '💢', '💥', '💫', '💦', '💨', '🔥', '✨',
+        '⭐', '🌟', '💎', '⚡', '☀️', '🌙', '☁️', '🌈', '☔', '❄️', '🎉', '🎊', '🎈', '🏆', '🥇', '🎯',
+        '📈', '📉', '📊', '💰', '💵', '💸', '🪙', '💳', '🏦', '💹', '🔔', '🔕', '🔑', '🔒', '🔓', '⚠️',
+        '✅', '❌', '❓', '❗', '➕', '➖', '➗', '✖️', '♻️', '⚙️', '🧲', '📌', '📍', '🚩', '🏁', '⏰',
+        '⬆️', '⬇️', '⬅️', '➡️', '↗️', '↘️', '↙️', '↖️', '🔼', '🔽', '▶️', '◀️', '⏩', '⏪', '🔴', '🟢'
+      ]
+    }
+  ]
+
+  function openEmojiPicker (): void {
+    if (emojiPop !== null) {
+      closeEmojiPicker()
+      return
+    }
+    const pop = createDom('div')
+    pop.className = 'sc-drw-emoji'
+    pop.setAttribute('role', 'dialog')
+
+    const tabs = createDom('div')
+    tabs.className = 'sc-drw-emoji-tabs'
+    const grid = createDom('div')
+    grid.className = 'sc-drw-emoji-grid'
+
+    const renderGrid = (tabId: string): void => {
+      grid.textContent = ''
+      const tab = EMOJI_TABS.find(t => t.id === tabId) ?? EMOJI_TABS[0]
+      for (const g of tab.glyphs) {
+        const cell = createDom('button')
+        cell.type = 'button'
+        cell.className = 'sc-drw-emoji-cell'
+        cell.textContent = g
+        cell.addEventListener('click', e => {
+          e.stopPropagation()
+          closeEmojiPicker()
+          // 'emoji' is a registered overlay name — raw skips catalog lookup.
+          api.activate('emoji', { extendData: { emoji: g }, raw: true })
+        })
+        grid.appendChild(cell)
+      }
+    }
+
+    for (const tab of EMOJI_TABS) {
+      const tb = createDom('button')
+      tb.type = 'button'
+      tb.className = 'sc-drw-emoji-tab'
+      tb.textContent = label(`emoji-${tab.id}`, tab.title)
+      tb.setAttribute('data-on', String(tab.id === EMOJI_TABS[0].id))
+      tb.addEventListener('click', e => {
+        e.stopPropagation()
+        tabs.querySelectorAll('.sc-drw-emoji-tab').forEach(el => { el.setAttribute('data-on', 'false') })
+        tb.setAttribute('data-on', 'true')
+        renderGrid(tab.id)
+      })
+      tabs.appendChild(tb)
+    }
+    pop.appendChild(tabs)
+    pop.appendChild(grid)
+    renderGrid(EMOJI_TABS[0].id)
+
+    pop.addEventListener('pointerdown', e => { e.stopPropagation() })
+    pop.addEventListener('click', e => { e.stopPropagation() })
+    ownerDoc.body.appendChild(pop)
+    emojiPop = pop
+
+    // Anchor to the right edge of the rail, aligned with the group button.
+    const railRect = root.getBoundingClientRect()
+    const groupBtn = groupButtons.get('font-icons')
+    const btnRect = groupBtn?.getBoundingClientRect()
+    pop.style.position = 'fixed'
+    pop.style.left = `${railRect.right + 8}px`
+    pop.style.top = `${Math.max(8, (btnRect?.top ?? railRect.top) - 8)}px`
+  }
+
   function armItem (item: DrawingToolItem): void {
     if (item.nonTool === true || item.overlayName === '') {
+      if (item.id === 'emojiPicker') {
+        openEmojiPicker()
+        return
+      }
       // Non-tool picks still stick as the group's rail icon (TV parity —
       // the cursor dropdown keeps the last-picked mode showing).
       const owner = findGroupOf(item)
@@ -218,7 +325,14 @@ export function mountToolPalette (
       }
       const handled = options?.onNonTool?.(item) === true
       if (!handled) {
-        api.deactivate()
+        // Built-in cursor-mode picks (cursor/dot/arrow/demonstration/eraser/
+        // zoom) map onto the chart's cursor mode; other non-tool ids are
+        // host-wired or inert.
+        if (CURSOR_MODES.has(item.id)) {
+          api.setCursorMode(item.id)
+        } else {
+          api.deactivate()
+        }
       }
       return
     }
@@ -364,10 +478,11 @@ export function mountToolPalette (
         title.textContent = label(it.id, it.title)
         row.appendChild(icon)
         row.appendChild(title)
-        if (it.hotkey !== undefined) {
+        const hotkeyHint = it.hotkeyLabel ?? it.hotkey
+        if (hotkeyHint !== undefined) {
           const key = createDom('span')
           key.className = 'sc-drw-flyout-key'
-          key.textContent = it.hotkey
+          key.textContent = hotkeyHint
           row.appendChild(key)
         }
         if (!it.available) {
@@ -420,6 +535,11 @@ export function mountToolPalette (
 
   function addGroupButton (group: DrawingToolGroup): void {
     const current = lastUsed.get(group.id) ?? firstAvailable(group)
+    if (group.separatorBefore === true) {
+      const sep = createDom('div')
+      sep.className = 'sc-drw-tools-sep'
+      root.appendChild(sep)
+    }
     const wrap = createDom('div')
     wrap.className = 'sc-drw-tools-group'
 
@@ -441,9 +561,10 @@ export function mountToolPalette (
     })
     wrap.appendChild(b)
 
-    // Caret opens the flyout — only when the group has >1 entry.
+    // Caret opens the flyout — only when the group has >1 entry and is not
+    // a standalone rail button (TV's measure/zoom).
     const itemCount = group.sections.reduce((n, s) => n + s.items.length, 0)
-    if (itemCount > 1) {
+    if (itemCount > 1 && group.standalone !== true) {
       const caret = createDom('button')
       caret.type = 'button'
       caret.className = 'sc-drw-tools-caret'
@@ -493,6 +614,11 @@ export function mountToolPalette (
     type ChromeSetOn = (on: boolean) => void
     const chromeSetOn = new Map<string, ChromeSetOn>()
     const addChromeButton = (c: DrawingChromeItem): void => {
+      if (c.separatorBefore === true) {
+        const sep = createDom('div')
+        sep.className = 'sc-drw-tools-sep'
+        footer.appendChild(sep)
+      }
       const b = createDom('button')
       b.type = 'button'
       b.className = 'sc-drw-btn sc-drw-tools-btn'
@@ -545,6 +671,26 @@ export function mountToolPalette (
             chromeSetOn.get('hideAll')?.(false)
             break
           }
+          default: {
+            // Host-wired chrome (e.g. drawingSync — sync state lives in the
+            // host's ChartSync instance, not the palette). The host reports
+            // the toggle; the button flips its own pressed state.
+            const handled = options?.onNonTool?.({
+              id: c.id,
+              overlayName: '',
+              title: c.title,
+              iconId: c.iconId,
+              capabilities: { anchorCount: 0, freehand: false, hasText: false, snap45: false, cloneable: false, multiline: false },
+              toolbarRecipe: [],
+              available: true,
+              nonTool: true
+            }) === true
+            if (handled && c.kind === 'toggle') {
+              const on = b.getAttribute('data-on') === 'true'
+              setOn(!on)
+            }
+            break
+          }
         }
       })
       if (c.id === 'magnet') setOn(isMagnetEnabled(chart))
@@ -575,6 +721,15 @@ export function mountToolPalette (
     if (!inside) {
       closeFlyout()
     }
+    const ep = emojiPop
+    if (ep !== null) {
+      const epInside = path.length > 0
+        ? path.includes(ep)
+        : (e.target instanceof Node && ep.contains(e.target))
+      if (!epInside) {
+        closeEmojiPicker()
+      }
+    }
   }
   ownerDoc.addEventListener('pointerdown', onDocPointer, true)
 
@@ -584,6 +739,12 @@ export function mountToolPalette (
   // document listener (it was bound earlier and would otherwise cancel the
   // in-progress drawing in the same keypress).
   const onDocKey = (e: KeyboardEvent): void => {
+    if (e.key === 'Escape' && emojiPop !== null) {
+      e.stopPropagation()
+      e.preventDefault()
+      closeEmojiPicker()
+      return
+    }
     if (e.key === 'Escape' && flyout !== null) {
       e.stopPropagation()
       e.preventDefault()
@@ -628,6 +789,7 @@ export function mountToolPalette (
       ownerDoc.defaultView?.removeEventListener('resize', onWinResize)
       unbindTool()
       closeFlyout()
+      closeEmojiPicker()
       root.parentElement?.removeChild(root)
       groupButtons.clear()
       itemButtons.clear()

@@ -1365,17 +1365,6 @@ export interface Options {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/**
- * Inline SVG icon registry — TradingView-style stroke icons.
- *
- * All icons render on a 28×28 viewBox with `stroke="currentColor"` and no
- * hard-coded fills, so toolbars inherit the host theme color. Paths are
- * authored in the same geometry language as TV's line-tools-icons set
- * (thin diagonal strokes for lines, level ticks for fib, loops for waves).
- *
- * `getDrawingIcon` resolves an iconId to markup; unknown ids get the
- * generic 'tool' glyph so a tool is never invisible in a toolbar.
- */
 export type DrawingIconId = string;
 /**
  * Register a host-supplied icon (inline SVG markup) under an id — for
@@ -1435,6 +1424,8 @@ export interface DrawingStylePaths {
 	textAlign?: StylePath;
 }
 export type ToolbarControl = {
+	kind: "templates";
+} | {
 	kind: "color";
 	role: "line" | "fill" | "text" | "background";
 	path?: StylePath;
@@ -1484,6 +1475,8 @@ export interface DrawingToolItem {
 	iconId: DrawingIconId;
 	/** Single-key hotkey hint (host may bind). */
 	hotkey?: string;
+	/** Flyout hint text (TV shows '⌥ T'); defaults to `hotkey` when unset. */
+	hotkeyLabel?: string;
 	capabilities: DrawingToolCapabilities;
 	toolbarRecipe: ToolbarControl[];
 	/** Live read/write path overrides for the recipe's style controls — the
@@ -1511,6 +1504,13 @@ export interface DrawingToolGroup {
 	/** Icon shown on the group's flyout button. */
 	iconId: DrawingIconId;
 	sections: DrawingToolSection[];
+	/**
+	 * Single-item rail button (TV's measure/zoom) — no caret, no flyout,
+	 * clicking arms/dispatches the item directly.
+	 */
+	standalone?: boolean;
+	/** Render a hairline separator above this group (TV's rail dividers). */
+	separatorBefore?: boolean;
 }
 /**
  * Left-side tool palette (DP-6d) — TradingView's vertical drawing rail.
@@ -1708,6 +1708,13 @@ export interface DrawingsApi extends DrawingManager {
 	 * extras' hotkeys automatically; hosts can call it directly too.
 	 */
 	registerToolHotkey: (key: string, overlayName: string) => void;
+	/**
+	 * Switch the cursor-group mode (TV's left-rail first flyout):
+	 * 'cursor' | 'dot' | 'arrowCursor' | 'demonstration' | 'eraser' | 'zoom'.
+	 * The palette calls this for non-tool picks the host didn't handle;
+	 * hosts can call it directly too.
+	 */
+	setCursorMode: (mode: string) => void;
 	configure: (opts: DrawingsConfigureOptions) => void;
 }
 export type DomPosition = "root" | "main" | "yAxis";
@@ -2384,6 +2391,12 @@ export interface DrawingInteractionState {
 	 * manager.activate unless the caller passes `continuous` explicitly.
 	 */
 	stayInDrawing: boolean;
+	/**
+	 * Cursor-group mode from the left rail: 'cursor' (cross), 'dot',
+	 * 'arrowCursor' (no crosshair), 'demonstration', 'eraser' (click removes
+	 * drawings), 'zoom' (click zooms in, shift-click zooms out).
+	 */
+	cursorMode: string;
 }
 export declare function getDrawingInteractionState(chart: Chart): DrawingInteractionState;
 export declare function setAlign45Enabled(chart: Chart, enabled: boolean): void;

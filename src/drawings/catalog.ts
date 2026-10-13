@@ -67,6 +67,7 @@ export interface DrawingStylePaths {
 }
 
 export type ToolbarControl =
+  | { kind: 'templates' }
   | { kind: 'color', role: 'line' | 'fill' | 'text' | 'background', path?: StylePath }
   | { kind: 'style', role: 'line' | 'text', path?: StylePath }
   | { kind: 'width', path?: StylePath }
@@ -93,6 +94,8 @@ export interface DrawingToolItem {
   iconId: DrawingIconId
   /** Single-key hotkey hint (host may bind). */
   hotkey?: string
+  /** Flyout hint text (TV shows '⌥ T'); defaults to `hotkey` when unset. */
+  hotkeyLabel?: string
   capabilities: DrawingToolCapabilities
   toolbarRecipe: ToolbarControl[]
   /** Live read/write path overrides for the recipe's style controls — the
@@ -122,6 +125,13 @@ export interface DrawingToolGroup {
   /** Icon shown on the group's flyout button. */
   iconId: DrawingIconId
   sections: DrawingToolSection[]
+  /**
+   * Single-item rail button (TV's measure/zoom) — no caret, no flyout,
+   * clicking arms/dispatches the item directly.
+   */
+  standalone?: boolean
+  /** Render a hairline separator above this group (TV's rail dividers). */
+  separatorBefore?: boolean
 }
 
 const BASE: Pick<DrawingToolCapabilities, 'cloneable' | 'snap45'> = {
@@ -133,13 +143,14 @@ function caps (partial: Partial<DrawingToolCapabilities> & Pick<DrawingToolCapab
   return { freehand: false, hasText: false, multiline: false, ...BASE, ...partial }
 }
 
+// TV floating-toolbar tail: quick controls first, then
+// settings | lock | remove | more (hide/clone live inside the ⋯ menu).
 const TAIL: ToolbarControl[] = [
-  { kind: 'lock' }, { kind: 'visibility' }, { kind: 'clone' },
-  { kind: 'settings' }, { kind: 'remove' }, { kind: 'more' }
+  { kind: 'settings' }, { kind: 'lock' }, { kind: 'remove' }, { kind: 'more' }
 ]
 
 const LINE_RECIPE: ToolbarControl[] = [
-  { kind: 'color', role: 'line' }, { kind: 'style', role: 'line' }, { kind: 'width' },
+  { kind: 'color', role: 'line' }, { kind: 'width' }, { kind: 'style', role: 'line' },
   { kind: 'snap45' }, ...TAIL
 ]
 
@@ -164,8 +175,8 @@ function shapeRecipe (channel: 'rect' | 'circle' | 'polygon' | 'arc', fill: 'rec
   return [
     { kind: 'color', role: 'line', path: ['styles', channel, 'borderColor'] },
     { kind: 'color', role: 'fill', path: ['styles', fill, 'color'] },
-    { kind: 'style', role: 'line', path: ['styles', channel, 'borderStyle'] },
     { kind: 'width', path: ['styles', channel, 'borderSize'] },
+    { kind: 'style', role: 'line', path: ['styles', channel, 'borderStyle'] },
     ...TAIL
   ]
 }
@@ -173,26 +184,24 @@ function shapeRecipe (channel: 'rect' | 'circle' | 'polygon' | 'arc', fill: 'rec
 /** Line-drawn freehand/curve tools read styles.line.* — same surface as
  * LINE_RECIPE minus the 45° snap control. */
 const PATH_RECIPE: ToolbarControl[] = [
-  { kind: 'color', role: 'line' }, { kind: 'style', role: 'line' }, { kind: 'width' },
+  { kind: 'color', role: 'line' }, { kind: 'width' }, { kind: 'style', role: 'line' },
   ...TAIL
 ]
 
 const TEXT_RECIPE: ToolbarControl[] = [
   { kind: 'color', role: 'text' }, { kind: 'style', role: 'text' }, { kind: 'text' },
-  { kind: 'textAlign' }, { kind: 'lock' }, { kind: 'visibility' }, { kind: 'clone' },
-  { kind: 'settings' }, { kind: 'remove' }, { kind: 'more' }
+  { kind: 'textAlign' }, ...TAIL
 ]
 
 /** Measure/range tools style via extendData — generic roles resolve through
  * each item's stylePaths, so the recipe stays family-shaped. */
 const MEASURE_RECIPE: ToolbarControl[] = [
   { kind: 'color', role: 'line' }, { kind: 'color', role: 'background' }, { kind: 'text' },
-  { kind: 'lock' }, { kind: 'visibility' }, { kind: 'clone' }, { kind: 'settings' },
-  { kind: 'remove' }, { kind: 'more' }
+  ...TAIL
 ]
 
 const RANGE_RECIPE: ToolbarControl[] = [
-  { kind: 'color', role: 'line' }, { kind: 'style', role: 'line' }, { kind: 'width' },
+  { kind: 'color', role: 'line' }, { kind: 'width' }, { kind: 'style', role: 'line' },
   ...TAIL
 ]
 
@@ -280,240 +289,274 @@ function item (
   iconId: DrawingIconId,
   capabilities: DrawingToolCapabilities,
   toolbarRecipe: ToolbarControl[],
-  extra?: Partial<Pick<DrawingToolItem, 'hotkey' | 'available' | 'nonTool' | 'stylePaths'>>
+  extra?: Partial<Pick<DrawingToolItem, 'hotkey' | 'hotkeyLabel' | 'available' | 'nonTool' | 'stylePaths' | 'extendData'>>
 ): DrawingToolItem {
   return { id, overlayName, title, iconId, capabilities, toolbarRecipe, available: true, ...extra }
 }
 
 function buildCatalog (): DrawingToolGroup[] {
+  // Structure mirrors the TradingView drawing rail exactly — same groups,
+  // section order, item order, and hotkey hints as the reference template.
+  // Tools TV does not ship (horizontalSegment, verticalSegment, verticalRay,
+  // priceLine, priceChannel, parallelogram, arrowMarkLeft/Right) stay
+  // registered as overlay templates but are not offered in the palette.
   return [
     {
       id: 'cursor',
-      iconId: 'cursor',
+      iconId: 'linetool-group-cursors',
       sections: [{
         id: 'main',
         items: [
-          item('cursor', '', 'Cursor', 'cursor', caps({ anchorCount: 0 }), [], { nonTool: true }),
-          item('cross', '', 'Cross', 'cross', caps({ anchorCount: 0 }), [], { nonTool: true }),
-          item('dot', '', 'Dot', 'cursor', caps({ anchorCount: 0 }), [], { nonTool: true }),
-          item('arrowCursor', '', 'Arrow Cursor', 'cursor', caps({ anchorCount: 0 }), [], { nonTool: true }),
-          item('eraser', '', 'Eraser', 'eraser', caps({ anchorCount: 0 }), [], { nonTool: true }),
-          item('zoom', '', 'Zoom', 'cross', caps({ anchorCount: 0 }), [], { nonTool: true })
+          item('cursor', '', 'Cross Cursor', 'cursor', caps({ anchorCount: 0, snap45: false }), [], { nonTool: true }),
+          item('dot', '', 'Dot Cursor', 'dot', caps({ anchorCount: 0, snap45: false }), [], { nonTool: true }),
+          item('arrowCursor', '', 'Arrow Cursor', 'arrow', caps({ anchorCount: 0, snap45: false }), [], { nonTool: true }),
+          item('demonstration', '', 'Demonstration', 'demonstration', caps({ anchorCount: 0, snap45: false }), [], { nonTool: true }),
+          item('eraser', '', 'Eraser', 'eraser', caps({ anchorCount: 0, snap45: false }), [], { nonTool: true })
         ]
       }]
     },
     {
       id: 'trend-line',
-      iconId: 'trendLine',
+      iconId: 'linetool-group-trend-line',
       sections: [
         {
           id: 'lines',
           items: [
-            item('trendLine', 'segment', 'Trend Line', 'trendLine', caps({ anchorCount: 2 }), LINE_RECIPE, { hotkey: 'T' }),
-            item('ray', 'rayLine', 'Ray', 'ray', caps({ anchorCount: 2 }), LINE_RECIPE),
-            item('infoLine', 'infoLine', 'Info Line', 'trendLine', caps({ anchorCount: 2 }), LINE_RECIPE),
-            item('extendedLine', 'straightLine', 'Extended Line', 'extendedLine', caps({ anchorCount: 2 }), LINE_RECIPE),
-            item('trendAngle', 'trendAngle', 'Trend Angle', 'trendLine', caps({ anchorCount: 2 }), LINE_RECIPE),
-            item('horizontalLine', 'horizontalStraightLine', 'Horizontal Line', 'horizontalLine', caps({ anchorCount: 1 }), LINE_RECIPE, { hotkey: 'H' }),
-            item('horizontalRay', 'horizontalRayLine', 'Horizontal Ray', 'horizontalRay', caps({ anchorCount: 1 }), LINE_RECIPE),
-            item('horizontalSegment', 'horizontalSegment', 'Horizontal Segment', 'horizontalLine', caps({ anchorCount: 2 }), LINE_RECIPE),
-            item('verticalLine', 'verticalStraightLine', 'Vertical Line', 'verticalLine', caps({ anchorCount: 1 }), LINE_RECIPE, { hotkey: 'V' }),
-            item('verticalSegment', 'verticalSegment', 'Vertical Segment', 'verticalLine', caps({ anchorCount: 2 }), LINE_RECIPE),
-            item('verticalRay', 'verticalRayLine', 'Vertical Ray Line', 'verticalLine', caps({ anchorCount: 2 }), LINE_RECIPE),
-            item('crossLine', 'crossLine', 'Cross Line', 'cross', caps({ anchorCount: 1 }), LINE_RECIPE),
-            item('priceLine', 'priceLine', 'Price Line', 'horizontalLine', caps({ anchorCount: 1 }), LINE_RECIPE),
-            item('arrow', 'arrowLine', 'Arrow', 'arrow', caps({ anchorCount: 2 }), LINE_RECIPE)
+            item('trendLine', 'segment', 'Trend Line', 'LineToolTrendLine', caps({ anchorCount: 2 }), LINE_RECIPE, { hotkey: 'T', hotkeyLabel: '⌥ T' }),
+            item('ray', 'rayLine', 'Ray', 'LineToolRay', caps({ anchorCount: 2 }), LINE_RECIPE),
+            item('infoLine', 'infoLine', 'Info Line', 'LineToolInfoLine', caps({ anchorCount: 2 }), LINE_RECIPE),
+            item('extendedLine', 'straightLine', 'Extended Line', 'LineToolExtended', caps({ anchorCount: 2 }), LINE_RECIPE),
+            item('trendAngle', 'trendAngle', 'Trend Angle', 'LineToolTrendAngle', caps({ anchorCount: 2 }), LINE_RECIPE),
+            item('horizontalLine', 'horizontalStraightLine', 'Horizontal Line', 'LineToolHorzLine', caps({ anchorCount: 1 }), LINE_RECIPE, { hotkey: 'H', hotkeyLabel: '⌥ H' }),
+            item('horizontalRay', 'horizontalRayLine', 'Horizontal Ray', 'LineToolHorzRay', caps({ anchorCount: 1 }), LINE_RECIPE, { hotkey: 'J', hotkeyLabel: '⌥ J' }),
+            item('verticalLine', 'verticalStraightLine', 'Vertical Line', 'LineToolVertLine', caps({ anchorCount: 1 }), LINE_RECIPE, { hotkey: 'V', hotkeyLabel: '⌥ V' }),
+            item('crossLine', 'crossLine', 'Cross Line', 'LineToolCrossLine', caps({ anchorCount: 1 }), LINE_RECIPE, { hotkey: 'C', hotkeyLabel: '⌥ C' })
           ]
         },
         {
           id: 'channels',
           items: [
-            item('parallelChannel', 'parallelStraightLine', 'Parallel Channel', 'parallelChannel', caps({ anchorCount: 3 }), LINE_RECIPE),
-            item('priceChannel', 'priceChannelLine', 'Price Channel', 'priceChannel', caps({ anchorCount: 3 }), LINE_RECIPE),
-            item('flatTopBottom', 'flatTopBottom', 'Flat Top/Bottom', 'flatTopBottom', caps({ anchorCount: 3 }), LINE_RECIPE),
-            item('disjointChannel', 'disjointChannel', 'Disjoint Channel', 'disjointChannel', caps({ anchorCount: 3 }), LINE_RECIPE),
-            item('regressionTrend', 'regressionTrend', 'Regression Trend', 'parallelChannel', caps({ anchorCount: 2 }), LINE_RECIPE)
+            item('parallelChannel', 'parallelStraightLine', 'Parallel Channel', 'LineToolParallelChannel', caps({ anchorCount: 3 }), LINE_RECIPE),
+            item('regressionTrend', 'regressionTrend', 'Regression Trend', 'LineToolRegressionTrend', caps({ anchorCount: 2 }), LINE_RECIPE),
+            item('flatTopBottom', 'flatTopBottom', 'Flat Top/Bottom', 'LineToolFlatBottom', caps({ anchorCount: 3 }), LINE_RECIPE),
+            item('disjointChannel', 'disjointChannel', 'Disjoint Channel', 'LineToolDisjointAngle', caps({ anchorCount: 3 }), LINE_RECIPE)
           ]
         },
         {
           id: 'pitchforks',
           items: [
-            item('pitchfork', 'pitchfork', 'Pitchfork', 'pitchfork', caps({ anchorCount: 3 }), LINE_RECIPE),
-            item('schiffPitchfork', 'schiffPitchfork', 'Schiff Pitchfork', 'pitchfork', caps({ anchorCount: 3 }), LINE_RECIPE),
-            item('modifiedSchiffPitchfork', 'modifiedSchiffPitchfork', 'Modified Schiff', 'pitchfork', caps({ anchorCount: 3 }), LINE_RECIPE),
-            item('insidePitchfork', 'insidePitchfork', 'Inside Pitchfork', 'pitchfork', caps({ anchorCount: 3 }), LINE_RECIPE),
-            item('pitchfan', 'pitchfan', 'Pitchfan', 'pitchfork', caps({ anchorCount: 3 }), LINE_RECIPE)
+            item('pitchfork', 'pitchfork', 'Pitchfork', 'LineToolPitchfork', caps({ anchorCount: 3 }), LINE_RECIPE),
+            item('schiffPitchfork', 'schiffPitchfork', 'Schiff Pitchfork', 'LineToolSchiffPitchfork2', caps({ anchorCount: 3 }), LINE_RECIPE),
+            item('modifiedSchiffPitchfork', 'modifiedSchiffPitchfork', 'Modified Schiff Pitchfork', 'LineToolSchiffPitchfork', caps({ anchorCount: 3 }), LINE_RECIPE),
+            item('insidePitchfork', 'insidePitchfork', 'Inside Pitchfork', 'LineToolInsidePitchfork', caps({ anchorCount: 3 }), LINE_RECIPE)
           ]
         }
       ]
     },
     {
       id: 'gann-fib',
-      iconId: 'fibRetracement',
+      iconId: 'linetool-group-gann-and-fibonacci',
       sections: [
         {
           id: 'fibonacci',
           items: [
-            item('fibRetracement', 'fibonacciLine', 'Fib Retracement', 'fibRetracement', caps({ anchorCount: 2 }), FIB_LEVELS_RECIPE, { hotkey: 'F' }),
-            item('fibTimeZone', 'fibTimeZone', 'Fib Time Zone', 'fibTimeZone', caps({ anchorCount: 2 }), FIB_LEVELS_RECIPE),
-            item('fibChannel', 'fibChannel', 'Fib Channel', 'parallelChannel', caps({ anchorCount: 3 }), FIB_LEVELS_RECIPE),
-            item('fibCircles', 'fibCircles', 'Fib Circles', 'circle', caps({ anchorCount: 2 }), FIB_RECIPE),
-            item('fibSpeedFan', 'fibSpeedFan', 'Fib Speed Resistance Fan', 'trendLine', caps({ anchorCount: 2 }), FIB_RECIPE),
-            item('fibSpeedArcs', 'fibSpeedArcs', 'Fib Speed Resistance Arcs', 'arc', caps({ anchorCount: 2 }), FIB_RECIPE),
-            item('fibSpiral', 'fibSpiral', 'Fib Spiral', 'arc', caps({ anchorCount: 2 }), FIB_RECIPE),
-            item('fibWedge', 'fibWedge', 'Fib Wedge', 'triangle', caps({ anchorCount: 3 }), FIB_RECIPE),
-            item('fibExtension', 'fibExtension', 'Trend-Based Fib Extension', 'fibRetracement', caps({ anchorCount: 3 }), FIB_LEVELS_RECIPE),
-            item('fibTimeExtension', 'fibTimeExtension', 'Trend-Based Fib Time', 'fibTimeZone', caps({ anchorCount: 3 }), FIB_LEVELS_RECIPE)
+            item('fibRetracement', 'fibonacciLine', 'Fib Retracement', 'LineToolFibRetracement', caps({ anchorCount: 2 }), FIB_LEVELS_RECIPE, { hotkey: 'F', hotkeyLabel: '⌥ F' }),
+            item('fibExtension', 'fibExtension', 'Trend-Based Fib Extension', 'LineToolTrendBasedFibExtension', caps({ anchorCount: 3 }), FIB_LEVELS_RECIPE),
+            item('fibChannel', 'fibChannel', 'Fib Channel', 'LineToolFibChannel', caps({ anchorCount: 3 }), FIB_LEVELS_RECIPE),
+            item('fibTimeZone', 'fibTimeZone', 'Fib Time Zone', 'LineToolFibTimeZone', caps({ anchorCount: 2 }), FIB_LEVELS_RECIPE),
+            item('fibSpeedFan', 'fibSpeedFan', 'Fib Speed Resistance Fan', 'LineToolFibSpeedResistanceFan', caps({ anchorCount: 2 }), FIB_RECIPE),
+            item('fibTimeExtension', 'fibTimeExtension', 'Trend-Based Fib Time', 'LineToolTrendBasedFibTime', caps({ anchorCount: 3 }), FIB_LEVELS_RECIPE),
+            item('fibCircles', 'fibCircles', 'Fib Circles', 'LineToolFibCircles', caps({ anchorCount: 2 }), FIB_RECIPE),
+            item('fibSpiral', 'fibSpiral', 'Fib Spiral', 'LineToolFibSpiral', caps({ anchorCount: 2 }), FIB_RECIPE),
+            item('fibSpeedArcs', 'fibSpeedArcs', 'Fib Speed Resistance Arcs', 'LineToolFibSpeedResistanceArcs', caps({ anchorCount: 2 }), FIB_RECIPE),
+            item('fibWedge', 'fibWedge', 'Fib Wedge', 'LineToolFibWedge', caps({ anchorCount: 3 }), FIB_RECIPE),
+            item('pitchfan', 'pitchfan', 'Pitchfan', 'LineToolPitchfan', caps({ anchorCount: 3 }), FIB_RECIPE)
           ]
         },
         {
           id: 'gann',
           items: [
-            item('gannFan', 'gannFan', 'Gann Fan', 'trendLine', caps({ anchorCount: 2 }), FIB_LEVELS_RECIPE),
-            item('gannBox', 'gannBox', 'Gann Box', 'rect', caps({ anchorCount: 2 }), FIB_RECIPE),
-            item('gannSquare', 'gannSquare', 'Gann Square', 'rect', caps({ anchorCount: 2 }), FIB_RECIPE),
-            item('gannFixed', 'gannFixed', 'Gann Square Fixed', 'rect', caps({ anchorCount: 1 }), FIB_RECIPE),
-            item('gannComplex', 'gannComplex', 'Gann Complex', 'rect', caps({ anchorCount: 2 }), FIB_RECIPE)
+            item('gannBox', 'gannBox', 'Gann Box', 'LineToolGannSquare', caps({ anchorCount: 2 }), FIB_RECIPE),
+            item('gannFixed', 'gannFixed', 'Gann Square Fixed', 'LineToolGannFixed', caps({ anchorCount: 1 }), FIB_RECIPE),
+            item('gannComplex', 'gannComplex', 'Gann Square', 'LineToolGannComplex', caps({ anchorCount: 2 }), FIB_RECIPE),
+            item('gannFan', 'gannFan', 'Gann Fan', 'LineToolGannFan', caps({ anchorCount: 2 }), FIB_LEVELS_RECIPE)
           ]
         }
       ]
     },
     {
       id: 'patterns',
-      iconId: 'elliottImpulse',
+      iconId: 'linetool-group-patterns',
       sections: [
         {
           id: 'chart-patterns',
           items: [
-            item('xabcd', 'xabcd', 'XABCD Pattern', 'xabcd', caps({ anchorCount: 5 }), LINE_RECIPE),
-            item('cypher', 'cypher', 'Cypher Pattern', 'xabcd', caps({ anchorCount: 5 }), LINE_RECIPE),
-            item('headAndShoulders', 'headAndShoulders', 'Head and Shoulders', 'elliottCorrection', caps({ anchorCount: 7 }), LINE_RECIPE),
-            item('abcd', 'abcd', 'ABCD Pattern', 'xabcd', caps({ anchorCount: 4 }), LINE_RECIPE),
-            item('threeDrives', 'threeDrives', 'Three Drives', 'elliottImpulse', caps({ anchorCount: 7 }), LINE_RECIPE),
-            item('trianglePattern', 'trianglePattern', 'Triangle Pattern', 'triangle', caps({ anchorCount: 4 }), LINE_RECIPE)
+            item('xabcd', 'xabcd', 'XABCD Pattern', 'LineTool5PointsPattern', caps({ anchorCount: 5 }), LINE_RECIPE),
+            item('cypher', 'cypher', 'Cypher Pattern', 'LineToolCypherPattern', caps({ anchorCount: 5 }), LINE_RECIPE),
+            item('headAndShoulders', 'headAndShoulders', 'Head and Shoulders', 'LineToolHeadAndShoulders', caps({ anchorCount: 7 }), LINE_RECIPE),
+            item('abcd', 'abcd', 'ABCD Pattern', 'LineToolABCD', caps({ anchorCount: 4 }), LINE_RECIPE),
+            item('trianglePattern', 'trianglePattern', 'Triangle Pattern', 'LineToolTrianglePattern', caps({ anchorCount: 4 }), LINE_RECIPE),
+            item('threeDrives', 'threeDrives', 'Three Drives', 'LineToolThreeDrivers', caps({ anchorCount: 7 }), LINE_RECIPE)
           ]
         },
         {
           id: 'elliott',
           items: [
-            item('elliottImpulse', 'elliottImpulse', 'Elliott Impulse (12345)', 'elliottImpulse', caps({ anchorCount: 6 }), LINE_RECIPE),
-            item('elliottCorrection', 'elliottCorrection', 'Elliott Correction (ABC)', 'elliottCorrection', caps({ anchorCount: 4 }), LINE_RECIPE),
-            item('elliottTriangle', 'elliottTriangle', 'Elliott Triangle (ABCDE)', 'elliottCorrection', caps({ anchorCount: 6 }), LINE_RECIPE),
-            item('elliottDoubleCombo', 'elliottDoubleCombo', 'Elliott Double Combo (WXY)', 'elliottCorrection', caps({ anchorCount: 6 }), LINE_RECIPE),
-            item('elliottTripleCombo', 'elliottTripleCombo', 'Elliott Triple Combo (WXYZ)', 'elliottCorrection', caps({ anchorCount: 7 }), LINE_RECIPE)
+            item('elliottImpulse', 'elliottImpulse', 'Elliott Impulse Wave (12345)', 'LineToolElliottImpulse', caps({ anchorCount: 6 }), LINE_RECIPE),
+            item('elliottCorrection', 'elliottCorrection', 'Elliott Correction Wave (ABC)', 'LineToolElliottCorrection', caps({ anchorCount: 4 }), LINE_RECIPE),
+            item('elliottTriangle', 'elliottTriangle', 'Elliott Triangle Wave (ABCDE)', 'LineToolElliottTriangle', caps({ anchorCount: 6 }), LINE_RECIPE),
+            item('elliottDoubleCombo', 'elliottDoubleCombo', 'Elliott Double Combo Wave (WXY)', 'LineToolElliottDoubleCombo', caps({ anchorCount: 6 }), LINE_RECIPE),
+            item('elliottTripleCombo', 'elliottTripleCombo', 'Elliott Triple Combo Wave (WXYXZ)', 'LineToolElliottTripleCombo', caps({ anchorCount: 7 }), LINE_RECIPE)
           ]
         },
         {
           id: 'cycles',
           items: [
-            item('cyclicLines', 'cyclicLines', 'Cyclic Lines', 'verticalLine', caps({ anchorCount: 2 }), LINE_RECIPE),
-            item('timeCycles', 'timeCycles', 'Time Cycles', 'verticalLine', caps({ anchorCount: 2 }), LINE_RECIPE),
-            item('sineLine', 'sineLine', 'Sine Line', 'curve', caps({ anchorCount: 2 }), LINE_RECIPE)
+            item('cyclicLines', 'cyclicLines', 'Cyclic Lines', 'LineToolCircleLines', caps({ anchorCount: 2 }), LINE_RECIPE),
+            item('timeCycles', 'timeCycles', 'Time Cycles', 'LineToolTimeCycles', caps({ anchorCount: 2 }), LINE_RECIPE),
+            item('sineLine', 'sineLine', 'Sine Line', 'LineToolSineLine', caps({ anchorCount: 2 }), LINE_RECIPE)
           ]
         }
       ]
     },
     {
       id: 'prediction-measure',
-      iconId: 'measure',
+      iconId: 'linetool-group-prediction-and-measurement',
       sections: [
         {
           id: 'forecast',
           items: [
-            item('forecast', 'forecast', 'Forecast', 'forecast', caps({ anchorCount: 2 }), MEASURE_RECIPE, { stylePaths: FORECAST_STYLE_PATHS }),
-            item('projection', 'projection', 'Projection', 'forecast', caps({ anchorCount: 3 }), PROJECTION_RECIPE, { stylePaths: PROJECTION_STYLE_PATHS }),
-            item('barsPattern', 'barsPattern', 'Bars Pattern', 'path', caps({ anchorCount: 2 }), COLOR_ONLY_RECIPE, { stylePaths: BARS_PATTERN_STYLE_PATHS }),
-            item('ghostFeed', 'ghostFeed', 'Ghost Feed', 'path', caps({ anchorCount: 2 }), ZONE_COLORS_RECIPE, { stylePaths: GHOST_FEED_STYLE_PATHS })
+            item('longPosition', 'longPosition', 'Long Position', 'LineToolRiskRewardLong', caps({ anchorCount: 1 }), POSITION_RECIPE, { stylePaths: POSITION_STYLE_PATHS }),
+            item('shortPosition', 'shortPosition', 'Short Position', 'LineToolRiskRewardShort', caps({ anchorCount: 1 }), POSITION_RECIPE, { stylePaths: POSITION_STYLE_PATHS }),
+            item('forecast', 'forecast', 'Forecast', 'LineToolPrediction', caps({ anchorCount: 2 }), MEASURE_RECIPE, { stylePaths: FORECAST_STYLE_PATHS }),
+            item('barsPattern', 'barsPattern', 'Bars Pattern', 'LineToolBarsPattern', caps({ anchorCount: 2 }), COLOR_ONLY_RECIPE, { stylePaths: BARS_PATTERN_STYLE_PATHS }),
+            item('ghostFeed', 'ghostFeed', 'Ghost Feed', 'LineToolGhostFeed', caps({ anchorCount: 2 }), ZONE_COLORS_RECIPE, { stylePaths: GHOST_FEED_STYLE_PATHS }),
+            item('projection', 'projection', 'Projection', 'LineToolProjection', caps({ anchorCount: 3 }), PROJECTION_RECIPE, { stylePaths: PROJECTION_STYLE_PATHS })
+          ]
+        },
+        {
+          id: 'volume',
+          items: [
+            item('anchoredVWAP', 'anchoredVWAP', 'Anchored VWAP', 'LineToolAnchoredVWAP', caps({ anchorCount: 1 }), LINE_RECIPE, { available: false }),
+            item('vpfr', 'vpfr', 'Fixed Range Volume Profile', 'LineToolFixedRangeVolumeProfile', caps({ anchorCount: 2 }), COLOR_ONLY_RECIPE),
+            item('anchoredVolumeProfile', 'anchoredVolumeProfile', 'Anchored Volume Profile', 'LineToolAnchoredVolumeProfile', caps({ anchorCount: 1 }), COLOR_ONLY_RECIPE, { available: false })
           ]
         },
         {
           id: 'measurers',
           items: [
-            item('measure', 'measure', 'Measure', 'measure', caps({ anchorCount: 0, freehand: true, snap45: false }), ZONE_COLORS_RECIPE, { stylePaths: MEASURE_STYLE_PATHS }),
-            item('dateRange', 'dateRange', 'Date Range', 'dateRange', caps({ anchorCount: 2 }), RANGE_RECIPE, { stylePaths: RANGE_STYLE_PATHS }),
-            item('priceRange', 'priceRange', 'Price Range', 'priceRange', caps({ anchorCount: 2 }), RANGE_RECIPE, { stylePaths: RANGE_STYLE_PATHS }),
-            item('dateAndPriceRange', 'dateAndPriceRange', 'Date and Price Range', 'dateRange', caps({ anchorCount: 2 }), RANGE_RECIPE, { stylePaths: RANGE_STYLE_PATHS }),
-            item('longPosition', 'longPosition', 'Long Position', 'longPosition', caps({ anchorCount: 1 }), POSITION_RECIPE, { stylePaths: POSITION_STYLE_PATHS }),
-            item('shortPosition', 'shortPosition', 'Short Position', 'shortPosition', caps({ anchorCount: 1 }), POSITION_RECIPE, { stylePaths: POSITION_STYLE_PATHS })
+            item('priceRange', 'priceRange', 'Price Range', 'LineToolPriceRange', caps({ anchorCount: 2 }), RANGE_RECIPE, { stylePaths: RANGE_STYLE_PATHS }),
+            item('dateRange', 'dateRange', 'Date Range', 'LineToolDateRange', caps({ anchorCount: 2 }), RANGE_RECIPE, { stylePaths: RANGE_STYLE_PATHS }),
+            item('dateAndPriceRange', 'dateAndPriceRange', 'Date and Price Range', 'LineToolDateAndPriceRange', caps({ anchorCount: 2 }), RANGE_RECIPE, { stylePaths: RANGE_STYLE_PATHS })
           ]
         }
       ]
     },
     {
       id: 'shapes',
-      iconId: 'rect',
+      iconId: 'linetool-group-geometric-shapes',
       sections: [
         {
           id: 'brushes',
           items: [
-            item('brush', 'brush', 'Brush', 'brush', caps({ anchorCount: 0, freehand: true, snap45: false }), PATH_RECIPE),
-            item('highlighter', 'highlighter', 'Highlighter', 'highlighter', caps({ anchorCount: 0, freehand: true, snap45: false }), HIGHLIGHTER_RECIPE, { stylePaths: HIGHLIGHTER_STYLE_PATHS }),
-            item('path', 'path', 'Path', 'path', caps({ anchorCount: -1, snap45: false }), PATH_RECIPE)
+            item('brush', 'brush', 'Brush', 'LineToolBrush', caps({ anchorCount: 0, freehand: true, snap45: false }), PATH_RECIPE),
+            item('highlighter', 'highlighter', 'Highlighter', 'LineToolHighlighter', caps({ anchorCount: 0, freehand: true, snap45: false }), HIGHLIGHTER_RECIPE, { stylePaths: HIGHLIGHTER_STYLE_PATHS })
           ]
         },
         {
           id: 'arrows',
           items: [
-            item('arrowMarkUp', 'arrowMarkUp', 'Arrow Mark Up', 'arrow', caps({ anchorCount: 1, snap45: false }), COLOR_ONLY_RECIPE, { stylePaths: MARK_STYLE_PATHS }),
-            item('arrowMarkDown', 'arrowMarkDown', 'Arrow Mark Down', 'arrow', caps({ anchorCount: 1, snap45: false }), COLOR_ONLY_RECIPE, { stylePaths: MARK_STYLE_PATHS }),
-            item('arrowMarkLeft', 'arrowMarkLeft', 'Arrow Mark Left', 'arrow', caps({ anchorCount: 1, snap45: false }), COLOR_ONLY_RECIPE, { stylePaths: MARK_STYLE_PATHS }),
-            item('arrowMarkRight', 'arrowMarkRight', 'Arrow Mark Right', 'arrow', caps({ anchorCount: 1, snap45: false }), COLOR_ONLY_RECIPE, { stylePaths: MARK_STYLE_PATHS }),
-            item('arrowMarker', 'arrowMarker', 'Arrow Marker', 'arrow', caps({ anchorCount: 2, snap45: false }), COLOR_ONLY_RECIPE, { stylePaths: MARK_STYLE_PATHS })
+            item('arrowMarker', 'arrowMarker', 'Arrow Marker', 'LineToolArrowMarker', caps({ anchorCount: 2, snap45: false }), COLOR_ONLY_RECIPE, { stylePaths: MARK_STYLE_PATHS }),
+            item('arrow', 'arrowLine', 'Arrow', 'LineToolArrow', caps({ anchorCount: 2 }), LINE_RECIPE),
+            item('arrowMarkUp', 'arrowMarkUp', 'Arrow Mark Up', 'LineToolArrowMarkUp', caps({ anchorCount: 1, snap45: false }), COLOR_ONLY_RECIPE, { stylePaths: MARK_STYLE_PATHS }),
+            item('arrowMarkDown', 'arrowMarkDown', 'Arrow Mark Down', 'LineToolArrowMarkDown', caps({ anchorCount: 1, snap45: false }), COLOR_ONLY_RECIPE, { stylePaths: MARK_STYLE_PATHS })
           ]
         },
         {
           id: 'shapes',
           items: [
-            item('rect', 'rect', 'Rectangle', 'rect', caps({ anchorCount: 2 }), shapeRecipe('rect')),
-            item('rotatedRect', 'rotatedRect', 'Rotated Rectangle', 'rotatedRect', caps({ anchorCount: 3 }), shapeRecipe('polygon')),
-            item('parallelogram', 'parallelogram', 'Parallelogram', 'rect', caps({ anchorCount: 3 }), shapeRecipe('polygon')),
-            item('circle', 'circle', 'Circle', 'circle', caps({ anchorCount: 2 }), shapeRecipe('circle')),
-            item('ellipse', 'ellipse', 'Ellipse', 'ellipse', caps({ anchorCount: 2 }), shapeRecipe('circle')),
-            item('triangle', 'triangle', 'Triangle', 'triangle', caps({ anchorCount: 3 }), shapeRecipe('polygon')),
-            // Arc's stroke channel is arc.{color,style,size} (not
-            // border*) — the generic shapeRecipe would write dead keys.
-            item('arc', 'arc', 'Arc', 'arc', caps({ anchorCount: 3 }), [
+            item('rect', 'rect', 'Rectangle', 'LineToolRectangle', caps({ anchorCount: 2 }), shapeRecipe('rect'), { hotkey: 'R', hotkeyLabel: '⌥ ⇧ R' }),
+            item('rotatedRect', 'rotatedRect', 'Rotated Rectangle', 'LineToolRotatedRectangle', caps({ anchorCount: 3 }), shapeRecipe('polygon')),
+            item('path', 'path', 'Path', 'LineToolPath', caps({ anchorCount: -1, snap45: false }), PATH_RECIPE),
+            item('circle', 'circle', 'Circle', 'LineToolCircle', caps({ anchorCount: 2 }), shapeRecipe('circle')),
+            item('ellipse', 'ellipse', 'Ellipse', 'LineToolEllipse', caps({ anchorCount: 2 }), shapeRecipe('circle')),
+            item('polyline', 'polyline', 'Polyline', 'LineToolPolyline', caps({ anchorCount: -1 }), shapeRecipe('polygon')),
+            item('triangle', 'triangle', 'Triangle', 'LineToolTriangle', caps({ anchorCount: 3 }), shapeRecipe('polygon')),
+            item('arc', 'arc', 'Arc', 'LineToolArc', caps({ anchorCount: 3 }), [
               { kind: 'color', role: 'line', path: ['styles', 'arc', 'color'] },
               { kind: 'color', role: 'fill', path: ['styles', 'polygon', 'color'] },
               { kind: 'style', role: 'line', path: ['styles', 'arc', 'style'] },
               { kind: 'width', path: ['styles', 'arc', 'size'] },
               ...TAIL
             ]),
-            item('curve', 'curve', 'Curve', 'curve', caps({ anchorCount: 2 }), PATH_RECIPE),
-            item('doubleCurve', 'doubleCurve', 'Double Curve', 'curve', caps({ anchorCount: 2 }), PATH_RECIPE),
-            item('polyline', 'polyline', 'Polyline', 'polyline', caps({ anchorCount: -1 }), shapeRecipe('polygon'))
+            item('curve', 'curve', 'Curve', 'LineToolBezierQuadro', caps({ anchorCount: 2 }), PATH_RECIPE),
+            item('doubleCurve', 'doubleCurve', 'Double Curve', 'LineToolBezierCubic', caps({ anchorCount: 2 }), PATH_RECIPE)
           ]
         }
       ]
     },
     {
       id: 'annotation',
-      iconId: 'text',
+      iconId: 'linetool-group-annotation',
       sections: [
         {
           id: 'text-notes',
           items: [
-            item('text', 'text', 'Text', 'text', caps({ anchorCount: 1, hasText: true, multiline: true, snap45: false }), TEXT_RECIPE, { hotkey: 'X' }),
-            item('anchoredText', 'anchoredText', 'Anchored Text', 'anchoredText', caps({ anchorCount: 1, hasText: true, multiline: true, snap45: false }), TEXT_RECIPE),
-            item('note', 'simpleTag', 'Note', 'note', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE),
-            item('anchoredNote', 'anchoredNote', 'Anchored Note', 'note', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE),
-            item('signpost', 'signpost', 'Signpost', 'flag', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE),
-            item('comment', 'comment', 'Comment', 'comment', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE)
+            item('text', 'text', 'Text', 'LineToolText', caps({ anchorCount: 1, hasText: true, multiline: true, snap45: false }), TEXT_RECIPE, { hotkey: 'X' }),
+            item('anchoredText', 'anchoredText', 'Anchored Text', 'LineToolTextAbsolute', caps({ anchorCount: 1, hasText: true, multiline: true, snap45: false }), TEXT_RECIPE),
+            item('textNote', 'anchoredNote', 'Note', 'LineToolTextNote', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE),
+            item('priceNote', 'simpleAnnotation', 'Price Note', 'LineToolPriceNote', caps({ anchorCount: 2, hasText: true, snap45: true }), TEXT_RECIPE),
+            item('note', 'simpleTag', 'Pin', 'LineToolNote', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE),
+            item('table', 'table', 'Table', 'LineToolTable', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE, { stylePaths: { textAlign: ['styles', 'table', 'textAlign'] } }),
+            item('callout', 'callout', 'Callout', 'LineToolCallout', caps({ anchorCount: 2, hasText: true, multiline: true, snap45: false }), TEXT_RECIPE),
+            item('comment', 'comment', 'Comment', 'LineToolComment', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE),
+            item('priceLabel', 'priceLabel', 'Price Label', 'LineToolPriceLabel', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE),
+            item('signpost', 'signpost', 'Signpost', 'LineToolSignpost', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE),
+            item('flag', 'flagMark', 'Flag Mark', 'LineToolFlagMark', caps({ anchorCount: 1, snap45: false }), ZONE_COLORS_RECIPE, { stylePaths: { fillColor: ['styles', 'flagMark', 'flagColor'], backgroundColor: ['styles', 'flagMark', 'poleColor'] } })
           ]
         },
         {
           id: 'content',
           items: [
-            item('callout', 'callout', 'Callout', 'callout', caps({ anchorCount: 2, hasText: true, multiline: true, snap45: false }), TEXT_RECIPE),
-            item('priceLabel', 'priceLabel', 'Price Label', 'priceLabel', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE),
-            item('priceNote', 'simpleAnnotation', 'Price Note', 'priceLabel', caps({ anchorCount: 2, hasText: true, snap45: true }), TEXT_RECIPE),
-            // flagMark styles live under styles.flagMark (flagColor/poleColor)
-            // — the generic text recipe wrote dead styles.text.* paths.
-            item('flag', 'flagMark', 'Flag Mark', 'flag', caps({ anchorCount: 1, snap45: false }), ZONE_COLORS_RECIPE, { stylePaths: { fillColor: ['styles', 'flagMark', 'flagColor'], backgroundColor: ['styles', 'flagMark', 'poleColor'] } }),
-            item('table', 'table', 'Table', 'note', caps({ anchorCount: 1, hasText: true, snap45: false }), TEXT_RECIPE, { stylePaths: { textAlign: ['styles', 'table', 'textAlign'] } })
+            item('image', 'image', 'Image', 'LineToolImage', caps({ anchorCount: 1, snap45: false }), TAIL, { available: false }),
+            item('tweet', 'tweet', 'Tweet', 'LineToolTweet', caps({ anchorCount: 1, snap45: false }), TAIL, { available: false }),
+            item('idea', 'idea', 'Idea', 'LineToolIdea', caps({ anchorCount: 1, snap45: false }), TAIL, { available: false })
           ]
         }
       ]
+    },
+    {
+      id: 'font-icons',
+      iconId: 'linetool-group-font-icons',
+      sections: [{
+        id: 'icons',
+        items: [
+          item('emojiPicker', '', 'Icons', 'linetool-group-font-icons', caps({ anchorCount: 0, snap45: false }), [], { nonTool: true })
+        ]
+      }]
+    },
+    {
+      id: 'measure',
+      iconId: 'measure',
+      standalone: true,
+      separatorBefore: true,
+      sections: [{
+        id: 'main',
+        items: [
+          item('measure', 'measure', 'Measure', 'measure', caps({ anchorCount: 0, freehand: true, snap45: false }), ZONE_COLORS_RECIPE, { stylePaths: MEASURE_STYLE_PATHS })
+        ]
+      }]
+    },
+    {
+      id: 'zoom',
+      iconId: 'zoom',
+      standalone: true,
+      sections: [{
+        id: 'main',
+        items: [
+          item('zoom', '', 'Zoom', 'zoom', caps({ anchorCount: 0, snap45: false }), [], { nonTool: true })
+        ]
+      }]
     }
   ]
 }
@@ -578,17 +621,21 @@ export function setCatalogItemAvailable (id: string, available: boolean): boolea
 
 /** Toolbar chrome — chart-level toggle actions (TV left-toolbar footer). */
 export interface DrawingChromeItem {
-  id: 'magnet' | 'stayInDrawing' | 'lockAll' | 'hideAll' | 'removeAll'
+  id: 'magnet' | 'stayInDrawing' | 'lockAll' | 'hideAll' | 'drawingSync' | 'removeAll'
   title: string
   iconId: DrawingIconId
   /** Toggles render pressed state; actions fire once. */
   kind: 'toggle' | 'action'
+  /** Render a hairline separator above this chrome button. */
+  separatorBefore?: boolean
 }
 
+// Order matches TV's rail footer: toggles, sync toggle, separator, trash.
 export const DRAWING_CHROME: DrawingChromeItem[] = [
-  { id: 'magnet', title: 'Magnet Mode', iconId: 'magnet', kind: 'toggle' },
-  { id: 'stayInDrawing', title: 'Stay in Drawing Mode', iconId: 'stayDrawing', kind: 'toggle' },
-  { id: 'lockAll', title: 'Lock All Drawings', iconId: 'lock', kind: 'toggle' },
-  { id: 'hideAll', title: 'Hide All Drawings', iconId: 'hide', kind: 'toggle' },
-  { id: 'removeAll', title: 'Remove All Drawings', iconId: 'remove', kind: 'action' }
+  { id: 'magnet', title: 'Magnet Mode', iconId: 'magnet-button', kind: 'toggle' },
+  { id: 'stayInDrawing', title: 'Stay in Drawing Mode', iconId: 'drawginmode', kind: 'toggle' },
+  { id: 'lockAll', title: 'Lock All Drawings', iconId: 'lock-all', kind: 'toggle' },
+  { id: 'hideAll', title: 'Hide All Drawings', iconId: 'hide-all', kind: 'toggle' },
+  { id: 'drawingSync', title: 'Sync Drawings', iconId: 'drawingSyncMode-button', kind: 'toggle' },
+  { id: 'removeAll', title: 'Remove All Drawings', iconId: 'removeAllDrawingTools', kind: 'action', separatorBefore: true }
 ]
