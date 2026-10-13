@@ -10872,6 +10872,12 @@ var LINE_RECIPE = __spreadArray([
     { kind: 'color', role: 'line' }, { kind: 'width' }, { kind: 'style', role: 'line' },
     { kind: 'snap45' }
 ], __read(TAIL), false);
+/** Trend-line family renders an editable on-line label (lineCommon) — TV
+ * shows the text-color control between line color and width. */
+var LINE_TEXT_RECIPE = __spreadArray([
+    { kind: 'color', role: 'line' }, { kind: 'color', role: 'text', path: ['extendData', 'textColor'] },
+    { kind: 'width' }, { kind: 'style', role: 'line' }, { kind: 'snap45' }
+], __read(TAIL), false);
 var FIB_RECIPE = __spreadArray([
     { kind: 'color', role: 'line' }, { kind: 'levels' }, { kind: 'style', role: 'line' },
     { kind: 'width' }
@@ -10887,14 +10893,17 @@ var FIB_LEVELS_RECIPE = __spreadArray([
  * Stroke/fill live under `styles.<channel>.border*` / `.color` — the channel
  * is per-tool (rect | circle | polygon | arc), so the recipe is a factory.
  */
-function shapeRecipe(channel, fill) {
+function shapeRecipe(channel, fill, withText) {
     if (fill === void 0) { fill = channel; }
-    return __spreadArray([
+    if (withText === void 0) { withText = false; }
+    var textColor = { kind: 'color', role: 'text', path: ['extendData', 'textColor'] };
+    return __spreadArray(__spreadArray(__spreadArray([
         { kind: 'color', role: 'line', path: ['styles', channel, 'borderColor'] },
-        { kind: 'color', role: 'fill', path: ['styles', fill, 'color'] },
+        { kind: 'color', role: 'fill', path: ['styles', fill, 'color'] }
+    ], __read((withText ? [textColor] : [])), false), [
         { kind: 'width', path: ['styles', channel, 'borderSize'] },
         { kind: 'style', role: 'line', path: ['styles', channel, 'borderStyle'] }
-    ], __read(TAIL), false);
+    ], false), __read(TAIL), false);
 }
 /** Line-drawn freehand/curve tools read styles.line.* — same surface as
  * LINE_RECIPE minus the 45° snap control. */
@@ -11006,15 +11015,15 @@ function buildCatalog() {
                 {
                     id: 'lines',
                     items: [
-                        item('trendLine', 'segment', 'Trend Line', 'LineToolTrendLine', caps({ anchorCount: 2 }), LINE_RECIPE, { hotkey: 'T', hotkeyLabel: '⌥ T' }),
-                        item('ray', 'rayLine', 'Ray', 'LineToolRay', caps({ anchorCount: 2 }), LINE_RECIPE),
-                        item('infoLine', 'infoLine', 'Info Line', 'LineToolInfoLine', caps({ anchorCount: 2 }), LINE_RECIPE),
-                        item('extendedLine', 'straightLine', 'Extended Line', 'LineToolExtended', caps({ anchorCount: 2 }), LINE_RECIPE),
-                        item('trendAngle', 'trendAngle', 'Trend Angle', 'LineToolTrendAngle', caps({ anchorCount: 2 }), LINE_RECIPE),
-                        item('horizontalLine', 'horizontalStraightLine', 'Horizontal Line', 'LineToolHorzLine', caps({ anchorCount: 1 }), LINE_RECIPE, { hotkey: 'H', hotkeyLabel: '⌥ H' }),
-                        item('horizontalRay', 'horizontalRayLine', 'Horizontal Ray', 'LineToolHorzRay', caps({ anchorCount: 1 }), LINE_RECIPE, { hotkey: 'J', hotkeyLabel: '⌥ J' }),
-                        item('verticalLine', 'verticalStraightLine', 'Vertical Line', 'LineToolVertLine', caps({ anchorCount: 1 }), LINE_RECIPE, { hotkey: 'V', hotkeyLabel: '⌥ V' }),
-                        item('crossLine', 'crossLine', 'Cross Line', 'LineToolCrossLine', caps({ anchorCount: 1 }), LINE_RECIPE, { hotkey: 'C', hotkeyLabel: '⌥ C' })
+                        item('trendLine', 'segment', 'Trend Line', 'LineToolTrendLine', caps({ anchorCount: 2 }), LINE_TEXT_RECIPE, { hotkey: 'T', hotkeyLabel: '⌥ T' }),
+                        item('ray', 'rayLine', 'Ray', 'LineToolRay', caps({ anchorCount: 2 }), LINE_TEXT_RECIPE),
+                        item('infoLine', 'infoLine', 'Info Line', 'LineToolInfoLine', caps({ anchorCount: 2 }), LINE_TEXT_RECIPE),
+                        item('extendedLine', 'straightLine', 'Extended Line', 'LineToolExtended', caps({ anchorCount: 2 }), LINE_TEXT_RECIPE),
+                        item('trendAngle', 'trendAngle', 'Trend Angle', 'LineToolTrendAngle', caps({ anchorCount: 2 }), LINE_TEXT_RECIPE),
+                        item('horizontalLine', 'horizontalStraightLine', 'Horizontal Line', 'LineToolHorzLine', caps({ anchorCount: 1 }), LINE_TEXT_RECIPE, { hotkey: 'H', hotkeyLabel: '⌥ H' }),
+                        item('horizontalRay', 'horizontalRayLine', 'Horizontal Ray', 'LineToolHorzRay', caps({ anchorCount: 1 }), LINE_TEXT_RECIPE, { hotkey: 'J', hotkeyLabel: '⌥ J' }),
+                        item('verticalLine', 'verticalStraightLine', 'Vertical Line', 'LineToolVertLine', caps({ anchorCount: 1 }), LINE_TEXT_RECIPE, { hotkey: 'V', hotkeyLabel: '⌥ V' }),
+                        item('crossLine', 'crossLine', 'Cross Line', 'LineToolCrossLine', caps({ anchorCount: 1 }), LINE_TEXT_RECIPE, { hotkey: 'C', hotkeyLabel: '⌥ C' })
                     ]
                 },
                 {
@@ -11151,7 +11160,7 @@ function buildCatalog() {
                     id: 'arrows',
                     items: [
                         item('arrowMarker', 'arrowMarker', 'Arrow Marker', 'LineToolArrowMarker', caps({ anchorCount: 2, snap45: false }), COLOR_ONLY_RECIPE, { stylePaths: MARK_STYLE_PATHS }),
-                        item('arrow', 'arrowLine', 'Arrow', 'LineToolArrow', caps({ anchorCount: 2 }), LINE_RECIPE),
+                        item('arrow', 'arrowLine', 'Arrow', 'LineToolArrow', caps({ anchorCount: 2 }), LINE_TEXT_RECIPE),
                         item('arrowMarkUp', 'arrowMarkUp', 'Arrow Mark Up', 'LineToolArrowMarkUp', caps({ anchorCount: 1, snap45: false }), COLOR_ONLY_RECIPE, { stylePaths: MARK_STYLE_PATHS }),
                         item('arrowMarkDown', 'arrowMarkDown', 'Arrow Mark Down', 'LineToolArrowMarkDown', caps({ anchorCount: 1, snap45: false }), COLOR_ONLY_RECIPE, { stylePaths: MARK_STYLE_PATHS })
                     ]
@@ -11159,11 +11168,11 @@ function buildCatalog() {
                 {
                     id: 'shapes',
                     items: [
-                        item('rect', 'rect', 'Rectangle', 'LineToolRectangle', caps({ anchorCount: 2 }), shapeRecipe('rect'), { hotkey: 'R', hotkeyLabel: '⌥ ⇧ R' }),
+                        item('rect', 'rect', 'Rectangle', 'LineToolRectangle', caps({ anchorCount: 2 }), shapeRecipe('rect', 'rect', true), { hotkey: 'R', hotkeyLabel: '⌥ ⇧ R' }),
                         item('rotatedRect', 'rotatedRect', 'Rotated Rectangle', 'LineToolRotatedRectangle', caps({ anchorCount: 3 }), shapeRecipe('polygon')),
                         item('path', 'path', 'Path', 'LineToolPath', caps({ anchorCount: -1, snap45: false }), PATH_RECIPE),
-                        item('circle', 'circle', 'Circle', 'LineToolCircle', caps({ anchorCount: 2 }), shapeRecipe('circle')),
-                        item('ellipse', 'ellipse', 'Ellipse', 'LineToolEllipse', caps({ anchorCount: 2 }), shapeRecipe('circle')),
+                        item('circle', 'circle', 'Circle', 'LineToolCircle', caps({ anchorCount: 2 }), shapeRecipe('circle', 'circle', true)),
+                        item('ellipse', 'ellipse', 'Ellipse', 'LineToolEllipse', caps({ anchorCount: 2 }), shapeRecipe('circle', 'circle', true)),
                         item('polyline', 'polyline', 'Polyline', 'LineToolPolyline', caps({ anchorCount: -1 }), shapeRecipe('polygon')),
                         item('triangle', 'triangle', 'Triangle', 'LineToolTriangle', caps({ anchorCount: 3 }), shapeRecipe('polygon')),
                         item('arc', 'arc', 'Arc', 'LineToolArc', caps({ anchorCount: 3 }), __spreadArray([
@@ -11647,6 +11656,7 @@ var TV_ICONS = {
     'ft-drawing-toolbar': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 12" width="8" height="12" fill="currentColor"><rect width="2" height="2" rx="1"></rect><rect width="2" height="2" rx="1" y="5"></rect><rect width="2" height="2" rx="1" y="10"></rect><rect width="2" height="2" rx="1" x="6"></rect><rect width="2" height="2" rx="1" x="6" y="5"></rect><rect width="2" height="2" rx="1" x="6" y="10"></rect></svg>',
     'ft-templates': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="28" height="28" fill="none" stroke="currentColor"><path stroke-linecap="round" d="M15.5 18.5h6m-3 3v-6"></path><rect width="6" height="6" rx="1.5" x="6.5" y="6.5"></rect><rect width="6" height="6" rx="1.5" x="15.5" y="6.5"></rect><rect width="6" height="6" rx="1.5" x="6.5" y="15.5"></rect></svg>',
     'ft-line-tool-color': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path fill="currentColor" d="M10.62.72a2.47 2.47 0 0 1 3.5 0l1.16 1.16c.96.97.96 2.54 0 3.5l-.58.58-8.9 8.9-1 1-.14.14H0v-4.65l.14-.15 1-1 8.9-8.9.58-.58Zm2.8.7a1.48 1.48 0 0 0-2.1 0l-.23.23 3.26 3.26.23-.23c.58-.58.58-1.52 0-2.1l-1.16-1.16Zm.23 4.2-3.26-3.27-8.2 8.2 3.25 3.27 8.2-8.2Zm-8.9 8.9-3.27-3.26-.5.5V15h3.27l.5-.5Z"></path></svg>',
+    'ft-background-color': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="20" height="20" fill="none"><path stroke="currentColor" d="M13.5 6.5l-3-3-7 7 7.59 7.59a2 2 0 0 0 2.82 0l4.18-4.18a2 2 0 0 0 0-2.82L13.5 6.5zm0 0v-4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v6"></path><path fill="currentColor" d="M0 16.5C0 15 2.5 12 2.5 12S5 15 5 16.5 4 19 2.5 19 0 18 0 16.5z"></path><circle fill="currentColor" cx="9.5" cy="9.5" r="1.5"></circle></svg>',
     'ft-text-color': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 13 15" width="13" height="15" fill="none"><path stroke="currentColor" d="M4 14.5h2.5m2.5 0H6.5m0 0V.5m0 0h-5a1 1 0 0 0-1 1V4m6-3.5h5a1 1 0 0 1 1 1V4"></path></svg>',
     'ft-line-tool-width': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 2" width="18" height="2"><rect width="18" height="2" fill="currentColor" rx="1"></rect></svg>',
     'ft-style': '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28"><path stroke="currentColor" d="M4 13.5h20"></path></svg>',
@@ -12164,9 +12174,9 @@ function attachFloatingToolbar(chart, manager, hooks) {
     /** role → button glyph. TV shows the glyph with a color bar under it. */
     var COLOR_ROLE_ICONS = {
         line: 'ft-line-tool-color',
-        fill: 'ft-line-tool-color',
+        fill: 'ft-background-color',
         text: 'ft-text-color',
-        background: 'ft-line-tool-color'
+        background: 'ft-background-color'
     };
     /** TV's templates dropdown — apply/save/clear this tool's default style. */
     function templatesControl() {

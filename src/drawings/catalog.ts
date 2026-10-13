@@ -154,6 +154,13 @@ const LINE_RECIPE: ToolbarControl[] = [
   { kind: 'snap45' }, ...TAIL
 ]
 
+/** Trend-line family renders an editable on-line label (lineCommon) — TV
+ * shows the text-color control between line color and width. */
+const LINE_TEXT_RECIPE: ToolbarControl[] = [
+  { kind: 'color', role: 'line' }, { kind: 'color', role: 'text', path: ['extendData', 'textColor'] },
+  { kind: 'width' }, { kind: 'style', role: 'line' }, { kind: 'snap45' }, ...TAIL
+]
+
 const FIB_RECIPE: ToolbarControl[] = [
   { kind: 'color', role: 'line' }, { kind: 'levels' }, { kind: 'style', role: 'line' },
   { kind: 'width' }, ...TAIL
@@ -171,10 +178,12 @@ const FIB_LEVELS_RECIPE: ToolbarControl[] = [
  * Stroke/fill live under `styles.<channel>.border*` / `.color` — the channel
  * is per-tool (rect | circle | polygon | arc), so the recipe is a factory.
  */
-function shapeRecipe (channel: 'rect' | 'circle' | 'polygon' | 'arc', fill: 'rect' | 'circle' | 'polygon' | 'arc' = channel): ToolbarControl[] {
+function shapeRecipe (channel: 'rect' | 'circle' | 'polygon' | 'arc', fill: 'rect' | 'circle' | 'polygon' | 'arc' = channel, withText = false): ToolbarControl[] {
+  const textColor: ToolbarControl = { kind: 'color', role: 'text', path: ['extendData', 'textColor'] }
   return [
     { kind: 'color', role: 'line', path: ['styles', channel, 'borderColor'] },
     { kind: 'color', role: 'fill', path: ['styles', fill, 'color'] },
+    ...(withText ? [textColor] : []),
     { kind: 'width', path: ['styles', channel, 'borderSize'] },
     { kind: 'style', role: 'line', path: ['styles', channel, 'borderStyle'] },
     ...TAIL
@@ -322,15 +331,15 @@ function buildCatalog (): DrawingToolGroup[] {
         {
           id: 'lines',
           items: [
-            item('trendLine', 'segment', 'Trend Line', 'LineToolTrendLine', caps({ anchorCount: 2 }), LINE_RECIPE, { hotkey: 'T', hotkeyLabel: '⌥ T' }),
-            item('ray', 'rayLine', 'Ray', 'LineToolRay', caps({ anchorCount: 2 }), LINE_RECIPE),
-            item('infoLine', 'infoLine', 'Info Line', 'LineToolInfoLine', caps({ anchorCount: 2 }), LINE_RECIPE),
-            item('extendedLine', 'straightLine', 'Extended Line', 'LineToolExtended', caps({ anchorCount: 2 }), LINE_RECIPE),
-            item('trendAngle', 'trendAngle', 'Trend Angle', 'LineToolTrendAngle', caps({ anchorCount: 2 }), LINE_RECIPE),
-            item('horizontalLine', 'horizontalStraightLine', 'Horizontal Line', 'LineToolHorzLine', caps({ anchorCount: 1 }), LINE_RECIPE, { hotkey: 'H', hotkeyLabel: '⌥ H' }),
-            item('horizontalRay', 'horizontalRayLine', 'Horizontal Ray', 'LineToolHorzRay', caps({ anchorCount: 1 }), LINE_RECIPE, { hotkey: 'J', hotkeyLabel: '⌥ J' }),
-            item('verticalLine', 'verticalStraightLine', 'Vertical Line', 'LineToolVertLine', caps({ anchorCount: 1 }), LINE_RECIPE, { hotkey: 'V', hotkeyLabel: '⌥ V' }),
-            item('crossLine', 'crossLine', 'Cross Line', 'LineToolCrossLine', caps({ anchorCount: 1 }), LINE_RECIPE, { hotkey: 'C', hotkeyLabel: '⌥ C' })
+            item('trendLine', 'segment', 'Trend Line', 'LineToolTrendLine', caps({ anchorCount: 2 }), LINE_TEXT_RECIPE, { hotkey: 'T', hotkeyLabel: '⌥ T' }),
+            item('ray', 'rayLine', 'Ray', 'LineToolRay', caps({ anchorCount: 2 }), LINE_TEXT_RECIPE),
+            item('infoLine', 'infoLine', 'Info Line', 'LineToolInfoLine', caps({ anchorCount: 2 }), LINE_TEXT_RECIPE),
+            item('extendedLine', 'straightLine', 'Extended Line', 'LineToolExtended', caps({ anchorCount: 2 }), LINE_TEXT_RECIPE),
+            item('trendAngle', 'trendAngle', 'Trend Angle', 'LineToolTrendAngle', caps({ anchorCount: 2 }), LINE_TEXT_RECIPE),
+            item('horizontalLine', 'horizontalStraightLine', 'Horizontal Line', 'LineToolHorzLine', caps({ anchorCount: 1 }), LINE_TEXT_RECIPE, { hotkey: 'H', hotkeyLabel: '⌥ H' }),
+            item('horizontalRay', 'horizontalRayLine', 'Horizontal Ray', 'LineToolHorzRay', caps({ anchorCount: 1 }), LINE_TEXT_RECIPE, { hotkey: 'J', hotkeyLabel: '⌥ J' }),
+            item('verticalLine', 'verticalStraightLine', 'Vertical Line', 'LineToolVertLine', caps({ anchorCount: 1 }), LINE_TEXT_RECIPE, { hotkey: 'V', hotkeyLabel: '⌥ V' }),
+            item('crossLine', 'crossLine', 'Cross Line', 'LineToolCrossLine', caps({ anchorCount: 1 }), LINE_TEXT_RECIPE, { hotkey: 'C', hotkeyLabel: '⌥ C' })
           ]
         },
         {
@@ -467,7 +476,7 @@ function buildCatalog (): DrawingToolGroup[] {
           id: 'arrows',
           items: [
             item('arrowMarker', 'arrowMarker', 'Arrow Marker', 'LineToolArrowMarker', caps({ anchorCount: 2, snap45: false }), COLOR_ONLY_RECIPE, { stylePaths: MARK_STYLE_PATHS }),
-            item('arrow', 'arrowLine', 'Arrow', 'LineToolArrow', caps({ anchorCount: 2 }), LINE_RECIPE),
+            item('arrow', 'arrowLine', 'Arrow', 'LineToolArrow', caps({ anchorCount: 2 }), LINE_TEXT_RECIPE),
             item('arrowMarkUp', 'arrowMarkUp', 'Arrow Mark Up', 'LineToolArrowMarkUp', caps({ anchorCount: 1, snap45: false }), COLOR_ONLY_RECIPE, { stylePaths: MARK_STYLE_PATHS }),
             item('arrowMarkDown', 'arrowMarkDown', 'Arrow Mark Down', 'LineToolArrowMarkDown', caps({ anchorCount: 1, snap45: false }), COLOR_ONLY_RECIPE, { stylePaths: MARK_STYLE_PATHS })
           ]
@@ -475,11 +484,11 @@ function buildCatalog (): DrawingToolGroup[] {
         {
           id: 'shapes',
           items: [
-            item('rect', 'rect', 'Rectangle', 'LineToolRectangle', caps({ anchorCount: 2 }), shapeRecipe('rect'), { hotkey: 'R', hotkeyLabel: '⌥ ⇧ R' }),
+            item('rect', 'rect', 'Rectangle', 'LineToolRectangle', caps({ anchorCount: 2 }), shapeRecipe('rect', 'rect', true), { hotkey: 'R', hotkeyLabel: '⌥ ⇧ R' }),
             item('rotatedRect', 'rotatedRect', 'Rotated Rectangle', 'LineToolRotatedRectangle', caps({ anchorCount: 3 }), shapeRecipe('polygon')),
             item('path', 'path', 'Path', 'LineToolPath', caps({ anchorCount: -1, snap45: false }), PATH_RECIPE),
-            item('circle', 'circle', 'Circle', 'LineToolCircle', caps({ anchorCount: 2 }), shapeRecipe('circle')),
-            item('ellipse', 'ellipse', 'Ellipse', 'LineToolEllipse', caps({ anchorCount: 2 }), shapeRecipe('circle')),
+            item('circle', 'circle', 'Circle', 'LineToolCircle', caps({ anchorCount: 2 }), shapeRecipe('circle', 'circle', true)),
+            item('ellipse', 'ellipse', 'Ellipse', 'LineToolEllipse', caps({ anchorCount: 2 }), shapeRecipe('circle', 'circle', true)),
             item('polyline', 'polyline', 'Polyline', 'LineToolPolyline', caps({ anchorCount: -1 }), shapeRecipe('polygon')),
             item('triangle', 'triangle', 'Triangle', 'LineToolTriangle', caps({ anchorCount: 3 }), shapeRecipe('polygon')),
             item('arc', 'arc', 'Arc', 'LineToolArc', caps({ anchorCount: 3 }), [

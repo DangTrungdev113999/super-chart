@@ -285,9 +285,9 @@ export function attachFloatingToolbar (
   /** role → button glyph. TV shows the glyph with a color bar under it. */
   const COLOR_ROLE_ICONS: Record<string, string> = {
     line: 'ft-line-tool-color',
-    fill: 'ft-line-tool-color',
+    fill: 'ft-background-color',
     text: 'ft-text-color',
-    background: 'ft-line-tool-color'
+    background: 'ft-background-color'
   }
 
   /** TV's templates dropdown — apply/save/clear this tool's default style. */
